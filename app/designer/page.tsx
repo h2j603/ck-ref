@@ -32,10 +32,15 @@ export default async function DesignerIndexPage() {
           {designers.map((d) => (
             <li key={d.id}>
               <Link
-                href={`/designer/${d.slug}`}
+                href={`/designer/${encodeURIComponent(d.slug)}`}
                 className="block border-b border-border/40 py-3 transition-colors hover:border-foreground"
               >
-                <p className="text-sm font-medium leading-tight">{d.name}</p>
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium leading-tight">{d.name}</p>
+                  <p className="font-mono text-[10px] tabular-nums uppercase tracking-wider text-muted-foreground">
+                    {d.ref_count}
+                  </p>
+                </div>
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   {d.origin ?? "—"}
                 </p>
