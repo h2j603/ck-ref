@@ -72,6 +72,13 @@ create table if not exists notes (
   updated_at  timestamptz not null default now()
 );
 
+-- Optional structured sections. Either may be NULL or empty; the original
+-- `body` column stays as the freeform note. Form-level validation requires
+-- at least one of (body, pros, cons) to be non-empty.
+alter table notes add column if not exists pros text;
+alter table notes add column if not exists cons text;
+alter table notes alter column body drop not null;
+
 create index if not exists notes_ref_idx on notes (ref_id, created_at desc);
 
 -- Maintain refs.notes_count -------------------------------------------------

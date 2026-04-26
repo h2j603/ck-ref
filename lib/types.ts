@@ -62,7 +62,9 @@ export type RefWithDesigners = Ref & {
 export type Note = {
   id: string;
   ref_id: string;
-  body: string;
+  body: string | null;
+  pros: string | null;
+  cons: string | null;
   author: string;
   created_at: string;
   updated_at: string;
