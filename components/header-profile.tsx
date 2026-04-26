@@ -19,7 +19,7 @@ export function HeaderProfile({ profiles }: { profiles: Profile[] }) {
   return (
     <Link
       href="/gate"
-      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+      className="inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
       aria-label={profile ? `@${profile.display_name}` : "sign in"}
     >
       <span
