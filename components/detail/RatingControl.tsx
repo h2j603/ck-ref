@@ -3,6 +3,7 @@
 import { Star } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { NicknamePill } from "@/components/nickname-pill";
 import { useNickname } from "@/lib/nickname";
 import { isProfileKey } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/client";
@@ -140,7 +141,40 @@ export function RatingControl({
           내 별점 {myStars} · 다시 누르면 취소
         </p>
       ) : null}
+      {ratings.length > 0 ? (
+        <ul className="flex flex-col gap-1 pt-1">
+          {[...ratings]
+            .sort((a, b) => b.stars - a.stars || a.user_key.localeCompare(b.user_key))
+            .map((r) => (
+              <li
+                key={r.user_key}
+                className="flex items-center justify-between gap-2"
+              >
+                <NicknamePill nickname={r.user_key} />
+                <MiniStars stars={r.stars} />
+              </li>
+            ))}
+        </ul>
+      ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
+  );
+}
+
+function MiniStars({ stars }: { stars: number }) {
+  return (
+    <span aria-label={`${stars} of 5`} className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={cn(
+            "size-3",
+            stars >= n
+              ? "fill-amber-400 stroke-amber-500"
+              : "stroke-muted-foreground/40",
+          )}
+        />
+      ))}
+    </span>
   );
 }
