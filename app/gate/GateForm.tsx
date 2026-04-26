@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { useNickname } from "@/lib/nickname";
 
 export default function GateForm({ redirectTo }: { redirectTo: string }) {
-  const router = useRouter();
   const { nickname, setNickname, hydrated } = useNickname();
   const [password, setPassword] = useState("");
   const [localNickname, setLocalNickname] = useState("");
@@ -50,8 +48,10 @@ export default function GateForm({ redirectTo }: { redirectTo: string }) {
         throw new Error(data?.error ?? "인증에 실패했습니다.");
       }
       setNickname(trimmedNickname);
-      router.replace(redirectTo);
-      router.refresh();
+      // Full reload guarantees the just-set auth cookie is sent on the next
+      // request and that the proxy re-evaluates from scratch — client-side
+      // router.replace+refresh can race with the proxy redirect cache.
+      window.location.assign(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
       setSubmitting(false);
