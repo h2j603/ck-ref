@@ -8,6 +8,7 @@ import {
 } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/server";
 import type {
+  Board,
   Designer,
   Note,
   Ref,
@@ -217,6 +218,104 @@ export async function fetchProfiles(): Promise<Profile[]> {
     return { ...rest, has_password: password_hash !== null && password_hash !== "" };
   });
 }
+
+// BOARDS --------------------------------------------------------------------
+
+type BoardCover = Pick<Ref, "id" | "image_path" | "image_width" | "image_height">;
+export type BoardSummary = Board & {
+  item_count: number;
+  cover_refs: BoardCover[];
+};
+
+const BOARD_COVER_LIMIT = 4;
+
+export async function fetchBoards(): Promise<BoardSummary[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("boards")
+    .select(
+      `id, title, description, created_at, created_by,
+       board_items ( position, ref:refs(id, image_path, image_width, image_height) )`,
+    )
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  type Row = Board & {
+    board_items: { position: number; ref: BoardCover | BoardCover[] | null }[];
+  };
+  return (data ?? []).map((raw) => {
+    const r = raw as Row;
+    const items = (r.board_items ?? [])
+      .map((bi) => {
+        const ref = Array.isArray(bi.ref) ? bi.ref[0] : bi.ref;
+        return ref ? { position: bi.position, ref } : null;
+      })
+      .filter((x): x is { position: number; ref: BoardCover } => x !== null)
+      .sort((a, b) => a.position - b.position);
+    const { board_items, ...rest } = r;
+    void board_items;
+    return {
+      ...rest,
+      item_count: items.length,
+      cover_refs: items.slice(0, BOARD_COVER_LIMIT).map((i) => i.ref),
+    };
+  });
+}
+
+export async function fetchBoard(id: string): Promise<Board | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("boards")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as Board | null;
+}
+
+export async function fetchBoardRefs(boardId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("board_items")
+    .select(
+      `position, ref:refs(${REF_COLUMNS_FOR_BOARD})`,
+    )
+    .eq("board_id", boardId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  type RawRef = Ref & {
+    ref_designers?: {
+      designer:
+        | Pick<Designer, "id" | "slug" | "name">
+        | Pick<Designer, "id" | "slug" | "name">[]
+        | null;
+    }[];
+  };
+  type Row = { position: number; ref: RawRef | RawRef[] | null };
+  const rows = (data ?? []) as unknown as Row[];
+  return rows
+    .map((r) => (Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref))
+    .filter((r): r is RawRef => r !== null)
+    .map((ref) => {
+      const { ref_designers, ...rest } = ref;
+      const designers: Pick<Designer, "id" | "slug" | "name">[] = [];
+      for (const rd of ref_designers ?? []) {
+        const d = rd.designer;
+        if (!d) continue;
+        if (Array.isArray(d)) designers.push(...d);
+        else designers.push(d);
+      }
+      return { ...rest, designers };
+    });
+}
+
+const REF_COLUMNS_FOR_BOARD = `
+  id, title, year, source_url,
+  image_path, image_width, image_height,
+  genre, medium, languages, tags,
+  color_hex, color_hue,
+  notes_count, created_at, created_by,
+  ref_designers ( designer:designers(id, slug, name) )
+`;
 
 export async function fetchAllTags(): Promise<string[]> {
   const supabase = await createClient();

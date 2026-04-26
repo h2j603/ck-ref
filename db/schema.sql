@@ -28,6 +28,34 @@ insert into profiles (key, display_name, color) values
   ('혁',   '혁',   '#e879c2')
 on conflict (key) do nothing;
 
+-- BOARDS (moodboards) -------------------------------------------------------
+-- A board is a curated collection of refs. Anyone with a nickname can add or
+-- remove items from any board (3-person trust model); only the creator can
+-- edit the board metadata or delete the board itself.
+
+create table if not exists boards (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  description text,
+  created_at  timestamptz not null default now(),
+  created_by  text
+);
+
+create index if not exists boards_created_at_idx on boards (created_at desc);
+create index if not exists boards_created_by_idx on boards (created_by);
+
+create table if not exists board_items (
+  board_id  uuid not null references boards(id) on delete cascade,
+  ref_id    uuid not null references refs(id) on delete cascade,
+  position  int not null default 0,
+  added_at  timestamptz not null default now(),
+  added_by  text,
+  primary key (board_id, ref_id)
+);
+
+create index if not exists board_items_board_idx on board_items (board_id, position);
+create index if not exists board_items_ref_idx on board_items (ref_id);
+
 -- DESIGNERS -----------------------------------------------------------------
 
 create table if not exists designers (
@@ -159,6 +187,8 @@ create index if not exists ref_links_b_idx on ref_links (b_id);
 -- password), so we expose permissive policies for anon + authenticated.
 
 alter table profiles      enable row level security;
+alter table boards        enable row level security;
+alter table board_items   enable row level security;
 alter table designers     enable row level security;
 alter table refs          enable row level security;
 alter table ref_designers enable row level security;
@@ -167,6 +197,14 @@ alter table notes         enable row level security;
 
 drop policy if exists "anon all" on profiles;
 create policy "anon all" on profiles
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on boards;
+create policy "anon all" on boards
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on board_items;
+create policy "anon all" on board_items
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on designers;
