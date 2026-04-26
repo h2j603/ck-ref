@@ -142,7 +142,7 @@ export function RefLinks({
                   type="button"
                   onClick={() => removeLink(r.id)}
                   disabled={busy}
-                  className="absolute right-1 top-1 hidden rounded-full bg-background/90 p-0.5 group-hover:block"
+                  className="absolute right-1 top-1 rounded-full bg-background/90 p-0.5 text-muted-foreground opacity-70 transition-opacity hover:text-destructive hover:opacity-100 disabled:opacity-40"
                   aria-label="remove link"
                 >
                   <X className="size-3" />

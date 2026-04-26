@@ -97,7 +97,7 @@ export function BoardItemsGrid({
                   type="button"
                   onClick={() => remove(ref.id)}
                   disabled={removing !== null}
-                  className="absolute right-1 top-1 hidden rounded-full bg-background/90 p-1 transition-colors hover:bg-background group-hover:block"
+                  className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-background hover:text-destructive hover:opacity-100 disabled:opacity-40"
                   aria-label="remove from board"
                 >
                   <X className="size-3" />
