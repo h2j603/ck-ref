@@ -23,9 +23,11 @@ import { EditProfileDialog } from "./EditProfileDialog";
 export default function GateClient({
   redirectTo,
   profiles,
+  counts,
 }: {
   redirectTo: string;
   profiles: Profile[];
+  counts: Record<string, number>;
 }) {
   const { nickname, setNickname } = useNickname();
   const [signingIn, setSigningIn] = useState<Profile | null>(null);
@@ -68,6 +70,10 @@ export default function GateClient({
                   )}
                 >
                   @{p.display_name}
+                </span>
+                <span className="font-mono text-[10px] tabular-nums tracking-wider text-muted-foreground">
+                  {counts[p.key] ?? 0} ref
+                  {counts[p.key] === 1 ? "" : "s"}
                 </span>
                 {!p.has_password ? (
                   <span className="rounded-full border border-dashed border-input px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">

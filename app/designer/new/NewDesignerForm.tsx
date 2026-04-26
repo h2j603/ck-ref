@@ -93,7 +93,7 @@ export default function NewDesignerForm() {
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="flex items-center justify-between">
         {hydrated && nickname ? (
-          <NicknamePill nickname={nickname} prefix="as @" />
+          <NicknamePill nickname={nickname} prefix="as @" link={false} />
         ) : (
           <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             닉네임 필요
