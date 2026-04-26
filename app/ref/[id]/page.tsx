@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AddToBoardDialog } from "@/components/board/AddToBoardDialog";
 import { NoteList } from "@/components/detail/NoteList";
 import { OwnerActions } from "@/components/detail/OwnerActions";
 import { RefLinks } from "@/components/detail/RefLinks";
@@ -105,11 +106,14 @@ export default async function RefDetailPage({
               ))}
             </div>
           ) : null}
-          <OwnerActions
-            refId={ref.id}
-            imagePath={ref.image_path}
-            createdBy={ref.created_by}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <AddToBoardDialog refId={ref.id} />
+            <OwnerActions
+              refId={ref.id}
+              imagePath={ref.image_path}
+              createdBy={ref.created_by}
+            />
+          </div>
         </section>
 
         <RefLinks refId={ref.id} initial={linked} />

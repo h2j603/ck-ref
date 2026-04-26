@@ -75,3 +75,11 @@ export type RefDesigner = {
   ref_id: string;
   designer_id: string;
 };
+
+export type Board = {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+  created_by: string | null;
+};

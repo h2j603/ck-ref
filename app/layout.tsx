@@ -53,6 +53,12 @@ export default async function RootLayout({
               Index
             </Link>
             <Link
+              href="/board"
+              className="transition-colors hover:text-foreground"
+            >
+              Board
+            </Link>
+            <Link
               href="/designer"
               className="transition-colors hover:text-foreground"
             >
