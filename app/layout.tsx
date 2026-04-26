@@ -55,13 +55,6 @@ export default async function RootLayout({
               <span className="hidden sm:inline">Index</span>
             </Link>
             <Link
-              href="/board"
-              className="transition-colors hover:text-foreground"
-            >
-              <span className="sm:hidden">BRD</span>
-              <span className="hidden sm:inline">Board</span>
-            </Link>
-            <Link
               href="/designer"
               className="transition-colors hover:text-foreground"
             >
@@ -74,6 +67,13 @@ export default async function RootLayout({
             >
               <span className="sm:hidden">UP</span>
               <span className="hidden sm:inline">Upload</span>
+            </Link>
+            <Link
+              href="/board"
+              className="transition-colors hover:text-foreground"
+            >
+              <span className="sm:hidden">BRD</span>
+              <span className="hidden sm:inline">Board</span>
             </Link>
             <HeaderProfile profiles={profiles} />
           </nav>
