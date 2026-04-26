@@ -18,6 +18,7 @@ import type {
 type DesignerLite = Pick<Designer, "id" | "slug" | "name">;
 type RefRow = Ref & {
   ref_designers?: { designer: DesignerLite | DesignerLite[] | null }[];
+  ref_ratings?: { stars: number }[];
 };
 
 const REF_COLUMNS = `
@@ -26,12 +27,13 @@ const REF_COLUMNS = `
   genre, medium, languages, tags,
   color_hex, color_hue,
   notes_count, created_at, created_by,
-  ref_designers ( designer:designers(id, slug, name) )
+  ref_designers ( designer:designers(id, slug, name) ),
+  ref_ratings ( stars )
 `;
 
 function flatten(rows: RefRow[] | null | undefined): RefWithDesigners[] {
   if (!rows) return [];
-  return rows.map(({ ref_designers, ...rest }) => {
+  return rows.map(({ ref_designers, ref_ratings, ...rest }) => {
     const designers: DesignerLite[] = [];
     for (const rd of ref_designers ?? []) {
       const d = rd.designer;
@@ -39,7 +41,13 @@ function flatten(rows: RefRow[] | null | undefined): RefWithDesigners[] {
       if (Array.isArray(d)) designers.push(...d);
       else designers.push(d);
     }
-    return { ...rest, designers };
+    const ratings = ref_ratings ?? [];
+    const rating_count = ratings.length;
+    const rating_avg =
+      rating_count > 0
+        ? ratings.reduce((s, r) => s + r.stars, 0) / rating_count
+        : null;
+    return { ...rest, designers, rating_avg, rating_count };
   });
 }
 
@@ -289,6 +297,7 @@ export async function fetchBoardRefs(boardId: string) {
         | Pick<Designer, "id" | "slug" | "name">[]
         | null;
     }[];
+    ref_ratings?: { stars: number }[];
   };
   type Row = { position: number; ref: RawRef | RawRef[] | null };
   const rows = (data ?? []) as unknown as Row[];
@@ -296,7 +305,7 @@ export async function fetchBoardRefs(boardId: string) {
     .map((r) => (Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref))
     .filter((r): r is RawRef => r !== null)
     .map((ref) => {
-      const { ref_designers, ...rest } = ref;
+      const { ref_designers, ref_ratings, ...rest } = ref;
       const designers: Pick<Designer, "id" | "slug" | "name">[] = [];
       for (const rd of ref_designers ?? []) {
         const d = rd.designer;
@@ -304,8 +313,29 @@ export async function fetchBoardRefs(boardId: string) {
         if (Array.isArray(d)) designers.push(...d);
         else designers.push(d);
       }
-      return { ...rest, designers };
+      const ratings = ref_ratings ?? [];
+      const rating_count = ratings.length;
+      const rating_avg =
+        rating_count > 0
+          ? ratings.reduce((s, x) => s + x.stars, 0) / rating_count
+          : null;
+      return { ...rest, designers, rating_avg, rating_count };
     });
+}
+
+export async function fetchRefRatings(refId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ref_ratings")
+    .select("ref_id, user_key, stars, rated_at")
+    .eq("ref_id", refId);
+  if (error) throw error;
+  return (data ?? []) as {
+    ref_id: string;
+    user_key: string;
+    stars: number;
+    rated_at: string;
+  }[];
 }
 
 const REF_COLUMNS_FOR_BOARD = `
@@ -314,7 +344,8 @@ const REF_COLUMNS_FOR_BOARD = `
   genre, medium, languages, tags,
   color_hex, color_hue,
   notes_count, created_at, created_by,
-  ref_designers ( designer:designers(id, slug, name) )
+  ref_designers ( designer:designers(id, slug, name) ),
+  ref_ratings ( stars )
 `;
 
 export async function fetchAllTags(): Promise<string[]> {

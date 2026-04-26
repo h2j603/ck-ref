@@ -164,6 +164,21 @@ create trigger notes_touch_trigger
 before update on notes
 for each row execute procedure touch_updated_at();
 
+-- REF RATINGS ---------------------------------------------------------------
+-- Each user (profile key) can rate a ref 1-5 once. Re-rating is an upsert
+-- on the composite key; un-rating is just a delete of that row. Average +
+-- count are computed in the queries.
+
+create table if not exists ref_ratings (
+  ref_id    uuid not null references refs(id) on delete cascade,
+  user_key  text not null,
+  stars     int not null check (stars between 1 and 5),
+  rated_at  timestamptz not null default now(),
+  primary key (ref_id, user_key)
+);
+
+create index if not exists ref_ratings_ref_idx on ref_ratings (ref_id);
+
 -- REF <-> REF LINKS ---------------------------------------------------------
 -- Undirected links between refs. Stored as a canonical pair (smaller uuid in
 -- a_id) so each link appears exactly once; the check constraint enforces it
@@ -192,6 +207,7 @@ alter table board_items   enable row level security;
 alter table designers     enable row level security;
 alter table refs          enable row level security;
 alter table ref_designers enable row level security;
+alter table ref_ratings   enable row level security;
 alter table ref_links     enable row level security;
 alter table notes         enable row level security;
 
@@ -217,6 +233,10 @@ create policy "anon all" on refs
 
 drop policy if exists "anon all" on ref_designers;
 create policy "anon all" on ref_designers
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on ref_ratings;
+create policy "anon all" on ref_ratings
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on ref_links;

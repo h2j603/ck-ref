@@ -57,6 +57,15 @@ export type Ref = {
 
 export type RefWithDesigners = Ref & {
   designers: Pick<Designer, "id" | "slug" | "name">[];
+  rating_avg: number | null;
+  rating_count: number;
+};
+
+export type RefRating = {
+  ref_id: string;
+  user_key: string;
+  stars: number;
+  rated_at: string;
 };
 
 export type Note = {
