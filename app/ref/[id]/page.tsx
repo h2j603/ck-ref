@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 
 import { NoteList } from "@/components/detail/NoteList";
 import { OwnerActions } from "@/components/detail/OwnerActions";
+import { RefLinks } from "@/components/detail/RefLinks";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Badge } from "@/components/ui/badge";
-import { fetchNotes, fetchRef } from "@/lib/queries";
+import { fetchLinkedRefs, fetchNotes, fetchRef } from "@/lib/queries";
 import { publicImageUrl } from "@/lib/storage";
 
 export default async function RefDetailPage({
@@ -18,7 +19,10 @@ export default async function RefDetailPage({
   const ref = await fetchRef(id).catch(() => null);
   if (!ref) notFound();
 
-  const notes = await fetchNotes(id).catch(() => []);
+  const [notes, linked] = await Promise.all([
+    fetchNotes(id).catch(() => []),
+    fetchLinkedRefs(id).catch(() => []),
+  ]);
   const url = publicImageUrl(ref.image_path);
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
@@ -108,6 +112,7 @@ export default async function RefDetailPage({
           />
         </section>
 
+        <RefLinks refId={ref.id} initial={linked} />
         <NoteList refId={ref.id} initialNotes={notes} />
       </aside>
     </div>

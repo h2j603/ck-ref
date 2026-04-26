@@ -100,6 +100,22 @@ create trigger notes_touch_trigger
 before update on notes
 for each row execute procedure touch_updated_at();
 
+-- REF <-> REF LINKS ---------------------------------------------------------
+-- Undirected links between refs. Stored as a canonical pair (smaller uuid in
+-- a_id) so each link appears exactly once; the check constraint enforces it
+-- and the client/queries canonicalize before insert.
+
+create table if not exists ref_links (
+  a_id        uuid not null references refs(id) on delete cascade,
+  b_id        uuid not null references refs(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  created_by  text,
+  primary key (a_id, b_id),
+  check (a_id < b_id)
+);
+
+create index if not exists ref_links_b_idx on ref_links (b_id);
+
 -- RLS POLICIES --------------------------------------------------------------
 -- Supabase enables RLS by default on tables exposed via PostgREST. Without
 -- policies, anon-key inserts are rejected with "new row violates row-level
@@ -109,6 +125,7 @@ for each row execute procedure touch_updated_at();
 alter table designers     enable row level security;
 alter table refs          enable row level security;
 alter table ref_designers enable row level security;
+alter table ref_links     enable row level security;
 alter table notes         enable row level security;
 
 drop policy if exists "anon all" on designers;
@@ -121,6 +138,10 @@ create policy "anon all" on refs
 
 drop policy if exists "anon all" on ref_designers;
 create policy "anon all" on ref_designers
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on ref_links;
+create policy "anon all" on ref_links
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on notes;
