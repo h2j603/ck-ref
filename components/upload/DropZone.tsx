@@ -1,10 +1,9 @@
 "use client";
 
-import { getColor } from "colorthief";
 import { ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { colorMetaFromRgb } from "@/lib/color";
+import { probeImage } from "@/lib/imageProbe";
 import { cn } from "@/lib/utils";
 
 export type UploadFile = {
@@ -19,44 +18,6 @@ export type UploadFile = {
 
 function fileId(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`;
-}
-
-type Probed = {
-  width: number;
-  height: number;
-  colorHex: string | null;
-  colorHue: number | null;
-};
-
-async function probeImage(file: File): Promise<Probed | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const img = new window.Image();
-    img.crossOrigin = "anonymous";
-    img.onload = async () => {
-      const dims = { width: img.naturalWidth, height: img.naturalHeight };
-      let colorHex: string | null = null;
-      let colorHue: number | null = null;
-      try {
-        const c = await getColor(img);
-        if (c) {
-          const rgb = c.rgb();
-          const meta = colorMetaFromRgb(rgb.r, rgb.g, rgb.b);
-          colorHex = meta.hex;
-          colorHue = meta.hue;
-        }
-      } catch {
-        /* color extraction is best-effort */
-      }
-      URL.revokeObjectURL(url);
-      resolve({ ...dims, colorHex, colorHue });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(null);
-    };
-    img.src = url;
-  });
 }
 
 export function DropZone({

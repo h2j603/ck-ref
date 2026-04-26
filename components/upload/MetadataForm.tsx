@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "./DesignerPicker";
@@ -16,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { probeImage } from "@/lib/imageProbe";
 import { useNickname } from "@/lib/nickname";
 import { parseTags } from "@/lib/slug";
 import { STORAGE_BUCKET, assertSupabaseConfigured } from "@/lib/supabase/env";
@@ -85,6 +87,59 @@ export function MetadataForm() {
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  async function importFromUrl() {
+    const url = sourceUrl.trim();
+    if (!url) {
+      setImportError("URL을 먼저 입력해주세요.");
+      return;
+    }
+    setImportError(null);
+    setImporting(true);
+    try {
+      const ogRes = await fetch(`/api/og?url=${encodeURIComponent(url)}`);
+      const og = (await ogRes.json()) as {
+        image?: string | null;
+        title?: string | null;
+        sourceUrl?: string;
+        error?: string;
+      };
+      if (!ogRes.ok || !og.image) {
+        throw new Error(og.error ?? "이미지를 찾지 못했어요.");
+      }
+      const imgRes = await fetch(`/api/og/image?url=${encodeURIComponent(og.image)}`);
+      if (!imgRes.ok) {
+        const data = (await imgRes.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(data?.error ?? "이미지를 받아오지 못했어요.");
+      }
+      const blob = await imgRes.blob();
+      const ct = blob.type || "image/jpeg";
+      const ext = ct.split("/")[1]?.split(";")[0] || "jpg";
+      const name = `imported-${Date.now()}.${ext}`;
+      const file = new File([blob], name, { type: ct });
+      const probed = await probeImage(file);
+      const newUploadFile: UploadFile = {
+        id: `imported-${Date.now()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        width: probed?.width,
+        height: probed?.height,
+        colorHex: probed?.colorHex ?? null,
+        colorHue: probed?.colorHue ?? null,
+      };
+      setFiles((prev) => [...prev, newUploadFile]);
+      if (!title.trim() && og.title) setTitle(og.title);
+      if (og.sourceUrl) setSourceUrl(og.sourceUrl);
+    } catch (err) {
+      setImportError(extractErrorMessage(err));
+    } finally {
+      setImporting(false);
+    }
+  }
 
   function toggleLanguage(lang: Language) {
     setLanguages((prev) =>
@@ -205,12 +260,34 @@ export function MetadataForm() {
           />
         </Field>
         <Field label="출처 URL" full>
-          <Input
-            value={sourceUrl}
-            onChange={(e) => setSourceUrl(e.target.value)}
-            inputMode="url"
-            placeholder="https://"
-          />
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-stretch gap-2">
+              <Input
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                inputMode="url"
+                placeholder="https://"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={importFromUrl}
+                disabled={importing || !sourceUrl.trim()}
+                className="shrink-0"
+              >
+                <Download className="size-3.5" />
+                {importing ? "가져오는 중…" : "가져오기"}
+              </Button>
+            </div>
+            {importError ? (
+              <p className="text-xs text-destructive">{importError}</p>
+            ) : (
+              <p className="font-mono text-[10px] text-muted-foreground">
+                URL의 og:image / 제목을 자동으로 채워요. 인스타는 게시물에 따라 실패할 수 있어요.
+              </p>
+            )}
+          </div>
         </Field>
 
         <Field label="장르">
