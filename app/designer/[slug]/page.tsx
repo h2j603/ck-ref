@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DesignerOwnerActions } from "@/components/detail/DesignerOwnerActions";
 import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { MasonryGrid } from "@/components/gallery/MasonryGrid";
 import { fetchDesignerBySlug, fetchRefs } from "@/lib/queries";
@@ -63,6 +64,11 @@ export default async function DesignerPage({
             {designer.bio}
           </p>
         ) : null}
+        <DesignerOwnerActions
+          designerId={designer.id}
+          slug={designer.slug}
+          createdBy={designer.created_by}
+        />
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/designer"
