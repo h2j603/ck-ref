@@ -11,6 +11,7 @@ export type Profile = {
   display_name: string;
   avatar_path: string | null;
   color: string;
+  has_password: boolean;
 };
 
 const DEFAULT_COLOR: Record<ProfileKey, string> = {
@@ -24,7 +25,12 @@ export const FALLBACK_PROFILES: Profile[] = PROFILE_KEYS.map((key) => ({
   display_name: key,
   avatar_path: null,
   color: DEFAULT_COLOR[key],
+  has_password: false,
 }));
+
+export function isProfileKey(value: unknown): value is ProfileKey {
+  return typeof value === "string" && (PROFILE_KEYS as readonly string[]).includes(value);
+}
 
 export function findProfile(
   profiles: Profile[],

@@ -162,18 +162,21 @@ export async function fetchLinkedRefs(refId: string): Promise<LinkedRef[]> {
 
 export async function fetchProfiles(): Promise<Profile[]> {
   const supabase = await createClient();
+  // Don't expose the hash to the client — only whether one is set.
   const { data, error } = await supabase
     .from("profiles")
-    .select("key, display_name, avatar_path, color")
+    .select("key, display_name, avatar_path, color, password_hash")
     .in("key", PROFILE_KEYS as readonly string[]);
   if (error) return FALLBACK_PROFILES;
-  // Preserve roster order regardless of DB return order; fall back per-key
-  // so a fresh DB without the seed row still renders something sensible.
   return PROFILE_KEYS.map((key) => {
     const row = (data ?? []).find(
       (r) => (r as { key: string }).key === key,
-    ) as Profile | undefined;
-    return row ?? FALLBACK_PROFILES.find((p) => p.key === key)!;
+    ) as
+      | (Omit<Profile, "has_password"> & { password_hash: string | null })
+      | undefined;
+    if (!row) return FALLBACK_PROFILES.find((p) => p.key === key)!;
+    const { password_hash, ...rest } = row;
+    return { ...rest, has_password: password_hash !== null && password_hash !== "" };
   });
 }
 

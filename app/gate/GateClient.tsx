@@ -4,6 +4,13 @@ import { Pencil } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNickname } from "@/lib/nickname";
@@ -14,118 +21,28 @@ import { cn } from "@/lib/utils";
 import { EditProfileDialog } from "./EditProfileDialog";
 
 export default function GateClient({
-  initialAuthed,
   redirectTo,
   profiles,
 }: {
-  initialAuthed: boolean;
   redirectTo: string;
   profiles: Profile[];
-}) {
-  const [authed, setAuthed] = useState(initialAuthed);
-
-  if (!authed) {
-    return <PasswordForm onSuccess={() => setAuthed(true)} />;
-  }
-  return <ProfilePicker profiles={profiles} redirectTo={redirectTo} />;
-}
-
-function PasswordForm({ onSuccess }: { onSuccess: () => void }) {
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!password) {
-      setError("비밀번호를 입력해주세요.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(data?.error ?? "인증에 실패했습니다.");
-      }
-      onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "인증에 실패했습니다.");
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="mx-auto flex w-full max-w-sm flex-col gap-4"
-    >
-      <div className="flex flex-col gap-2">
-        <Label
-          htmlFor="password"
-          className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
-        >
-          Password
-        </Label>
-        <Input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-          autoFocus
-          required
-        />
-      </div>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      <Button type="submit" disabled={submitting}>
-        {submitting ? "확인 중…" : "들어가기"}
-      </Button>
-    </form>
-  );
-}
-
-function ProfilePicker({
-  profiles,
-  redirectTo,
-}: {
-  profiles: Profile[];
-  redirectTo: string;
 }) {
   const { nickname, setNickname } = useNickname();
-  const [pendingNick, setPendingNick] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState<Profile | null>(null);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
-
-  function pick(profile: Profile) {
-    setPendingNick(profile.key);
-    setNickname(profile.key);
-    window.location.assign(redirectTo);
-  }
 
   return (
     <div className="flex flex-col items-center gap-8">
       <ul className="grid grid-cols-3 gap-6">
         {profiles.map((p) => {
           const current = nickname === p.key;
-          const loading = pendingNick === p.key;
           const avatar = p.avatar_path ? publicImageUrl(p.avatar_path) : null;
           return (
             <li key={p.key} className="relative">
               <button
                 type="button"
-                onClick={() => pick(p)}
-                disabled={pendingNick !== null}
-                className={cn(
-                  "group flex flex-col items-center gap-2 outline-none disabled:cursor-not-allowed",
-                  loading && "animate-pulse",
-                )}
+                onClick={() => setSigningIn(p)}
+                className="group flex flex-col items-center gap-2 outline-none"
               >
                 <span
                   className={cn(
@@ -152,6 +69,11 @@ function ProfilePicker({
                 >
                   @{p.display_name}
                 </span>
+                {!p.has_password ? (
+                  <span className="rounded-full border border-dashed border-input px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                    set password
+                  </span>
+                ) : null}
               </button>
               {current ? (
                 <button
@@ -169,9 +91,24 @@ function ProfilePicker({
       </ul>
       <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
         {nickname
-          ? "현재 프로필 위 연필 아이콘을 누르면 이름·사진을 바꿀 수 있어요"
-          : "프로필 선택"}
+          ? "다른 프로필로 전환하려면 카드를 누르세요"
+          : "프로필을 누르고 비밀번호를 입력하세요"}
       </p>
+
+      {signingIn ? (
+        <SignInDialog
+          profile={signingIn}
+          open={signingIn !== null}
+          onOpenChange={(open) => {
+            if (!open) setSigningIn(null);
+          }}
+          onSuccess={(key) => {
+            setNickname(key);
+            window.location.assign(redirectTo);
+          }}
+        />
+      ) : null}
+
       {editingProfile ? (
         <EditProfileDialog
           profile={editingProfile}
@@ -182,5 +119,113 @@ function ProfilePicker({
         />
       ) : null}
     </div>
+  );
+}
+
+function SignInDialog({
+  profile,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  profile: Profile;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: (key: string) => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const firstTime = !profile.has_password;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!password) {
+      setError("비밀번호를 입력해주세요.");
+      return;
+    }
+    if (firstTime && password !== confirm) {
+      setError("두 비밀번호가 일치하지 않아요.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: profile.key, password }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(data?.error ?? "로그인에 실패했습니다.");
+      }
+      onSuccess(profile.key);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            @{profile.display_name} {firstTime ? "— 비밀번호 만들기" : "— 로그인"}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          {firstTime ? (
+            <p className="text-xs text-muted-foreground">
+              이 프로필은 아직 비밀번호가 없어요. 지금 입력한 값이 비밀번호로
+              저장됩니다.
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="signin-password">비밀번호</Label>
+            <Input
+              id="signin-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={firstTime ? "new-password" : "current-password"}
+              autoFocus
+              required
+            />
+          </div>
+          {firstTime ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="signin-confirm">비밀번호 확인</Label>
+              <Input
+                id="signin-confirm"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </div>
+          ) : null}
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={busy}
+            >
+              취소
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "확인 중…" : firstTime ? "저장하고 들어가기" : "들어가기"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
