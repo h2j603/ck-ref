@@ -5,10 +5,16 @@ import { notFound } from "next/navigation";
 import { AddToBoardDialog } from "@/components/board/AddToBoardDialog";
 import { NoteList } from "@/components/detail/NoteList";
 import { OwnerActions } from "@/components/detail/OwnerActions";
+import { RatingControl } from "@/components/detail/RatingControl";
 import { RefLinks } from "@/components/detail/RefLinks";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Badge } from "@/components/ui/badge";
-import { fetchLinkedRefs, fetchNotes, fetchRef } from "@/lib/queries";
+import {
+  fetchLinkedRefs,
+  fetchNotes,
+  fetchRef,
+  fetchRefRatings,
+} from "@/lib/queries";
 import { publicImageUrl } from "@/lib/storage";
 
 export default async function RefDetailPage({
@@ -20,9 +26,10 @@ export default async function RefDetailPage({
   const ref = await fetchRef(id).catch(() => null);
   if (!ref) notFound();
 
-  const [notes, linked] = await Promise.all([
+  const [notes, linked, ratings] = await Promise.all([
     fetchNotes(id).catch(() => []),
     fetchLinkedRefs(id).catch(() => []),
+    fetchRefRatings(id).catch(() => []),
   ]);
   const url = publicImageUrl(ref.image_path);
   const w = ref.image_width ?? 4;
@@ -48,6 +55,13 @@ export default async function RefDetailPage({
           <h1 className="text-xl font-medium tracking-tight">
             {ref.title ?? "untitled"}
           </h1>
+          <RatingControl
+            refId={ref.id}
+            initialRatings={ratings.map((r) => ({
+              user_key: r.user_key,
+              stars: r.stars,
+            }))}
+          />
           <dl className="grid grid-cols-[80px_1fr] gap-x-3 gap-y-1.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
             <Meta term="Designer">
               {ref.designers.length > 0 ? (
