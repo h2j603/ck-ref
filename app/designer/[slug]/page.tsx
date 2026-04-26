@@ -10,7 +10,10 @@ export default async function DesignerPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  // Next 16 dynamic params arrive URL-encoded; decode so non-ASCII slugs
+  // (Korean designer names) round-trip correctly to the DB query.
+  const slug = decodeURIComponent(rawSlug);
   const designer = await fetchDesignerBySlug(slug).catch(() => null);
   if (!designer) notFound();
 
