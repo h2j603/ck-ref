@@ -41,14 +41,14 @@ export default async function RootLayout({
       className={`${inter.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
-        <header className="flex items-baseline justify-between border-b border-border/60 px-6 py-4 sm:px-10">
+        <header className="flex flex-wrap items-center justify-between gap-y-2 border-b border-border/60 px-6 py-4 sm:items-baseline sm:px-10">
           <Link
             href="/"
             className="font-mono text-sm font-medium tracking-tight text-foreground"
           >
             CK Ref.
           </Link>
-          <nav className="flex items-center gap-6 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          <nav className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-muted-foreground sm:gap-6">
             <Link href="/" className="transition-colors hover:text-foreground">
               Index
             </Link>
