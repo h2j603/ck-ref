@@ -116,6 +116,32 @@ export async function fetchDesignerBySlug(slug: string) {
   return (data ?? null) as Designer | null;
 }
 
+export type LinkedRef = Pick<
+  Ref,
+  "id" | "title" | "year" | "image_path" | "image_width" | "image_height"
+>;
+
+export async function fetchLinkedRefs(refId: string): Promise<LinkedRef[]> {
+  const supabase = await createClient();
+  const { data: links, error } = await supabase
+    .from("ref_links")
+    .select("a_id, b_id")
+    .or(`a_id.eq.${refId},b_id.eq.${refId}`);
+  if (error) throw error;
+  const otherIds = (links ?? []).map((l) =>
+    (l as { a_id: string; b_id: string }).a_id === refId
+      ? (l as { a_id: string; b_id: string }).b_id
+      : (l as { a_id: string; b_id: string }).a_id,
+  );
+  if (otherIds.length === 0) return [];
+  const { data, error: e2 } = await supabase
+    .from("refs")
+    .select("id, title, year, image_path, image_width, image_height")
+    .in("id", otherIds);
+  if (e2) throw e2;
+  return (data ?? []) as LinkedRef[];
+}
+
 export async function fetchAllTags(): Promise<string[]> {
   const supabase = await createClient();
   // Pull tags from refs and dedupe in memory. For larger archives, move this to a view/RPC.
