@@ -18,7 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import { parseTags } from "@/lib/slug";
-import { STORAGE_BUCKET } from "@/lib/supabase/env";
+import { STORAGE_BUCKET, assertSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
 import {
   GENRES,
@@ -42,6 +42,31 @@ function fileExtension(file: File) {
 
 function randomId() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+// Supabase가 던지는 PostgrestError/StorageError는 Error 인스턴스가 아닐 때가
+// 있어서 `instanceof Error` 만으로는 메시지를 못 잡는다. 가능한 모든 형태에서
+// 사람이 읽을 수 있는 문자열을 뽑아낸다.
+function extractErrorMessage(err: unknown): string {
+  if (typeof err === "string" && err.trim()) return err;
+  if (err && typeof err === "object") {
+    const e = err as {
+      message?: unknown;
+      error?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      statusCode?: unknown;
+    };
+    const parts = [e.message, e.details, e.hint, e.error]
+      .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (parts.length > 0) {
+      const code = typeof e.statusCode === "string" || typeof e.statusCode === "number"
+        ? ` (${e.statusCode})`
+        : "";
+      return parts.join(" — ") + code;
+    }
+  }
+  return "업로드에 실패했습니다.";
 }
 
 export function MetadataForm() {
@@ -79,6 +104,12 @@ export function MetadataForm() {
     }
     if (files.length === 0) {
       setError("이미지를 한 장 이상 추가해주세요.");
+      return;
+    }
+    try {
+      assertSupabaseConfigured();
+    } catch (err) {
+      setError(extractErrorMessage(err));
       return;
     }
 
@@ -143,7 +174,8 @@ export function MetadataForm() {
       router.push("/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "업로드에 실패했습니다.");
+      console.error("upload failed", err);
+      setError(extractErrorMessage(err));
       setSubmitting(false);
       setProgress(null);
     }
