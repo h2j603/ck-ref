@@ -113,14 +113,21 @@ export async function fetchNotes(refId: string): Promise<Note[]> {
   return (data ?? []) as Note[];
 }
 
-export async function fetchDesigners(): Promise<Designer[]> {
+export type DesignerWithCount = Designer & { ref_count: number };
+
+export async function fetchDesigners(): Promise<DesignerWithCount[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("designers")
-    .select("*")
+    .select("*, ref_designers(count)")
     .order("name", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Designer[];
+  type Row = Designer & { ref_designers: { count: number }[] };
+  return (data ?? []).map((row) => {
+    const r = row as Row;
+    const { ref_designers, ...rest } = r;
+    return { ...rest, ref_count: ref_designers?.[0]?.count ?? 0 };
+  });
 }
 
 export async function fetchDesignerBySlug(slug: string) {

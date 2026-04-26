@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { NicknamePill } from "@/components/nickname-pill";
+import { OriginPicker, originToString, type OriginValue } from "@/components/origin-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,7 @@ export default function NewDesignerForm() {
   const { nickname, hydrated } = useNickname();
 
   const [name, setName] = useState("");
-  const [origin, setOrigin] = useState("");
+  const [origin, setOrigin] = useState<OriginValue>({ code: null, freeText: "" });
   const [website, setWebsite] = useState("");
   const [bio, setBio] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,7 +38,7 @@ export default function NewDesignerForm() {
       .insert({
         slug,
         name: name.trim(),
-        origin: origin.trim() || null,
+        origin: originToString(origin),
         website: website.trim() || null,
         bio: bio.trim() || null,
         created_by: nickname || null,
@@ -71,11 +72,7 @@ export default function NewDesignerForm() {
         ) : null}
       </Field>
       <Field label="출신/국가">
-        <Input
-          value={origin}
-          onChange={(e) => setOrigin(e.target.value)}
-          placeholder="예: 서울, KR"
-        />
+        <OriginPicker value={origin} onChange={setOrigin} />
       </Field>
       <Field label="웹사이트">
         <Input

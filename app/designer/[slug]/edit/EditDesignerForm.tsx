@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 
+import { OriginPicker, originToString, type OriginValue } from "@/components/origin-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { matchCountry } from "@/lib/countries";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
 
@@ -31,7 +33,7 @@ export function EditDesignerForm({
   const { nickname, hydrated } = useNickname();
 
   const [name, setName] = useState(initial.name);
-  const [origin, setOrigin] = useState(initial.origin ?? "");
+  const [origin, setOrigin] = useState<OriginValue>(matchCountry(initial.origin));
   const [website, setWebsite] = useState(initial.website ?? "");
   const [bio, setBio] = useState(initial.bio ?? "");
   const [busy, setBusy] = useState(false);
@@ -64,7 +66,7 @@ export function EditDesignerForm({
       .from("designers")
       .update({
         name: name.trim(),
-        origin: origin.trim() || null,
+        origin: originToString(origin),
         website: website.trim() || null,
         bio: bio.trim() || null,
       })
@@ -86,11 +88,7 @@ export function EditDesignerForm({
         </p>
       </Field>
       <Field label="출신/국가">
-        <Input
-          value={origin}
-          onChange={(e) => setOrigin(e.target.value)}
-          placeholder="예: 서울, KR"
-        />
+        <OriginPicker value={origin} onChange={setOrigin} />
       </Field>
       <Field label="웹사이트">
         <Input
