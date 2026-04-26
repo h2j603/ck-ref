@@ -51,6 +51,8 @@ export type Ref = {
   notes_count: number;
   created_at: string;
   created_by: string | null;
+  color_hex: string | null;
+  color_hue: number | null;
 };
 
 export type RefWithDesigners = Ref & {

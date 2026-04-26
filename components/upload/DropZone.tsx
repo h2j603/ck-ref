@@ -1,8 +1,10 @@
 "use client";
 
+import { getColor } from "colorthief";
 import { ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { colorMetaFromRgb } from "@/lib/color";
 import { cn } from "@/lib/utils";
 
 export type UploadFile = {
@@ -11,22 +13,43 @@ export type UploadFile = {
   previewUrl: string;
   width?: number;
   height?: number;
+  colorHex?: string | null;
+  colorHue?: number | null;
 };
 
 function fileId(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`;
 }
 
-async function readDimensions(
-  file: File,
-): Promise<{ width: number; height: number } | null> {
+type Probed = {
+  width: number;
+  height: number;
+  colorHex: string | null;
+  colorHue: number | null;
+};
+
+async function probeImage(file: File): Promise<Probed | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const img = new window.Image();
-    img.onload = () => {
+    img.crossOrigin = "anonymous";
+    img.onload = async () => {
       const dims = { width: img.naturalWidth, height: img.naturalHeight };
+      let colorHex: string | null = null;
+      let colorHue: number | null = null;
+      try {
+        const c = await getColor(img);
+        if (c) {
+          const rgb = c.rgb();
+          const meta = colorMetaFromRgb(rgb.r, rgb.g, rgb.b);
+          colorHex = meta.hex;
+          colorHue = meta.hue;
+        }
+      } catch {
+        /* color extraction is best-effort */
+      }
       URL.revokeObjectURL(url);
-      resolve(dims);
+      resolve({ ...dims, colorHex, colorHue });
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -61,13 +84,15 @@ export function DropZone({
       for (const file of accepted) {
         const id = fileId(file);
         if (existingIds.has(id)) continue;
-        const dims = await readDimensions(file);
+        const probed = await probeImage(file);
         next.push({
           id,
           file,
           previewUrl: URL.createObjectURL(file),
-          width: dims?.width,
-          height: dims?.height,
+          width: probed?.width,
+          height: probed?.height,
+          colorHex: probed?.colorHex ?? null,
+          colorHue: probed?.colorHue ?? null,
         });
       }
       if (next.length > 0) onChange([...files, ...next]);

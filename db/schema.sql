@@ -45,6 +45,12 @@ create index if not exists refs_languages_idx  on refs using gin (languages);
 create index if not exists refs_genre_idx      on refs (genre);
 create index if not exists refs_medium_idx     on refs (medium);
 
+-- Dominant color extracted client-side at upload. color_hex is for display,
+-- color_hue (0-359) for cheap range filters; NULL hue = greyscale/neutral.
+alter table refs add column if not exists color_hex text;
+alter table refs add column if not exists color_hue smallint;
+create index if not exists refs_color_hue_idx on refs (color_hue);
+
 -- REF <-> DESIGNER ----------------------------------------------------------
 
 create table if not exists ref_designers (
