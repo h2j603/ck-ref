@@ -3,18 +3,24 @@
 import Masonry from "react-masonry-css";
 
 import { RefCard } from "./RefCard";
+import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
 import type { RefWithDesigners } from "@/lib/types";
 
-const BREAKPOINTS = {
-  default: 5,
-  1536: 4,
-  1280: 4,
-  1024: 3,
-  768: 2,
-  480: 2,
-};
+// Mobile breakpoints scale the user's pick down so phones don't end up with
+// 5 hairline columns.
+function breakpointsFor(cols: ColumnCount) {
+  return {
+    default: cols,
+    1536: cols,
+    1280: Math.min(cols, 4),
+    1024: Math.min(cols, 3),
+    768: Math.min(cols, 2),
+    480: Math.min(cols, 2),
+  };
+}
 
 export function MasonryGrid({ refs }: { refs: RefWithDesigners[] }) {
+  const { columns } = useColumnPref();
   if (refs.length === 0) {
     return (
       <p className="py-32 text-center font-mono text-xs text-muted-foreground">
@@ -24,7 +30,7 @@ export function MasonryGrid({ refs }: { refs: RefWithDesigners[] }) {
   }
   return (
     <Masonry
-      breakpointCols={BREAKPOINTS}
+      breakpointCols={breakpointsFor(columns)}
       className="masonry-grid"
       columnClassName="masonry-grid_column"
     >

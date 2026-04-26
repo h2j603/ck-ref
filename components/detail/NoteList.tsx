@@ -4,6 +4,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
@@ -129,9 +130,10 @@ export function NoteList({
               className="flex flex-col gap-2 border-b border-border/40 pb-4 last:border-b-0"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <div className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  @{note.author} · {formatDate(note.created_at)}
-                  {note.created_at !== note.updated_at ? " · edited" : ""}
+                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <NicknamePill nickname={note.author} />
+                  <span>{formatDate(note.created_at)}</span>
+                  {note.created_at !== note.updated_at ? <span>· edited</span> : null}
                 </div>
                 {mine && !editing ? (
                   <div className="flex gap-2">

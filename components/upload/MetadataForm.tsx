@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "./DesignerPicker";
 import { DropZone, type UploadFile } from "./DropZone";
+import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -293,9 +294,13 @@ export function MetadataForm() {
       ) : null}
 
       <div className="flex items-center justify-between gap-4">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-          {nickname ? `as @${nickname}` : "/gate에서 닉네임 등록 필요"}
-        </p>
+        {nickname ? (
+          <NicknamePill nickname={nickname} prefix="as @" />
+        ) : (
+          <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            /gate에서 닉네임 등록 필요
+          </p>
+        )}
         <Button type="submit" disabled={submitting || !hydrated}>
           {submitting ? "올리는 중…" : `${files.length || ""} 이미지 등록`}
         </Button>

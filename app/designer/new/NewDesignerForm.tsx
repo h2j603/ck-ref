@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,9 +95,13 @@ export default function NewDesignerForm() {
       </Field>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-          {hydrated && nickname ? `as @${nickname}` : "닉네임 필요"}
-        </p>
+        {hydrated && nickname ? (
+          <NicknamePill nickname={nickname} prefix="as @" />
+        ) : (
+          <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            닉네임 필요
+          </p>
+        )}
         <Button type="submit" disabled={busy}>
           {busy ? "저장 중…" : "추가"}
         </Button>
