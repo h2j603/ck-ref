@@ -12,10 +12,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BUCKET_SWATCH, HUE_BUCKETS, type HueBucket } from "@/lib/color";
-import { GENRES, LANGUAGES, MEDIUMS } from "@/lib/types";
+import { GENRES, LANGUAGES, MEDIUMS, REF_SORTS, type RefSort } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
+
+const SORT_LABELS: Record<RefSort, string> = {
+  latest: "최신",
+  rating: "별점",
+  popular: "인기",
+};
 
 export function FilterBar({ allTags }: { allTags: string[] }) {
   const router = useRouter();
@@ -25,6 +31,10 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   const medium = params.get("medium") ?? ALL;
   const language = params.get("language") ?? ALL;
   const hue = params.get("hue") as HueBucket | null;
+  const sortParam = params.get("sort");
+  const sort: RefSort = (REF_SORTS as readonly string[]).includes(sortParam ?? "")
+    ? (sortParam as RefSort)
+    : "latest";
   const activeTags = useMemo(
     () => params.getAll("tag").filter(Boolean),
     [params],
@@ -80,6 +90,24 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           options={LANGUAGES as readonly string[]}
           onChange={(v) => update({ language: v })}
         />
+        <Select
+          value={sort}
+          onValueChange={(v) =>
+            update({ sort: v === "latest" ? null : (v as RefSort) })
+          }
+        >
+          <SelectTrigger className="h-8 w-[140px] gap-2 border-dashed font-mono text-[11px] uppercase tracking-wider">
+            <span className="text-muted-foreground">Sort</span>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REF_SORTS.map((s) => (
+              <SelectItem key={s} value={s}>
+                {SORT_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {hasFilter ? (
           <button
             type="button"
