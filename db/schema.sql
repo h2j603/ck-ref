@@ -15,8 +15,12 @@ create table if not exists profiles (
   display_name  text not null,
   avatar_path   text,
   color         text not null default '#a8a29e',
+  password_hash text,
   updated_at    timestamptz not null default now()
 );
+
+-- Existing deployments: the column was added later. Idempotent.
+alter table profiles add column if not exists password_hash text;
 
 insert into profiles (key, display_name, color) values
   ('하진', '하진', '#e9c46a'),
