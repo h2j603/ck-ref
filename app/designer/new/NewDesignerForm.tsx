@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,6 @@ import { slugify } from "@/lib/slug";
 import { createClient } from "@/lib/supabase/client";
 
 export default function NewDesignerForm() {
-  const router = useRouter();
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
 
@@ -45,13 +43,16 @@ export default function NewDesignerForm() {
       })
       .select("slug")
       .single();
-    setBusy(false);
     if (error) {
+      setBusy(false);
       setError(error.message);
       return;
     }
-    router.push(`/designer/${(data as { slug: string }).slug}`);
-    router.refresh();
+    // Full reload — same reason as gate: avoids router cache races with the
+    // proxy and ensures the just-inserted row is visible to the next RSC.
+    window.location.assign(
+      `/designer/${encodeURIComponent((data as { slug: string }).slug)}`,
+    );
   }
 
   return (

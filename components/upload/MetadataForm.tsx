@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "./DesignerPicker";
@@ -70,7 +69,6 @@ function extractErrorMessage(err: unknown): string {
 }
 
 export function MetadataForm() {
-  const router = useRouter();
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
 
@@ -171,8 +169,9 @@ export function MetadataForm() {
       }
 
       setProgress("완료. 인덱스로 이동합니다.");
-      router.push("/");
-      router.refresh();
+      // Full reload so the newly-inserted ref shows up in the index RSC and
+      // we don't fight the router cache.
+      window.location.assign("/");
     } catch (err) {
       console.error("upload failed", err);
       setError(extractErrorMessage(err));
