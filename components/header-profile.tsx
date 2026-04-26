@@ -3,16 +3,19 @@
 import Link from "next/link";
 
 import { useNickname } from "@/lib/nickname";
-import { findProfile } from "@/lib/profiles";
+import { findProfile, type Profile } from "@/lib/profiles";
+import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 
-export function HeaderProfile() {
+export function HeaderProfile({ profiles }: { profiles: Profile[] }) {
   const { nickname, hydrated } = useNickname();
   if (!hydrated) {
-    // Reserve space so the header doesn't reflow on hydration.
     return <span aria-hidden className="inline-block h-5 w-12" />;
   }
-  const profile = nickname ? findProfile(nickname) : null;
+  const profile = findProfile(profiles, nickname);
+  const avatar = profile?.avatar_path
+    ? publicImageUrl(profile.avatar_path)
+    : null;
   return (
     <Link
       href="/gate"
@@ -22,12 +25,15 @@ export function HeaderProfile() {
       <span
         aria-hidden
         className={cn(
-          "size-4 rounded-full border border-black/10",
+          "size-5 overflow-hidden rounded-full border border-black/10 bg-cover bg-center",
           !profile && "bg-muted",
         )}
-        style={profile ? { backgroundColor: profile.color } : undefined}
+        style={{
+          backgroundColor: avatar ? undefined : profile?.color,
+          backgroundImage: avatar ? `url(${avatar})` : undefined,
+        }}
       />
-      {nickname ? `@${nickname}` : "Sign in"}
+      {profile ? `@${profile.display_name}` : "Sign in"}
     </Link>
   );
 }

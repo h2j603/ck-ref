@@ -1,27 +1,33 @@
 "use client";
 
+import { Pencil } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNickname } from "@/lib/nickname";
-import { PROFILES, type Profile } from "@/lib/profiles";
+import { type Profile } from "@/lib/profiles";
+import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
+
+import { EditProfileDialog } from "./EditProfileDialog";
 
 export default function GateClient({
   initialAuthed,
   redirectTo,
+  profiles,
 }: {
   initialAuthed: boolean;
   redirectTo: string;
+  profiles: Profile[];
 }) {
   const [authed, setAuthed] = useState(initialAuthed);
 
   if (!authed) {
     return <PasswordForm onSuccess={() => setAuthed(true)} />;
   }
-  return <ProfilePicker redirectTo={redirectTo} />;
+  return <ProfilePicker profiles={profiles} redirectTo={redirectTo} />;
 }
 
 function PasswordForm({ onSuccess }: { onSuccess: () => void }) {
@@ -86,25 +92,32 @@ function PasswordForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function ProfilePicker({ redirectTo }: { redirectTo: string }) {
+function ProfilePicker({
+  profiles,
+  redirectTo,
+}: {
+  profiles: Profile[];
+  redirectTo: string;
+}) {
   const { nickname, setNickname } = useNickname();
   const [pendingNick, setPendingNick] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
 
   function pick(profile: Profile) {
-    setPendingNick(profile.nickname);
-    setNickname(profile.nickname);
-    // Full reload so the proxy/RSC see the cookie freshly.
+    setPendingNick(profile.key);
+    setNickname(profile.key);
     window.location.assign(redirectTo);
   }
 
   return (
     <div className="flex flex-col items-center gap-8">
       <ul className="grid grid-cols-3 gap-6">
-        {PROFILES.map((p) => {
-          const current = nickname === p.nickname;
-          const loading = pendingNick === p.nickname;
+        {profiles.map((p) => {
+          const current = nickname === p.key;
+          const loading = pendingNick === p.key;
+          const avatar = p.avatar_path ? publicImageUrl(p.avatar_path) : null;
           return (
-            <li key={p.nickname}>
+            <li key={p.key} className="relative">
               <button
                 type="button"
                 onClick={() => pick(p)}
@@ -116,32 +129,58 @@ function ProfilePicker({ redirectTo }: { redirectTo: string }) {
               >
                 <span
                   className={cn(
-                    "flex size-20 items-center justify-center rounded-2xl border text-2xl font-medium transition-transform sm:size-24",
+                    "flex size-20 items-center justify-center overflow-hidden rounded-2xl border bg-cover bg-center text-2xl font-medium text-foreground transition-transform sm:size-24",
                     current
                       ? "border-foreground"
                       : "border-transparent group-hover:scale-105 group-hover:border-foreground/40 group-focus-visible:border-foreground",
                   )}
-                  style={{ backgroundColor: p.color }}
+                  style={{
+                    backgroundColor: avatar ? undefined : p.color,
+                    backgroundImage: avatar ? `url(${avatar})` : undefined,
+                  }}
                   aria-hidden
                 >
-                  {p.nickname.slice(0, 1)}
+                  {avatar ? "" : p.display_name.slice(0, 1)}
                 </span>
                 <span
                   className={cn(
                     "font-mono text-[11px] uppercase tracking-wider",
-                    current ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
+                    current
+                      ? "text-foreground"
+                      : "text-muted-foreground group-hover:text-foreground",
                   )}
                 >
-                  @{p.nickname}
+                  @{p.display_name}
                 </span>
               </button>
+              {current ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingProfile(p)}
+                  className="absolute -right-1 -top-1 rounded-full border border-input bg-background p-1 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="edit profile"
+                >
+                  <Pencil className="size-3" />
+                </button>
+              ) : null}
             </li>
           );
         })}
       </ul>
       <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-        {nickname ? `현재: @${nickname} — 다른 프로필을 눌러 변경` : "프로필 선택"}
+        {nickname
+          ? "현재 프로필 위 연필 아이콘을 누르면 이름·사진을 바꿀 수 있어요"
+          : "프로필 선택"}
       </p>
+      {editingProfile ? (
+        <EditProfileDialog
+          profile={editingProfile}
+          open={editingProfile !== null}
+          onOpenChange={(open) => {
+            if (!open) setEditingProfile(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
