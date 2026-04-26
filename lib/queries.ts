@@ -1,5 +1,6 @@
 import "server-only";
 
+import { bucketHueRanges, type HueBucket } from "@/lib/color";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Designer,
@@ -17,6 +18,7 @@ const REF_COLUMNS = `
   id, title, year, source_url,
   image_path, image_width, image_height,
   genre, medium, languages, tags,
+  color_hex, color_hue,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) )
 `;
@@ -41,6 +43,7 @@ export type RefFilter = {
   language?: string;
   tags?: string[];
   designerId?: string;
+  hue?: HueBucket;
 };
 
 export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
@@ -57,6 +60,16 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
   if (filter.language) query = query.contains("languages", [filter.language]);
   if (filter.tags && filter.tags.length > 0) {
     query = query.contains("tags", filter.tags);
+  }
+  if (filter.hue) {
+    const ranges = bucketHueRanges(filter.hue);
+    if (ranges === null) {
+      query = query.is("color_hue", null);
+    } else {
+      // OR-join the ranges (red wraps around, so it has two).
+      const parts = ranges.map(([lo, hi]) => `and(color_hue.gte.${lo},color_hue.lt.${hi})`);
+      query = query.or(parts.join(","));
+    }
   }
 
   const { data, error } = await query;

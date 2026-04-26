@@ -147,6 +147,8 @@ export function MetadataForm() {
             image_path: path,
             image_width: f.width ?? null,
             image_height: f.height ?? null,
+            color_hex: f.colorHex ?? null,
+            color_hue: f.colorHue ?? null,
             genre: genre === NONE ? null : genre,
             medium: medium === NONE ? null : medium,
             languages,

@@ -11,7 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BUCKET_SWATCH, HUE_BUCKETS, type HueBucket } from "@/lib/color";
 import { GENRES, LANGUAGES, MEDIUMS } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const ALL = "__all__";
 
@@ -22,6 +24,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   const genre = params.get("genre") ?? ALL;
   const medium = params.get("medium") ?? ALL;
   const language = params.get("language") ?? ALL;
+  const hue = params.get("hue") as HueBucket | null;
   const activeTags = useMemo(
     () => params.getAll("tag").filter(Boolean),
     [params],
@@ -53,6 +56,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     genre !== ALL ||
     medium !== ALL ||
     language !== ALL ||
+    hue !== null ||
     activeTags.length > 0;
 
   return (
@@ -80,13 +84,48 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           <button
             type="button"
             onClick={() =>
-              update({ genre: null, medium: null, language: null, tag: [] })
+              update({
+                genre: null,
+                medium: null,
+                language: null,
+                hue: null,
+                tag: [],
+              })
             }
             className="ml-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
           >
             reset
           </button>
         ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          Color
+        </span>
+        {HUE_BUCKETS.map((b) => {
+          const active = hue === b;
+          return (
+            <button
+              key={b}
+              type="button"
+              onClick={() => update({ hue: active ? null : b })}
+              aria-pressed={active}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                active
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-input text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span
+                aria-hidden
+                className="size-2.5 rounded-full border border-black/10"
+                style={{ backgroundColor: BUCKET_SWATCH[b] }}
+              />
+              {b}
+            </button>
+          );
+        })}
       </div>
       {allTags.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
