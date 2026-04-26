@@ -13,7 +13,9 @@ import {
   fetchAllTags,
   fetchProfiles,
   fetchRefs,
+  REF_SORTS,
   type RefFilter,
+  type RefSort,
 } from "@/lib/queries";
 import { startOfThisWeekUtcIso } from "@/lib/week";
 
@@ -22,6 +24,7 @@ type SearchParams = Promise<{
   medium?: string;
   language?: string;
   hue?: string;
+  sort?: string;
   tag?: string | string[];
 }>;
 
@@ -34,11 +37,15 @@ export default async function HomePage({
   const hue = HUE_BUCKETS.includes(sp.hue as HueBucket)
     ? (sp.hue as HueBucket)
     : undefined;
+  const sort = (REF_SORTS as readonly string[]).includes(sp.sort ?? "")
+    ? (sp.sort as RefSort)
+    : undefined;
   const filter: RefFilter = {
     genre: sp.genre,
     medium: sp.medium,
     language: sp.language,
     hue,
+    sort,
     tags: sp.tag ? (Array.isArray(sp.tag) ? sp.tag : [sp.tag]) : undefined,
   };
 
