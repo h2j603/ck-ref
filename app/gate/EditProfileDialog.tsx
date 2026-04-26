@@ -27,6 +27,15 @@ function fileExt(file: File) {
   return "bin";
 }
 
+// Supabase Storage rejects non-ASCII characters in object keys, so the
+// profile key (e.g. 혁) can't appear in the path. The DB row's `key` is the
+// canonical link back; the storage path just needs to be unique + ASCII.
+function avatarPath(ext: string) {
+  const stamp = Date.now();
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `avatars/${stamp}-${rand}.${ext}`;
+}
+
 export function EditProfileDialog({
   profile,
   open,
@@ -63,9 +72,9 @@ export function EditProfileDialog({
     }
     setBusy(true);
     try {
-      let avatarPath = profile.avatar_path;
+      let nextAvatarPath = profile.avatar_path;
       if (file) {
-        const path = `avatars/${profile.key}-${Date.now()}.${fileExt(file)}`;
+        const path = avatarPath(fileExt(file));
         const { error: upErr } = await supabase.storage
           .from(STORAGE_BUCKET)
           .upload(path, file, {
@@ -74,13 +83,13 @@ export function EditProfileDialog({
             contentType: file.type || undefined,
           });
         if (upErr) throw upErr;
-        avatarPath = path;
+        nextAvatarPath = path;
       }
       const { error: updErr } = await supabase
         .from("profiles")
         .update({
           display_name: trimmed,
-          avatar_path: avatarPath,
+          avatar_path: nextAvatarPath,
           updated_at: new Date().toISOString(),
         })
         .eq("key", profile.key);
