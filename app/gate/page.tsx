@@ -1,4 +1,4 @@
-import { fetchProfiles } from "@/lib/queries";
+import { fetchProfileRefCounts, fetchProfiles } from "@/lib/queries";
 
 import GateClient from "./GateClient";
 
@@ -14,7 +14,10 @@ export default async function GatePage({
   const { from } = await searchParams;
   const safeFrom =
     from && from.startsWith("/") && !from.startsWith("//") ? from : "/";
-  const profiles = await fetchProfiles();
+  const [profiles, counts] = await Promise.all([
+    fetchProfiles(),
+    fetchProfileRefCounts(),
+  ]);
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center gap-10">
@@ -29,7 +32,7 @@ export default async function GatePage({
           처음이라면 입력한 비밀번호가 그 프로필의 비밀번호로 저장돼요.
         </p>
       </div>
-      <GateClient redirectTo={safeFrom} profiles={profiles} />
+      <GateClient redirectTo={safeFrom} profiles={profiles} counts={counts} />
     </div>
   );
 }

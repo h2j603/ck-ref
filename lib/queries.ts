@@ -49,6 +49,7 @@ export type RefFilter = {
   tags?: string[];
   designerId?: string;
   hue?: HueBucket;
+  userKey?: string;
 };
 
 export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
@@ -60,6 +61,7 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  if (filter.userKey) query = query.eq("created_by", filter.userKey);
   if (filter.genre) query = query.eq("genre", filter.genre);
   if (filter.medium) query = query.eq("medium", filter.medium);
   if (filter.language) query = query.contains("languages", [filter.language]);
@@ -165,6 +167,35 @@ export async function fetchLinkedRefs(refId: string): Promise<LinkedRef[]> {
     .in("id", otherIds);
   if (e2) throw e2;
   return (data ?? []) as LinkedRef[];
+}
+
+// One head-count per profile (3 round trips). Cheap and avoids transferring
+// rows we don't need.
+export async function fetchProfileRefCounts(): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const entries = await Promise.all(
+    PROFILE_KEYS.map(async (key) => {
+      const { count } = await supabase
+        .from("refs")
+        .select("*", { count: "exact", head: true })
+        .eq("created_by", key);
+      return [key, count ?? 0] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
+export async function countRefsByUserSince(
+  userKey: string,
+  sinceIso: string,
+): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("refs")
+    .select("*", { count: "exact", head: true })
+    .eq("created_by", userKey)
+    .gte("created_at", sinceIso);
+  return count ?? 0;
 }
 
 export async function fetchProfiles(): Promise<Profile[]> {
