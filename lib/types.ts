@@ -1,0 +1,73 @@
+// Domain types matching the Supabase schema (see db/schema.sql).
+
+export const GENRES = [
+  "editorial",
+  "poster",
+  "identity",
+  "type",
+  "packaging",
+  "web",
+  "motion",
+  "exhibition",
+  "etc",
+] as const;
+export type Genre = (typeof GENRES)[number];
+
+export const MEDIUMS = [
+  "print",
+  "screen",
+  "spatial",
+  "object",
+  "mixed",
+] as const;
+export type Medium = (typeof MEDIUMS)[number];
+
+export const LANGUAGES = ["ko", "en", "ja", "zh", "etc"] as const;
+export type Language = (typeof LANGUAGES)[number];
+
+export type Designer = {
+  id: string;
+  slug: string;
+  name: string;
+  origin: string | null;
+  website: string | null;
+  bio: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type Ref = {
+  id: string;
+  title: string | null;
+  year: number | null;
+  source_url: string | null;
+  image_path: string;
+  image_width: number | null;
+  image_height: number | null;
+  genre: Genre | null;
+  medium: Medium | null;
+  languages: Language[];
+  tags: string[];
+  notes_count: number;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type RefWithDesigners = Ref & {
+  designers: Pick<Designer, "id" | "slug" | "name">[];
+};
+
+export type Note = {
+  id: string;
+  ref_id: string;
+  body: string;
+  author: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// Join-row helper used when inserting after upload.
+export type RefDesigner = {
+  ref_id: string;
+  designer_id: string;
+};

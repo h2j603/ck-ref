@@ -1,0 +1,20 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
+
+export function proxy(request: NextRequest) {
+  const cookie = request.cookies.get(ARCHIVE_AUTH_COOKIE)?.value;
+  if (cookie === "1") {
+    return NextResponse.next();
+  }
+  const url = request.nextUrl.clone();
+  url.pathname = "/gate";
+  url.searchParams.set("from", request.nextUrl.pathname);
+  return NextResponse.redirect(url);
+}
+
+export const config = {
+  // run on every path except /gate, /api/auth, static files, and Next internals
+  matcher: ["/((?!gate|api/auth|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+};
