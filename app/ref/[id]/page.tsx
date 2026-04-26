@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { NoteList } from "@/components/detail/NoteList";
+import { OwnerActions } from "@/components/detail/OwnerActions";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Badge } from "@/components/ui/badge";
 import { fetchNotes, fetchRef } from "@/lib/queries";
@@ -100,6 +101,11 @@ export default async function RefDetailPage({
               ))}
             </div>
           ) : null}
+          <OwnerActions
+            refId={ref.id}
+            imagePath={ref.image_path}
+            createdBy={ref.created_by}
+          />
         </section>
 
         <NoteList refId={ref.id} initialNotes={notes} />
