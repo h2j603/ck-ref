@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 
 import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +20,22 @@ function formatDate(iso: string) {
   });
 }
 
+type Draft = { body: string; pros: string; cons: string };
+const EMPTY: Draft = { body: "", pros: "", cons: "" };
+
+function trimToNull(value: string): string | null {
+  const t = value.trim();
+  return t ? t : null;
+}
+
+function noteToDraft(note: Note): Draft {
+  return {
+    body: note.body ?? "",
+    pros: note.pros ?? "",
+    cons: note.cons ?? "",
+  };
+}
+
 export function NoteList({
   refId,
   initialNotes,
@@ -29,9 +46,9 @@ export function NoteList({
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [notes, setNotes] = useState<Note[]>(initialNotes);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState<Draft>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingBody, setEditingBody] = useState("");
+  const [editingDraft, setEditingDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +68,11 @@ export function NoteList({
     };
   }, [supabase, refId]);
 
+  const draftHasContent =
+    draft.body.trim() !== "" ||
+    draft.pros.trim() !== "" ||
+    draft.cons.trim() !== "";
+
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -58,13 +80,18 @@ export function NoteList({
       setError("/gate에서 닉네임을 먼저 등록해주세요.");
       return;
     }
-    const body = draft.trim();
-    if (!body) return;
+    if (!draftHasContent) return;
 
     setBusy(true);
     const { data, error } = await supabase
       .from("notes")
-      .insert({ ref_id: refId, body, author: nickname })
+      .insert({
+        ref_id: refId,
+        body: trimToNull(draft.body),
+        pros: trimToNull(draft.pros),
+        cons: trimToNull(draft.cons),
+        author: nickname,
+      })
       .select("*")
       .single();
     setBusy(false);
@@ -73,17 +100,24 @@ export function NoteList({
       return;
     }
     setNotes((prev) => [...prev, data as Note]);
-    setDraft("");
+    setDraft(EMPTY);
   }
 
   async function saveEdit(noteId: string) {
     setError(null);
-    const body = editingBody.trim();
-    if (!body) return;
+    const hasContent =
+      editingDraft.body.trim() !== "" ||
+      editingDraft.pros.trim() !== "" ||
+      editingDraft.cons.trim() !== "";
+    if (!hasContent) return;
     setBusy(true);
     const { data, error } = await supabase
       .from("notes")
-      .update({ body })
+      .update({
+        body: trimToNull(editingDraft.body),
+        pros: trimToNull(editingDraft.pros),
+        cons: trimToNull(editingDraft.cons),
+      })
       .eq("id", noteId)
       .select("*")
       .single();
@@ -96,7 +130,7 @@ export function NoteList({
       prev.map((n) => (n.id === noteId ? (data as Note) : n)),
     );
     setEditingId(null);
-    setEditingBody("");
+    setEditingDraft(EMPTY);
   }
 
   async function deleteNote(noteId: string) {
@@ -141,7 +175,7 @@ export function NoteList({
                       type="button"
                       onClick={() => {
                         setEditingId(note.id);
-                        setEditingBody(note.body);
+                        setEditingDraft(noteToDraft(note));
                       }}
                       className="text-muted-foreground hover:text-foreground"
                       aria-label="edit"
@@ -160,39 +194,37 @@ export function NoteList({
                 ) : null}
               </div>
               {editing ? (
-                <div className="flex flex-col gap-2">
-                  <Textarea
-                    value={editingBody}
-                    onChange={(e) => setEditingBody(e.target.value)}
-                    rows={4}
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setEditingId(null);
-                        setEditingBody("");
-                      }}
-                    >
-                      취소
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => saveEdit(note.id)}
-                      disabled={busy}
-                    >
-                      저장
-                    </Button>
-                  </div>
-                </div>
+                <NoteFields
+                  draft={editingDraft}
+                  onChange={setEditingDraft}
+                  disabled={busy}
+                />
               ) : (
-                <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
-                  <ReactMarkdown>{note.body}</ReactMarkdown>
-                </div>
+                <NoteContent note={note} />
               )}
+              {editing ? (
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditingId(null);
+                      setEditingDraft(EMPTY);
+                    }}
+                  >
+                    취소
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => saveEdit(note.id)}
+                    disabled={busy}
+                  >
+                    저장
+                  </Button>
+                </div>
+              ) : null}
             </li>
           );
         })}
@@ -203,28 +235,126 @@ export function NoteList({
         ) : null}
       </ul>
 
-      <form onSubmit={addNote} className="flex flex-col gap-2">
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={
-            hydrated && !nickname
-              ? "/gate에서 닉네임 등록 후 작성하세요"
-              : "마크다운으로 노트를 적어주세요"
-          }
-          rows={4}
+      <form onSubmit={addNote} className="flex flex-col gap-3">
+        <NoteFields
+          draft={draft}
+          onChange={setDraft}
           disabled={hydrated && !nickname}
         />
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <div className="flex justify-end">
           <Button
             type="submit"
-            disabled={busy || !draft.trim() || (hydrated && !nickname)}
+            disabled={busy || !draftHasContent || (hydrated && !nickname)}
           >
             노트 추가
           </Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function NoteFields({
+  draft,
+  onChange,
+  disabled,
+}: {
+  draft: Draft;
+  onChange: (d: Draft) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <FieldGroup label="장점" accent="text-emerald-600">
+        <Textarea
+          value={draft.pros}
+          onChange={(e) => onChange({ ...draft, pros: e.target.value })}
+          rows={2}
+          disabled={disabled}
+          placeholder="좋았던 점"
+        />
+      </FieldGroup>
+      <FieldGroup label="단점" accent="text-rose-600">
+        <Textarea
+          value={draft.cons}
+          onChange={(e) => onChange({ ...draft, cons: e.target.value })}
+          rows={2}
+          disabled={disabled}
+          placeholder="아쉬운 점"
+        />
+      </FieldGroup>
+      <FieldGroup label="메모">
+        <Textarea
+          value={draft.body}
+          onChange={(e) => onChange({ ...draft, body: e.target.value })}
+          rows={3}
+          disabled={disabled}
+          placeholder="마크다운 가능"
+        />
+      </FieldGroup>
+    </div>
+  );
+}
+
+function FieldGroup({
+  label,
+  accent,
+  children,
+}: {
+  label: string;
+  accent?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label
+        className={`font-mono text-[11px] uppercase tracking-widest ${accent ?? "text-muted-foreground"}`}
+      >
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function NoteContent({ note }: { note: Note }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {note.pros ? (
+        <Section label="장점" accent="text-emerald-600" content={note.pros} />
+      ) : null}
+      {note.cons ? (
+        <Section label="단점" accent="text-rose-600" content={note.cons} />
+      ) : null}
+      {note.body ? (
+        <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
+          <ReactMarkdown>{note.body}</ReactMarkdown>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Section({
+  label,
+  accent,
+  content,
+}: {
+  label: string;
+  accent: string;
+  content: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p
+        className={`font-mono text-[10px] uppercase tracking-widest ${accent}`}
+      >
+        {label}
+      </p>
+      <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </div>
     </div>
   );
 }
