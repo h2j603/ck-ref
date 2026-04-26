@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { NoteList } from "@/components/detail/NoteList";
+import { NicknamePill } from "@/components/nickname-pill";
 import { Badge } from "@/components/ui/badge";
 import { fetchNotes, fetchRef } from "@/lib/queries";
 import { publicImageUrl } from "@/lib/storage";
@@ -79,8 +80,10 @@ export default async function RefDetailPage({
               )}
             </Meta>
             <Meta term="Added">
-              {new Date(ref.created_at).toLocaleDateString("ko-KR")}
-              {ref.created_by ? ` · @${ref.created_by}` : ""}
+              <span className="inline-flex items-center gap-2">
+                {new Date(ref.created_at).toLocaleDateString("ko-KR")}
+                <NicknamePill nickname={ref.created_by} />
+              </span>
             </Meta>
           </dl>
           {ref.tags.length > 0 ? (

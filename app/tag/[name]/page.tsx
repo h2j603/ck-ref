@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { MasonryGrid } from "@/components/gallery/MasonryGrid";
 import { fetchRefs } from "@/lib/queries";
 
@@ -26,13 +27,14 @@ export default async function TagPage({
             {refs.length} ref{refs.length === 1 ? "" : "s"}
           </p>
         </div>
-        <div>
+        <div className="flex items-center justify-between gap-3">
           <Link
             href="/"
             className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
           >
             ← back to index
           </Link>
+          <ColumnSelector />
         </div>
       </header>
       <MasonryGrid refs={refs} />

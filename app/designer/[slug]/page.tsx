@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { MasonryGrid } from "@/components/gallery/MasonryGrid";
 import { fetchDesignerBySlug, fetchRefs } from "@/lib/queries";
 
@@ -59,13 +60,14 @@ export default async function DesignerPage({
             {designer.bio}
           </p>
         ) : null}
-        <div>
+        <div className="flex items-center justify-between gap-3">
           <Link
             href="/designer"
             className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
           >
             ← all designers
           </Link>
+          <ColumnSelector />
         </div>
       </header>
       <MasonryGrid refs={refs} />
