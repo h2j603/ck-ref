@@ -100,6 +100,33 @@ create trigger notes_touch_trigger
 before update on notes
 for each row execute procedure touch_updated_at();
 
+-- RLS POLICIES --------------------------------------------------------------
+-- Supabase enables RLS by default on tables exposed via PostgREST. Without
+-- policies, anon-key inserts are rejected with "new row violates row-level
+-- security policy". This app gates access at the proxy layer (single shared
+-- password), so we expose permissive policies for anon + authenticated.
+
+alter table designers     enable row level security;
+alter table refs          enable row level security;
+alter table ref_designers enable row level security;
+alter table notes         enable row level security;
+
+drop policy if exists "anon all" on designers;
+create policy "anon all" on designers
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on refs;
+create policy "anon all" on refs
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on ref_designers;
+create policy "anon all" on ref_designers
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on notes;
+create policy "anon all" on notes
+  for all to anon, authenticated using (true) with check (true);
+
 -- STORAGE BUCKET ------------------------------------------------------------
 -- Create the bucket via Supabase dashboard or:
 --   insert into storage.buckets (id, name, public) values ('refs', 'refs', true)
