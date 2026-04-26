@@ -1,6 +1,11 @@
 import "server-only";
 
 import { bucketHueRanges, type HueBucket } from "@/lib/color";
+import {
+  FALLBACK_PROFILES,
+  PROFILE_KEYS,
+  type Profile,
+} from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Designer,
@@ -153,6 +158,23 @@ export async function fetchLinkedRefs(refId: string): Promise<LinkedRef[]> {
     .in("id", otherIds);
   if (e2) throw e2;
   return (data ?? []) as LinkedRef[];
+}
+
+export async function fetchProfiles(): Promise<Profile[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("key, display_name, avatar_path, color")
+    .in("key", PROFILE_KEYS as readonly string[]);
+  if (error) return FALLBACK_PROFILES;
+  // Preserve roster order regardless of DB return order; fall back per-key
+  // so a fresh DB without the seed row still renders something sensible.
+  return PROFILE_KEYS.map((key) => {
+    const row = (data ?? []).find(
+      (r) => (r as { key: string }).key === key,
+    ) as Profile | undefined;
+    return row ?? FALLBACK_PROFILES.find((p) => p.key === key)!;
+  });
 }
 
 export async function fetchAllTags(): Promise<string[]> {

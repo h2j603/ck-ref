@@ -5,6 +5,25 @@
 
 create extension if not exists "pgcrypto";
 
+-- PROFILES ------------------------------------------------------------------
+-- Fixed roster of three known users. `key` is the immutable identifier and
+-- matches what we store in localStorage and in created_by columns; only
+-- display_name + avatar_path are editable. The seed runs once via on-conflict.
+
+create table if not exists profiles (
+  key           text primary key,
+  display_name  text not null,
+  avatar_path   text,
+  color         text not null default '#a8a29e',
+  updated_at    timestamptz not null default now()
+);
+
+insert into profiles (key, display_name, color) values
+  ('하진', '하진', '#e9c46a'),
+  ('미주', '미주', '#48cae4'),
+  ('혁',   '혁',   '#e879c2')
+on conflict (key) do nothing;
+
 -- DESIGNERS -----------------------------------------------------------------
 
 create table if not exists designers (
@@ -135,11 +154,16 @@ create index if not exists ref_links_b_idx on ref_links (b_id);
 -- security policy". This app gates access at the proxy layer (single shared
 -- password), so we expose permissive policies for anon + authenticated.
 
+alter table profiles      enable row level security;
 alter table designers     enable row level security;
 alter table refs          enable row level security;
 alter table ref_designers enable row level security;
 alter table ref_links     enable row level security;
 alter table notes         enable row level security;
+
+drop policy if exists "anon all" on profiles;
+create policy "anon all" on profiles
+  for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on designers;
 create policy "anon all" on designers

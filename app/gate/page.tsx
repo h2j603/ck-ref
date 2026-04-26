@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 
 import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
+import { fetchProfiles } from "@/lib/queries";
 
 import GateClient from "./GateClient";
 
@@ -19,6 +20,7 @@ export default async function GatePage({
 
   const store = await cookies();
   const authed = store.get(ARCHIVE_AUTH_COOKIE)?.value === "1";
+  const profiles = await fetchProfiles();
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center gap-10">
@@ -35,7 +37,11 @@ export default async function GatePage({
           </p>
         )}
       </div>
-      <GateClient initialAuthed={authed} redirectTo={safeFrom} />
+      <GateClient
+        initialAuthed={authed}
+        redirectTo={safeFrom}
+        profiles={profiles}
+      />
     </div>
   );
 }
