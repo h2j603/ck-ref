@@ -20,7 +20,7 @@ export function HeaderProfile({ profiles }: { profiles: Profile[] }) {
     <Link
       href="/gate"
       className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
-      aria-label="profile"
+      aria-label={profile ? `@${profile.display_name}` : "sign in"}
     >
       <span
         aria-hidden
@@ -33,7 +33,9 @@ export function HeaderProfile({ profiles }: { profiles: Profile[] }) {
           backgroundImage: avatar ? `url(${avatar})` : undefined,
         }}
       />
-      {profile ? `@${profile.display_name}` : "Sign in"}
+      <span className="hidden sm:inline">
+        {profile ? `@${profile.display_name}` : "Sign in"}
+      </span>
     </Link>
   );
 }
