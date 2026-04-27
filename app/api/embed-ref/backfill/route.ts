@@ -9,7 +9,9 @@ import {
   vectorLiteral,
 } from "@/lib/embedding";
 import { isProfileKey } from "@/lib/profiles";
-import { publicImageUrl } from "@/lib/storage";
+import { publicImageUrl, transformedImageUrl } from "@/lib/storage";
+
+const EMBED_IMAGE_WIDTH = 512;
 import { createClient } from "@/lib/supabase/server";
 
 // One-shot backfill for refs that don't have an embedding yet. Walks up
@@ -71,7 +73,21 @@ export async function POST(request: Request) {
   // diagnose; we don't need every row's error.
   let lastError: string | null = null;
   for (const row of rows) {
-    const result = await embedImage(publicImageUrl(row.image_path));
+    const small = transformedImageUrl(row.image_path, {
+      width: EMBED_IMAGE_WIDTH,
+      resize: "contain",
+    });
+    let result = await embedImage(small);
+    if (!result.ok && result.reason.startsWith("jina_400")) {
+      result = await embedImage(publicImageUrl(row.image_path));
+    }
+    // On a token rate limit, sleep through the next minute and try once
+    // more. The free tier resets per-minute, so a single backoff usually
+    // gets us moving again instead of failing every remaining row.
+    if (!result.ok && result.reason.startsWith("jina_429")) {
+      await new Promise((r) => setTimeout(r, 65_000));
+      result = await embedImage(small);
+    }
     if (!result.ok) {
       failed += 1;
       lastError = result.reason;

@@ -5,7 +5,9 @@ import {
   embeddingsConfigured,
   vectorLiteral,
 } from "@/lib/embedding";
-import { publicImageUrl } from "@/lib/storage";
+import { publicImageUrl, transformedImageUrl } from "@/lib/storage";
+
+const EMBED_IMAGE_WIDTH = 512;
 import { createClient } from "@/lib/supabase/server";
 
 // Compute and persist an image embedding for a single ref. The upload
@@ -58,7 +60,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, skipped: true, reason: "already_embedded" });
   }
 
-  const result = await embedImage(publicImageUrl(row.image_path));
+  // Try the resized render endpoint first — it's a fraction of the bytes
+  // (and tokens) of the original. Some Supabase tiers don't expose the
+  // render endpoint, so fall back to the raw object URL on failure.
+  const small = transformedImageUrl(row.image_path, {
+    width: EMBED_IMAGE_WIDTH,
+    resize: "contain",
+  });
+  let result = await embedImage(small);
+  if (!result.ok && result.reason.startsWith("jina_400")) {
+    // Render endpoint disabled / image format unsupported by transform —
+    // retry with the unmodified public URL.
+    result = await embedImage(publicImageUrl(row.image_path));
+  }
   if (!result.ok) {
     return NextResponse.json({
       ok: true,
