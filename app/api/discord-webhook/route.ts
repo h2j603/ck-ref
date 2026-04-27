@@ -57,7 +57,11 @@ type Built = {
   kind: EventKind;
   actorKey: string | null;
   description: string;
+  // imageUrl renders full-width at the bottom of the embed (used when the
+  // upload itself is the message). thumbnailUrl renders small at the top-
+  // right (used to give context for notes/annotations/ratings).
   imageUrl?: string;
+  thumbnailUrl?: string;
 };
 
 export async function POST(req: Request) {
@@ -137,6 +141,7 @@ export async function POST(req: Request) {
         description: `${EVENT_EMOJI[built.kind]} ${built.description}`,
         color: EVENT_COLOR[built.kind],
         ...(built.imageUrl ? { image: { url: built.imageUrl } } : {}),
+        ...(built.thumbnailUrl ? { thumbnail: { url: built.thumbnailUrl } } : {}),
       },
     ],
     allowed_mentions: ping
@@ -244,38 +249,51 @@ async function buildNote(
   let targetLabel = "ref";
   let targetTitle = "untitled";
   let targetUrl = site;
+  let thumbnailPath: string | null = null;
 
   if (record.ref_id) {
     const { data } = await supabase
       .from("refs")
-      .select("id, title")
+      .select("id, title, image_path")
       .eq("id", record.ref_id as string)
       .maybeSingle();
     if (!data) return null;
-    const r = data as { id: string; title: string | null };
+    const r = data as { id: string; title: string | null; image_path: string | null };
     targetLabel = "ref";
     targetTitle = r.title ?? "untitled";
     targetUrl = `${site}/ref/${r.id}#note-${noteId}`;
+    thumbnailPath = r.image_path;
   } else if (record.project_id) {
+    // Projects don't have their own image. Use the latest project_update's
+    // image as the cover (matches the WIP list thumbnail logic).
     const { data } = await supabase
       .from("projects")
-      .select("id, title")
+      .select("id, title, project_updates(image_path, created_at)")
       .eq("id", record.project_id as string)
+      .order("created_at", { foreignTable: "project_updates", ascending: false })
+      .limit(1, { foreignTable: "project_updates" })
       .maybeSingle();
     if (!data) return null;
-    const p = data as { id: string; title: string };
+    type Row = {
+      id: string;
+      title: string;
+      project_updates: { image_path: string; created_at: string }[] | null;
+    };
+    const p = data as Row;
     targetLabel = "작업";
     targetTitle = p.title;
     targetUrl = `${site}/wip/${p.id}#note-${noteId}`;
+    thumbnailPath = p.project_updates?.[0]?.image_path ?? null;
   } else if (record.project_update_id) {
     const { data } = await supabase
       .from("project_updates")
-      .select("project_id, projects(title)")
+      .select("project_id, image_path, projects(title)")
       .eq("id", record.project_update_id as string)
       .maybeSingle();
     if (!data) return null;
     type Row = {
       project_id: string;
+      image_path: string | null;
       projects: { title: string } | { title: string }[] | null;
     };
     const r = data as Row;
@@ -283,6 +301,7 @@ async function buildNote(
     targetLabel = "업데이트";
     targetTitle = proj?.title ?? "untitled";
     targetUrl = `${site}/wip/${r.project_id}#update-${record.project_update_id as string}`;
+    thumbnailPath = r.image_path;
   } else {
     return null;
   }
@@ -296,6 +315,7 @@ async function buildNote(
     description:
       `**${authorName}**님이 ${targetLabel}에 ${verb} — [${targetTitle}](${targetUrl})` +
       (body ? `\n> ${body.replace(/\n/g, "\n> ")}` : ""),
+    thumbnailUrl: thumbnailPath ? publicImageUrl(thumbnailPath) : undefined,
   };
 }
 
@@ -310,28 +330,31 @@ async function buildAnnotation(
   let label = "ref";
   let title = "untitled";
   let url = site;
+  let thumbnailPath: string | null = null;
 
   if (record.ref_id) {
     const { data } = await supabase
       .from("refs")
-      .select("id, title")
+      .select("id, title, image_path")
       .eq("id", record.ref_id as string)
       .maybeSingle();
     if (!data) return null;
-    const r = data as { id: string; title: string | null };
+    const r = data as { id: string; title: string | null; image_path: string | null };
     label = "ref";
     title = r.title ?? "untitled";
     url = `${site}/ref/${r.id}#ann-${annId}`;
+    thumbnailPath = r.image_path;
   } else if (record.project_update_id) {
     const { data } = await supabase
       .from("project_updates")
-      .select("id, project_id, projects(title)")
+      .select("id, project_id, image_path, projects(title)")
       .eq("id", record.project_update_id as string)
       .maybeSingle();
     if (!data) return null;
     type Row = {
       id: string;
       project_id: string;
+      image_path: string | null;
       projects: { title: string } | { title: string }[] | null;
     };
     const r = data as Row;
@@ -339,6 +362,7 @@ async function buildAnnotation(
     label = "업데이트";
     title = proj?.title ?? "untitled";
     url = `${site}/wip/${r.project_id}#ann-${annId}`;
+    thumbnailPath = r.image_path;
   } else {
     return null;
   }
@@ -348,6 +372,7 @@ async function buildAnnotation(
     actorKey: author,
     description:
       `**${label}에 주석** — [${title}](${url})` + (body ? `\n> ${body}` : ""),
+    thumbnailUrl: thumbnailPath ? publicImageUrl(thumbnailPath) : undefined,
   };
 }
 
@@ -360,11 +385,11 @@ async function buildRating(
   const stars = Number(record.stars ?? 0);
   const { data } = await supabase
     .from("refs")
-    .select("id, title")
+    .select("id, title, image_path")
     .eq("id", record.ref_id as string)
     .maybeSingle();
   if (!data) return null;
-  const r = data as { id: string; title: string | null };
+  const r = data as { id: string; title: string | null; image_path: string | null };
   const title = r.title ?? "untitled";
   const url = `${site}/ref/${r.id}`;
   const filled = "★".repeat(stars);
@@ -373,6 +398,7 @@ async function buildRating(
     kind: "rating",
     actorKey: userKey,
     description: `**별점 ${filled}${empty}** — [${title}](${url})`,
+    thumbnailUrl: r.image_path ? publicImageUrl(r.image_path) : undefined,
   };
 }
 
