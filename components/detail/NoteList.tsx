@@ -1,7 +1,7 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CornerDownRight, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 import { NicknamePill } from "@/components/nickname-pill";
@@ -49,6 +49,8 @@ export function NoteList({
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<Draft>(EMPTY);
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +69,24 @@ export function NoteList({
       cancelled = true;
     };
   }, [supabase, refId]);
+
+  const { topLevel, repliesByParent } = useMemo(() => {
+    const top: Note[] = [];
+    const map = new Map<string, Note[]>();
+    for (const n of notes) {
+      if (n.parent_id) {
+        const list = map.get(n.parent_id) ?? [];
+        list.push(n);
+        map.set(n.parent_id, list);
+      } else {
+        top.push(n);
+      }
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    }
+    return { topLevel: top, repliesByParent: map };
+  }, [notes]);
 
   const draftHasContent =
     draft.body.trim() !== "" ||
@@ -87,6 +107,7 @@ export function NoteList({
       .from("notes")
       .insert({
         ref_id: refId,
+        parent_id: null,
         body: trimToNull(draft.body),
         pros: trimToNull(draft.pros),
         cons: trimToNull(draft.cons),
@@ -103,21 +124,57 @@ export function NoteList({
     setDraft(EMPTY);
   }
 
-  async function saveEdit(noteId: string) {
+  async function addReply(parentId: string) {
     setError(null);
-    const hasContent =
-      editingDraft.body.trim() !== "" ||
-      editingDraft.pros.trim() !== "" ||
-      editingDraft.cons.trim() !== "";
-    if (!hasContent) return;
+    if (!nickname) {
+      setError("/gate에서 닉네임을 먼저 등록해주세요.");
+      return;
+    }
+    const body = replyDraft.trim();
+    if (!body) return;
+
     setBusy(true);
     const { data, error } = await supabase
       .from("notes")
-      .update({
-        body: trimToNull(editingDraft.body),
-        pros: trimToNull(editingDraft.pros),
-        cons: trimToNull(editingDraft.cons),
+      .insert({
+        ref_id: refId,
+        parent_id: parentId,
+        body,
+        pros: null,
+        cons: null,
+        author: nickname,
       })
+      .select("*")
+      .single();
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNotes((prev) => [...prev, data as Note]);
+    setReplyingTo(null);
+    setReplyDraft("");
+  }
+
+  async function saveEdit(noteId: string, isReply: boolean) {
+    setError(null);
+    const hasContent = isReply
+      ? editingDraft.body.trim() !== ""
+      : editingDraft.body.trim() !== "" ||
+        editingDraft.pros.trim() !== "" ||
+        editingDraft.cons.trim() !== "";
+    if (!hasContent) return;
+    setBusy(true);
+    const patch = isReply
+      ? { body: trimToNull(editingDraft.body) }
+      : {
+          body: trimToNull(editingDraft.body),
+          pros: trimToNull(editingDraft.pros),
+          cons: trimToNull(editingDraft.cons),
+        };
+    const { data, error } = await supabase
+      .from("notes")
+      .update(patch)
       .eq("id", noteId)
       .select("*")
       .single();
@@ -134,7 +191,8 @@ export function NoteList({
   }
 
   async function deleteNote(noteId: string) {
-    if (!window.confirm("이 노트를 삭제할까요?")) return;
+    if (!window.confirm("이 노트를 삭제할까요? (답글이 있으면 함께 사라져요)"))
+      return;
     setError(null);
     setBusy(true);
     const { error } = await supabase.from("notes").delete().eq("id", noteId);
@@ -143,7 +201,9 @@ export function NoteList({
       setError(error.message);
       return;
     }
-    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    setNotes((prev) =>
+      prev.filter((n) => n.id !== noteId && n.parent_id !== noteId),
+    );
   }
 
   return (
@@ -155,44 +215,26 @@ export function NoteList({
       </header>
 
       <ul className="flex flex-col gap-5">
-        {notes.map((note) => {
+        {topLevel.map((note) => {
+          const replies = repliesByParent.get(note.id) ?? [];
           const mine = hydrated && nickname && nickname === note.author;
           const editing = editingId === note.id;
+          const replying = replyingTo === note.id;
           return (
             <li
               key={note.id}
               className="flex flex-col gap-2 border-b border-border/40 pb-4 last:border-b-0"
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  <NicknamePill nickname={note.author} />
-                  <span>{formatDate(note.created_at)}</span>
-                  {note.created_at !== note.updated_at ? <span>· edited</span> : null}
-                </div>
-                {mine && !editing ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingId(note.id);
-                        setEditingDraft(noteToDraft(note));
-                      }}
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label="edit"
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteNote(note.id)}
-                      className="text-muted-foreground hover:text-destructive"
-                      aria-label="delete"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <NoteHead
+                note={note}
+                mine={!!mine}
+                editing={editing}
+                onEdit={() => {
+                  setEditingId(note.id);
+                  setEditingDraft(noteToDraft(note));
+                }}
+                onDelete={() => void deleteNote(note.id)}
+              />
               {editing ? (
                 <NoteFields
                   draft={editingDraft}
@@ -203,32 +245,123 @@ export function NoteList({
                 <NoteContent note={note} />
               )}
               {editing ? (
-                <div className="flex justify-end gap-2">
-                  <Button
+                <EditActions
+                  busy={busy}
+                  onCancel={() => {
+                    setEditingId(null);
+                    setEditingDraft(EMPTY);
+                  }}
+                  onSave={() => void saveEdit(note.id, false)}
+                />
+              ) : null}
+
+              {replies.length > 0 ? (
+                <ul className="flex flex-col gap-3 border-l-2 border-border/40 pl-3">
+                  {replies.map((reply) => {
+                    const replyMine =
+                      hydrated && nickname && nickname === reply.author;
+                    const replyEditing = editingId === reply.id;
+                    return (
+                      <li key={reply.id} className="flex flex-col gap-1.5">
+                        <NoteHead
+                          note={reply}
+                          mine={!!replyMine}
+                          editing={replyEditing}
+                          onEdit={() => {
+                            setEditingId(reply.id);
+                            setEditingDraft({
+                              body: reply.body ?? "",
+                              pros: "",
+                              cons: "",
+                            });
+                          }}
+                          onDelete={() => void deleteNote(reply.id)}
+                          compact
+                        />
+                        {replyEditing ? (
+                          <>
+                            <Textarea
+                              value={editingDraft.body}
+                              onChange={(e) =>
+                                setEditingDraft({
+                                  ...editingDraft,
+                                  body: e.target.value,
+                                })
+                              }
+                              rows={3}
+                              disabled={busy}
+                            />
+                            <EditActions
+                              busy={busy}
+                              onCancel={() => {
+                                setEditingId(null);
+                                setEditingDraft(EMPTY);
+                              }}
+                              onSave={() => void saveEdit(reply.id, true)}
+                            />
+                          </>
+                        ) : reply.body ? (
+                          <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
+                            <ReactMarkdown>{reply.body}</ReactMarkdown>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+
+              {hydrated && nickname && !editing ? (
+                replying ? (
+                  <div className="flex flex-col gap-2 border-l-2 border-border/40 pl-3">
+                    <Textarea
+                      value={replyDraft}
+                      onChange={(e) => setReplyDraft(e.target.value)}
+                      rows={3}
+                      placeholder="답글을 적어주세요"
+                      autoFocus
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setReplyingTo(null);
+                          setReplyDraft("");
+                        }}
+                        disabled={busy}
+                      >
+                        취소
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void addReply(note.id)}
+                        disabled={busy || !replyDraft.trim()}
+                      >
+                        답글 등록
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="sm"
                     onClick={() => {
-                      setEditingId(null);
-                      setEditingDraft(EMPTY);
+                      setReplyingTo(note.id);
+                      setReplyDraft("");
                     }}
+                    className="inline-flex w-fit items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
                   >
-                    취소
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => saveEdit(note.id)}
-                    disabled={busy}
-                  >
-                    저장
-                  </Button>
-                </div>
+                    <CornerDownRight className="size-3" />
+                    답글
+                  </button>
+                )
               ) : null}
             </li>
           );
         })}
-        {notes.length === 0 ? (
+        {topLevel.length === 0 ? (
           <li className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             아직 노트가 없습니다.
           </li>
@@ -251,6 +384,86 @@ export function NoteList({
           </Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function NoteHead({
+  note,
+  mine,
+  editing,
+  onEdit,
+  onDelete,
+  compact = false,
+}: {
+  note: Note;
+  mine: boolean;
+  editing: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <div
+        className={`flex items-center gap-2 font-mono uppercase tracking-wider text-muted-foreground ${
+          compact ? "text-[10px]" : "text-[11px]"
+        }`}
+      >
+        {compact ? (
+          <MessageCircle aria-hidden className="size-3" />
+        ) : null}
+        <NicknamePill nickname={note.author} />
+        <span>{formatDate(note.created_at)}</span>
+        {note.created_at !== note.updated_at ? <span>· edited</span> : null}
+      </div>
+      {mine && !editing ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="edit"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label="delete"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EditActions({
+  busy,
+  onCancel,
+  onSave,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onCancel}
+        disabled={busy}
+      >
+        취소
+      </Button>
+      <Button type="button" size="sm" onClick={onSave} disabled={busy}>
+        저장
+      </Button>
     </div>
   );
 }

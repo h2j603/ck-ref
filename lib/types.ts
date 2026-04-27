@@ -74,6 +74,7 @@ export type RefRating = {
 export type Note = {
   id: string;
   ref_id: string;
+  parent_id: string | null;
   body: string | null;
   pros: string | null;
   cons: string | null;

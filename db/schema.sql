@@ -117,6 +117,7 @@ create index if not exists ref_designers_designer_idx on ref_designers (designer
 create table if not exists notes (
   id          uuid primary key default gen_random_uuid(),
   ref_id      uuid not null references refs(id) on delete cascade,
+  parent_id   uuid references notes(id) on delete cascade,
   body        text not null,
   author      text not null,
   created_at  timestamptz not null default now(),
@@ -128,9 +129,11 @@ create table if not exists notes (
 -- at least one of (body, pros, cons) to be non-empty.
 alter table notes add column if not exists pros text;
 alter table notes add column if not exists cons text;
+alter table notes add column if not exists parent_id uuid references notes(id) on delete cascade;
 alter table notes alter column body drop not null;
 
 create index if not exists notes_ref_idx on notes (ref_id, created_at desc);
+create index if not exists notes_parent_idx on notes (parent_id);
 
 -- Maintain refs.notes_count -------------------------------------------------
 
