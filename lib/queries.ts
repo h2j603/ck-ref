@@ -16,6 +16,7 @@ import {
   type ProjectUpdate,
   type Ref,
   type RefAnnotation,
+  type RefImage,
   type RefSort,
   type RefWithDesigners,
 } from "@/lib/types";
@@ -29,27 +30,30 @@ export type { RefSort } from "@/lib/types";
 type DesignerLite = Pick<Designer, "id" | "slug" | "name">;
 type RefRow = Ref & {
   ref_designers?: { designer: DesignerLite | DesignerLite[] | null }[];
+  ref_images?: { count: number }[];
 };
 
-// Ratings are fetched in a separate query and merged so that a missing
-// ref_ratings table (e.g. fresh deploy without the migration) doesn't take
-// the whole gallery down with it.
+// Ratings + extra image counts are fetched separately so a missing table on
+// a fresh deploy doesn't take the whole gallery down. The embed below pulls
+// ref_images count cheaply alongside.
 const REF_COLUMNS = `
   id, title, year, source_url,
   image_path, image_width, image_height,
   genre, medium, languages, tags,
   color_hex, color_hue,
   notes_count, created_at, created_by,
-  ref_designers ( designer:designers(id, slug, name) )
+  ref_designers ( designer:designers(id, slug, name) ),
+  ref_images ( count )
 `;
 
 type RefWithDesignersOnly = Ref & {
   designers: DesignerLite[];
+  extra_image_count: number;
 };
 
 function flatten(rows: RefRow[] | null | undefined): RefWithDesignersOnly[] {
   if (!rows) return [];
-  return rows.map(({ ref_designers, ...rest }) => {
+  return rows.map(({ ref_designers, ref_images, ...rest }) => {
     const designers: DesignerLite[] = [];
     for (const rd of ref_designers ?? []) {
       const d = rd.designer;
@@ -57,7 +61,8 @@ function flatten(rows: RefRow[] | null | undefined): RefWithDesignersOnly[] {
       if (Array.isArray(d)) designers.push(...d);
       else designers.push(d);
     }
-    return { ...rest, designers };
+    const extra_image_count = ref_images?.[0]?.count ?? 0;
+    return { ...rest, designers, extra_image_count };
   });
 }
 
@@ -547,6 +552,7 @@ export async function fetchBoardRefs(boardId: string) {
         | Pick<Designer, "id" | "slug" | "name">[]
         | null;
     }[];
+    ref_images?: { count: number }[];
   };
   type Row = { position: number; ref: RawRef | RawRef[] | null };
   const rows = (data ?? []) as unknown as Row[];
@@ -554,7 +560,7 @@ export async function fetchBoardRefs(boardId: string) {
     .map((r) => (Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref))
     .filter((r): r is RawRef => r !== null)
     .map((ref) => {
-      const { ref_designers, ...rest } = ref;
+      const { ref_designers, ref_images, ...rest } = ref;
       const designers: Pick<Designer, "id" | "slug" | "name">[] = [];
       for (const rd of ref_designers ?? []) {
         const d = rd.designer;
@@ -562,9 +568,21 @@ export async function fetchBoardRefs(boardId: string) {
         if (Array.isArray(d)) designers.push(...d);
         else designers.push(d);
       }
-      return { ...rest, designers };
+      const extra_image_count = ref_images?.[0]?.count ?? 0;
+      return { ...rest, designers, extra_image_count };
     });
   return attachRatings(bare);
+}
+
+export async function fetchRefExtraImages(refId: string): Promise<RefImage[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ref_images")
+    .select("*")
+    .eq("ref_id", refId)
+    .order("position", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as RefImage[];
 }
 
 export async function fetchSimilarRefs(
@@ -657,7 +675,8 @@ const REF_COLUMNS_FOR_BOARD = `
   genre, medium, languages, tags,
   color_hex, color_hue,
   notes_count, created_at, created_by,
-  ref_designers ( designer:designers(id, slug, name) )
+  ref_designers ( designer:designers(id, slug, name) ),
+  ref_images ( count )
 `;
 
 // ACTIVITY FEED -------------------------------------------------------------

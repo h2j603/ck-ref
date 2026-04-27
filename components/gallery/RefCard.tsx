@@ -25,6 +25,14 @@ export function RefCard({ ref_ }: { ref_: RefWithDesigners }) {
             className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
           />
         </div>
+        {ref_.extra_image_count > 0 ? (
+          <span
+            aria-label={`${ref_.extra_image_count + 1} images`}
+            className="pointer-events-none absolute right-1.5 top-1.5 rounded-full bg-black/60 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-white"
+          >
+            +{ref_.extra_image_count}
+          </span>
+        ) : null}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/70 via-black/0 to-black/0 p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <div className="flex flex-col gap-0.5 text-white">
             <p className="font-mono text-[11px] uppercase tracking-wide opacity-80">

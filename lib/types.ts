@@ -58,10 +58,21 @@ export type Ref = {
   color_hue: number | null;
 };
 
+export type RefImage = {
+  id: string;
+  ref_id: string;
+  image_path: string;
+  image_width: number | null;
+  image_height: number | null;
+  position: number;
+  created_at: string;
+};
+
 export type RefWithDesigners = Ref & {
   designers: Pick<Designer, "id" | "slug" | "name">[];
   rating_avg: number | null;
   rating_count: number;
+  extra_image_count: number;
 };
 
 export type RefRating = {
