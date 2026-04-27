@@ -116,7 +116,8 @@ export type NoteTarget =
 
 export type RefAnnotation = {
   id: string;
-  ref_id: string;
+  ref_id: string | null;
+  project_update_id: string | null;
   kind: "point" | "area";
   x_pct: number;
   y_pct: number;
@@ -127,6 +128,10 @@ export type RefAnnotation = {
   created_at: string;
   updated_at: string;
 };
+
+export type AnnotationTarget =
+  | { kind: "ref"; id: string }
+  | { kind: "project_update"; id: string };
 
 // Join-row helper used when inserting after upload.
 export type RefDesigner = {

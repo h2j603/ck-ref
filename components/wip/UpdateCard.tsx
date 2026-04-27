@@ -1,19 +1,26 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import Image from "next/image";
 import { useState } from "react";
 
+import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
 import { NoteList } from "@/components/detail/NoteList";
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
 import { useNickname } from "@/lib/nickname";
+import { type Profile } from "@/lib/profiles";
 import { relativeTime } from "@/lib/relativeTime";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
 import type { ProjectUpdate } from "@/lib/types";
 
-export function UpdateCard({ update }: { update: ProjectUpdate }) {
+export function UpdateCard({
+  update,
+  profiles,
+}: {
+  update: ProjectUpdate;
+  profiles: Profile[];
+}) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [deleted, setDeleted] = useState(false);
@@ -71,18 +78,15 @@ export function UpdateCard({ update }: { update: ProjectUpdate }) {
           </button>
         ) : null}
       </div>
-      <div
-        className="relative w-full overflow-hidden bg-muted"
-        style={{ aspectRatio: `${w} / ${h}` }}
-      >
-        <Image
-          src={publicImageUrl(update.image_path)}
-          alt={update.body ?? "update"}
-          fill
-          sizes="(max-width: 1024px) 100vw, 720px"
-          className="object-contain"
-        />
-      </div>
+      <AnnotationLayer
+        target={{ kind: "project_update", id: update.id }}
+        imageUrl={publicImageUrl(update.image_path)}
+        alt={update.body ?? "update"}
+        width={w}
+        height={h}
+        initial={[]}
+        profiles={profiles}
+      />
       {update.body ? (
         <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
           <MarkdownWithMentions text={update.body} />

@@ -235,25 +235,34 @@ for each row execute procedure touch_updated_at();
 -- render time. Author is the profile key; the same trust model as notes.
 
 create table if not exists ref_annotations (
-  id          uuid primary key default gen_random_uuid(),
-  ref_id      uuid not null references refs(id) on delete cascade,
-  kind        text not null default 'point' check (kind in ('point', 'area')),
-  x_pct       numeric not null check (x_pct >= 0 and x_pct <= 100),
-  y_pct       numeric not null check (y_pct >= 0 and y_pct <= 100),
-  w_pct       numeric check (w_pct is null or (w_pct > 0 and w_pct <= 100)),
-  h_pct       numeric check (h_pct is null or (h_pct > 0 and h_pct <= 100)),
-  body        text not null,
-  author      text not null,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  id                uuid primary key default gen_random_uuid(),
+  ref_id            uuid references refs(id) on delete cascade,
+  project_update_id uuid references project_updates(id) on delete cascade,
+  kind              text not null default 'point' check (kind in ('point', 'area')),
+  x_pct             numeric not null check (x_pct >= 0 and x_pct <= 100),
+  y_pct             numeric not null check (y_pct >= 0 and y_pct <= 100),
+  w_pct             numeric check (w_pct is null or (w_pct > 0 and w_pct <= 100)),
+  h_pct             numeric check (h_pct is null or (h_pct > 0 and h_pct <= 100)),
+  body              text not null,
+  author            text not null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
 );
 
--- Existing deployments: add the columns idempotently.
+-- Existing deployments: idempotent column adds + nullability + a check that
+-- exactly one target is set so each annotation belongs to exactly one image.
 alter table ref_annotations add column if not exists kind text not null default 'point';
 alter table ref_annotations add column if not exists w_pct numeric;
 alter table ref_annotations add column if not exists h_pct numeric;
+alter table ref_annotations add column if not exists project_update_id uuid references project_updates(id) on delete cascade;
+alter table ref_annotations alter column ref_id drop not null;
+alter table ref_annotations drop constraint if exists ref_annotations_target_check;
+alter table ref_annotations add constraint ref_annotations_target_check check (
+  (ref_id is not null)::int + (project_update_id is not null)::int = 1
+);
 
-create index if not exists ref_annotations_ref_idx on ref_annotations (ref_id, created_at desc);
+create index if not exists ref_annotations_ref_idx    on ref_annotations (ref_id, created_at desc);
+create index if not exists ref_annotations_update_idx on ref_annotations (project_update_id, created_at desc);
 
 -- REF RATINGS ---------------------------------------------------------------
 -- Each user (profile key) can rate a ref 1-5 once. Re-rating is an upsert

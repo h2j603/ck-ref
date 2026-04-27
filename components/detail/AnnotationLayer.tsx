@@ -14,7 +14,7 @@ import {
 } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { RefAnnotation } from "@/lib/types";
+import type { AnnotationTarget, RefAnnotation } from "@/lib/types";
 
 type DraftNew = {
   kind: "new";
@@ -30,8 +30,7 @@ type DraftEdit = {
 type Draft = DraftNew | DraftEdit;
 
 export function AnnotationLayer({
-  refId,
-  imagePath,
+  target,
   imageUrl,
   alt,
   width,
@@ -39,8 +38,7 @@ export function AnnotationLayer({
   initial,
   profiles,
 }: {
-  refId: string;
-  imagePath: string;
+  target: AnnotationTarget;
   imageUrl: string;
   alt: string;
   width: number;
@@ -48,7 +46,6 @@ export function AnnotationLayer({
   initial: RefAnnotation[];
   profiles: Profile[];
 }) {
-  void imagePath;
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [items, setItems] = useState<RefAnnotation[]>(initial);
@@ -59,20 +56,23 @@ export function AnnotationLayer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const targetColumn =
+    target.kind === "ref" ? "ref_id" : "project_update_id";
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const { data } = await supabase
         .from("ref_annotations")
         .select("*")
-        .eq("ref_id", refId)
+        .eq(targetColumn, target.id)
         .order("created_at", { ascending: true });
       if (!cancelled && data) setItems(data as RefAnnotation[]);
     })();
     return () => {
       cancelled = true;
     };
-  }, [supabase, refId]);
+  }, [supabase, targetColumn, target.id]);
 
   // Open the annotation referenced by #ann-<id> in the URL — used by activity
   // feed deeplinks. We re-evaluate after items load so the matched one
@@ -110,7 +110,9 @@ export function AnnotationLayer({
       const { data, error } = await supabase
         .from("ref_annotations")
         .insert({
-          ref_id: refId,
+          ref_id: target.kind === "ref" ? target.id : null,
+          project_update_id:
+            target.kind === "project_update" ? target.id : null,
           kind: "point",
           x_pct: draft.x_pct,
           y_pct: draft.y_pct,
