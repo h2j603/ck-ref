@@ -1,42 +1,52 @@
 import "server-only";
 
-// Server-side image-embedding helper. Wraps a generic HTTP embedding API
-// (defaults to Hugging Face Inference) so that the rest of the app can
-// stay provider-agnostic. When the env var isn't set, the helper returns
-// null and callers treat it as "no embedding available" — the visual
-// reranker quietly falls back to the metadata-only score path.
+// Server-side image-embedding helper. Two providers are supported out of
+// the box:
 //
-// Env:
-//   EMBEDDING_API_URL    — POST endpoint (default: HF clip-ViT-B-32)
-//   EMBEDDING_API_TOKEN  — Bearer token (or HF_API_TOKEN as fallback)
-//   EMBEDDING_DIM        — expected output length (default: 512)
-
-const DEFAULT_URL =
-  "https://api-inference.huggingface.co/models/sentence-transformers/clip-ViT-B-32";
-
-const DEFAULT_DIM = 512;
+//   1. Jina (default, recommended). Set JINA_API_TOKEN. Free tier is
+//      generous and the API is stable. Default model jina-clip-v1
+//      returns 768-dim embeddings — schema's `refs.embedding` column
+//      matches that out of the box.
+//
+//   2. Generic HTTP provider. Set EMBEDDING_API_URL and
+//      EMBEDDING_API_TOKEN (or HF_API_TOKEN as a legacy fallback) for
+//      a Hugging Face / Replicate / etc. endpoint that takes raw image
+//      bytes and returns an embedding array. EMBEDDING_DIM controls
+//      the expected length; mismatch is rejected.
+//
+// When no provider is configured, every call returns `{ ok: false,
+// reason: "no_token" }` and the rest of the app falls back to the
+// metadata-only similarity path silently.
 
 export type EmbedResult =
   | { ok: true; embedding: number[] }
   | { ok: false; reason: string };
 
-function token(): string | null {
+const JINA_URL = "https://api.jina.ai/v1/embeddings";
+const JINA_DEFAULT_MODEL = "jina-clip-v1";
+const JINA_DEFAULT_DIM = 768;
+
+function jinaToken(): string | null {
+  return process.env.JINA_API_TOKEN || null;
+}
+
+function genericToken(): string | null {
   return (
     process.env.EMBEDDING_API_TOKEN || process.env.HF_API_TOKEN || null
   );
 }
 
 export function embeddingsConfigured(): boolean {
-  return token() !== null;
+  return jinaToken() !== null || genericToken() !== null;
 }
 
-function expectedDim(): number {
+function genericExpectedDim(): number {
   const raw = process.env.EMBEDDING_DIM;
-  const n = raw ? Number(raw) : DEFAULT_DIM;
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DIM;
+  const n = raw ? Number(raw) : JINA_DEFAULT_DIM;
+  return Number.isFinite(n) && n > 0 ? n : JINA_DEFAULT_DIM;
 }
 
-// Some HF endpoints return [[...512 floats...]] (a 1×N matrix), others
+// Some endpoints return [[...512 floats...]] (a 1×N matrix), others
 // return [...512 floats...]. Flatten one level if the first element is
 // itself an array.
 function flatten(raw: unknown): number[] | null {
@@ -48,20 +58,93 @@ function flatten(raw: unknown): number[] | null {
   return raw as number[];
 }
 
-export async function embedImage(imageUrl: string): Promise<EmbedResult> {
-  const tk = token();
-  if (!tk) return { ok: false, reason: "no_token" };
-  const url = process.env.EMBEDDING_API_URL || DEFAULT_URL;
-
-  // Pull the image bytes ourselves rather than handing the provider a URL —
-  // public Supabase storage URLs can occasionally rate-limit anonymous
-  // hot-link traffic, and this also lets us send the right Content-Type.
-  const imgRes = await fetch(imageUrl);
+async function fetchImageBase64(
+  imageUrl: string,
+): Promise<
+  { ok: true; base64: string; contentType: string; bytes: Buffer }
+  | { ok: false; reason: string }
+> {
+  let imgRes: Response;
+  try {
+    imgRes = await fetch(imageUrl);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `fetch_image_network:${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
   if (!imgRes.ok) {
     return { ok: false, reason: `fetch_image:${imgRes.status}` };
   }
-  const buf = Buffer.from(await imgRes.arrayBuffer());
+  const bytes = Buffer.from(await imgRes.arrayBuffer());
   const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+  return { ok: true, base64: bytes.toString("base64"), contentType, bytes };
+}
+
+async function embedViaJina(imageUrl: string): Promise<EmbedResult> {
+  const tk = jinaToken();
+  if (!tk) return { ok: false, reason: "no_token" };
+  const fetched = await fetchImageBase64(imageUrl);
+  if (!fetched.ok) return fetched;
+  const model = process.env.JINA_MODEL || JINA_DEFAULT_MODEL;
+
+  let res: Response;
+  try {
+    res = await fetch(JINA_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tk}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        input: [{ image: fetched.base64 }],
+      }),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `jina_network:${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: `jina_${res.status}:${text.slice(0, 200)}`,
+    };
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return { ok: false, reason: `jina_parse:${text.slice(0, 100)}` };
+  }
+  type JinaResponse = {
+    data?: { embedding?: number[]; index?: number }[];
+    detail?: string;
+  };
+  const j = json as JinaResponse;
+  const embedding = j.data?.[0]?.embedding;
+  if (!embedding || !Array.isArray(embedding)) {
+    return {
+      ok: false,
+      reason: `jina_shape:${JSON.stringify(json).slice(0, 120)}`,
+    };
+  }
+  return { ok: true, embedding };
+}
+
+async function embedViaGeneric(imageUrl: string): Promise<EmbedResult> {
+  const tk = genericToken();
+  if (!tk) return { ok: false, reason: "no_token" };
+  const url = process.env.EMBEDDING_API_URL;
+  if (!url) {
+    return { ok: false, reason: "no_url_for_generic_provider" };
+  }
+  const fetched = await fetchImageBase64(imageUrl);
+  if (!fetched.ok) return fetched;
 
   let res: Response;
   try {
@@ -69,48 +152,51 @@ export async function embedImage(imageUrl: string): Promise<EmbedResult> {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tk}`,
-        "Content-Type": contentType,
-        // Some HF deployments return 503 with an `estimated_time` while
-        // the model spins up. Asking the client to wait pushes that
-        // burden onto the provider rather than us retrying ourselves.
+        "Content-Type": fetched.contentType,
         "x-wait-for-model": "true",
       },
-      body: buf,
+      body: new Uint8Array(fetched.bytes),
     });
   } catch (err) {
     return {
       ok: false,
-      reason: `network:${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    return {
-      ok: false,
-      reason: `provider:${res.status} ${body.slice(0, 200)}`,
+      reason: `generic_network:${err instanceof Error ? err.message : String(err)}`,
     };
   }
   const text = await res.text();
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: `generic_${res.status}:${text.slice(0, 200)}`,
+    };
+  }
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
-    return { ok: false, reason: `parse:${text.slice(0, 100)}` };
+    return { ok: false, reason: `generic_parse:${text.slice(0, 100)}` };
   }
   const flat = flatten(json);
   if (!flat) {
     return {
       ok: false,
-      reason: `shape:${JSON.stringify(json).slice(0, 100)}`,
+      reason: `generic_shape:${JSON.stringify(json).slice(0, 100)}`,
     };
   }
-  if (flat.length !== expectedDim()) {
+  const expected = genericExpectedDim();
+  if (flat.length !== expected) {
     return {
       ok: false,
-      reason: `dim:got_${flat.length}_expected_${expectedDim()}`,
+      reason: `dim:got_${flat.length}_expected_${expected}`,
     };
   }
   return { ok: true, embedding: flat };
+}
+
+export async function embedImage(imageUrl: string): Promise<EmbedResult> {
+  if (jinaToken()) return embedViaJina(imageUrl);
+  if (genericToken()) return embedViaGeneric(imageUrl);
+  return { ok: false, reason: "no_token" };
 }
 
 // Postgres expects a vector literal like '[0.1,0.2,...]'. Supabase JS lets

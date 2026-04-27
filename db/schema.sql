@@ -170,15 +170,35 @@ alter table refs add column if not exists color_hex text;
 alter table refs add column if not exists color_hue smallint;
 create index if not exists refs_color_hue_idx on refs (color_hue);
 
--- CLIP image embedding (vector(512)). Computed server-side via the embedding
--- provider after upload; NULL until the backfill / async job catches up.
--- Existing deployments without pgvector will skip this gracefully.
+-- CLIP image embedding. Computed server-side via the embedding provider
+-- after upload; NULL until the backfill / async job catches up. Existing
+-- deployments without pgvector skip this gracefully.
+--
+-- Default dimension is 768 to match Jina jina-clip-v1, our fallback
+-- provider after Hugging Face's free serverless turned out to be too
+-- flaky to rely on. If you swap providers in env, set EMBEDDING_DIM and
+-- re-run this block — it'll resize the column when no rows are populated.
 do $$
+declare
+  has_data boolean;
 begin
-  if exists (select 1 from pg_extension where extname = 'vector') then
-    execute 'alter table refs add column if not exists embedding vector(512)';
-    execute 'create index if not exists refs_embedding_idx on refs using hnsw (embedding vector_cosine_ops)';
+  if not exists (select 1 from pg_extension where extname = 'vector') then
+    return;
   end if;
+  -- Add the column at the target dim if it doesn't exist yet.
+  execute 'alter table refs add column if not exists embedding vector(768)';
+
+  -- If the existing column is at a different dim and nothing has been
+  -- embedded yet, resize. We don't try to re-embed surviving rows; that
+  -- isn't safe in SQL alone.
+  select exists(select 1 from refs where embedding is not null) into has_data;
+  if not has_data then
+    execute 'drop index if exists refs_embedding_idx';
+    execute 'alter table refs drop column if exists embedding';
+    execute 'alter table refs add column embedding vector(768)';
+  end if;
+
+  execute 'create index if not exists refs_embedding_idx on refs using hnsw (embedding vector_cosine_ops)';
 end $$;
 
 -- Cosine-similarity nearest-neighbor lookup, called from the server via
@@ -187,9 +207,13 @@ end $$;
 do $$
 begin
   if exists (select 1 from pg_extension where extname = 'vector') then
+    -- Use the unsized vector type for the parameter so the function works
+    -- regardless of which embedding model the app is currently configured
+    -- for. The cosine operator still requires both sides to match the
+    -- column's dimension at call time.
     execute $f$
       create or replace function similar_refs_by_embedding(
-        query_embedding vector(512),
+        query_embedding vector,
         match_count int,
         exclude_id uuid
       )
