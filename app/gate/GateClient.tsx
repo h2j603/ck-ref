@@ -24,14 +24,43 @@ export default function GateClient({
   redirectTo,
   profiles,
   counts,
+  viaDiscord = false,
 }: {
   redirectTo: string;
   profiles: Profile[];
   counts: Record<string, number>;
+  viaDiscord?: boolean;
 }) {
   const { nickname, setNickname } = useNickname();
   const [signingIn, setSigningIn] = useState<Profile | null>(null);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [discordBusy, setDiscordBusy] = useState<string | null>(null);
+  const [discordError, setDiscordError] = useState<string | null>(null);
+
+  async function pickViaDiscord(p: Profile) {
+    setDiscordError(null);
+    setDiscordBusy(p.key);
+    try {
+      const res = await fetch("/api/auth/discord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: p.key }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(data?.error ?? "로그인에 실패했습니다.");
+      }
+      setNickname(p.key);
+      window.location.assign(redirectTo);
+    } catch (err) {
+      setDiscordBusy(null);
+      setDiscordError(
+        err instanceof Error ? err.message : "로그인에 실패했습니다.",
+      );
+    }
+  }
 
   return (
     <div className="flex flex-col items-center gap-8">
@@ -43,7 +72,11 @@ export default function GateClient({
             <li key={p.key} className="relative">
               <button
                 type="button"
-                onClick={() => setSigningIn(p)}
+                disabled={discordBusy !== null}
+                onClick={() => {
+                  if (viaDiscord) void pickViaDiscord(p);
+                  else setSigningIn(p);
+                }}
                 className="group flex flex-col items-center gap-2 outline-none"
               >
                 <span
@@ -96,10 +129,15 @@ export default function GateClient({
         })}
       </ul>
       <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-        {nickname
-          ? "다른 프로필로 전환하려면 카드를 누르세요"
-          : "프로필을 누르고 비밀번호를 입력하세요"}
+        {viaDiscord
+          ? "프로필만 누르면 들어가져요"
+          : nickname
+            ? "다른 프로필로 전환하려면 카드를 누르세요"
+            : "프로필을 누르고 비밀번호를 입력하세요"}
       </p>
+      {discordError ? (
+        <p className="text-xs text-destructive">{discordError}</p>
+      ) : null}
 
       {signingIn ? (
         <SignInDialog

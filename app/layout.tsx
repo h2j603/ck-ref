@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 
 import { HeaderProfile } from "@/components/header-profile";
+import { NotificationBell } from "@/components/notification-bell";
 import { fetchProfiles } from "@/lib/queries";
 
 import "./globals.css";
@@ -82,6 +83,7 @@ export default async function RootLayout({
               <span className="sm:hidden">WIP</span>
               <span className="hidden sm:inline">WIP</span>
             </Link>
+            <NotificationBell />
             <HeaderProfile profiles={profiles} />
           </nav>
         </header>

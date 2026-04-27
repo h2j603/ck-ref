@@ -7,6 +7,7 @@ import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
 import { NoteList } from "@/components/detail/NoteList";
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
+import { UpdateRefs } from "@/components/wip/UpdateRefs";
 import { useNickname } from "@/lib/nickname";
 import { type Profile } from "@/lib/profiles";
 import { relativeTime } from "@/lib/relativeTime";
@@ -96,6 +97,7 @@ export function UpdateCard({
         </div>
       ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      <UpdateRefs updateId={update.id} initial={[]} />
       <div className="rounded-md border border-border/40 bg-muted/30 p-3">
         <NoteList
           target={{ kind: "project_update", id: update.id }}

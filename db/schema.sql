@@ -64,12 +64,31 @@ create index if not exists project_updates_project_idx
 create table if not exists project_refs (
   project_id uuid not null references projects(id) on delete cascade,
   ref_id     uuid not null references refs(id) on delete cascade,
+  reason     text,
   added_at   timestamptz not null default now(),
   added_by   text,
   primary key (project_id, ref_id)
 );
 
+-- Existing deployments: column added later. Idempotent.
+alter table project_refs add column if not exists reason text;
+
 create index if not exists project_refs_ref_idx on project_refs (ref_id);
+
+-- Per-update inspiration. Same shape as project_refs but scoped to one
+-- specific update (image post) instead of the whole project. The two are
+-- independent — a ref can be on the project's overall pool, on a single
+-- update, or both.
+create table if not exists project_update_refs (
+  project_update_id uuid not null references project_updates(id) on delete cascade,
+  ref_id            uuid not null references refs(id) on delete cascade,
+  reason            text,
+  added_at          timestamptz not null default now(),
+  added_by          text,
+  primary key (project_update_id, ref_id)
+);
+
+create index if not exists project_update_refs_ref_idx on project_update_refs (ref_id);
 
 -- BOARDS (moodboards) -------------------------------------------------------
 -- A board is a curated collection of refs. Anyone with a nickname can add or
@@ -311,6 +330,32 @@ create table if not exists ref_links (
 
 create index if not exists ref_links_b_idx on ref_links (b_id);
 
+-- IN-APP NOTIFICATIONS ------------------------------------------------------
+-- One row per (recipient, event). The Discord webhook handler is the single
+-- source — when an event fires, it posts to Discord AND inserts a row here
+-- for every team member that isn't the actor. read_at is per recipient so
+-- each profile tracks their own inbox.
+
+create table if not exists notifications (
+  id          uuid primary key default gen_random_uuid(),
+  recipient   text not null,
+  actor       text,
+  kind        text not null check (kind in (
+    'note', 'reply', 'annotation', 'rating', 'ref_upload', 'project_update'
+  )),
+  target_type text not null,
+  target_id   uuid not null,
+  body        text,
+  link        text not null,
+  read_at     timestamptz,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists notifications_recipient_idx
+  on notifications (recipient, created_at desc);
+create index if not exists notifications_unread_idx
+  on notifications (recipient) where read_at is null;
+
 -- RLS POLICIES --------------------------------------------------------------
 -- Supabase enables RLS by default on tables exposed via PostgREST. Without
 -- policies, anon-key inserts are rejected with "new row violates row-level
@@ -321,6 +366,7 @@ alter table profiles        enable row level security;
 alter table projects        enable row level security;
 alter table project_updates enable row level security;
 alter table project_refs    enable row level security;
+alter table project_update_refs enable row level security;
 alter table boards          enable row level security;
 alter table board_items     enable row level security;
 alter table designers       enable row level security;
@@ -331,6 +377,7 @@ alter table ref_ratings     enable row level security;
 alter table ref_annotations enable row level security;
 alter table ref_links       enable row level security;
 alter table notes         enable row level security;
+alter table notifications enable row level security;
 
 drop policy if exists "anon all" on profiles;
 create policy "anon all" on profiles
@@ -346,6 +393,10 @@ create policy "anon all" on project_updates
 
 drop policy if exists "anon all" on project_refs;
 create policy "anon all" on project_refs
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_update_refs;
+create policy "anon all" on project_update_refs
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on boards;
@@ -386,6 +437,10 @@ create policy "anon all" on ref_links
 
 drop policy if exists "anon all" on notes;
 create policy "anon all" on notes
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on notifications;
+create policy "anon all" on notifications
   for all to anon, authenticated using (true) with check (true);
 
 -- STORAGE BUCKET ------------------------------------------------------------

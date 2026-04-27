@@ -26,11 +26,11 @@ type RefLite = Pick<
   "id" | "title" | "image_path" | "image_width" | "image_height"
 > & { reason?: string | null };
 
-export function InspirationRefs({
-  projectId,
+export function UpdateRefs({
+  updateId,
   initial,
 }: {
-  projectId: string;
+  updateId: string;
   initial: RefLite[];
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -43,11 +43,53 @@ export function InspirationRefs({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hydratedFromDb, setHydratedFromDb] = useState(false);
 
   const linkedIds = useMemo(
     () => new Set(linked.map((r) => r.id)),
     [linked],
   );
+
+  // The page loads UpdateCards without per-update refs (server-side cost),
+  // so on first mount fetch refs for this update lazily.
+  useEffect(() => {
+    if (hydratedFromDb) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("project_update_refs")
+        .select(
+          `reason, ref:refs(id, title, image_path, image_width, image_height)`,
+        )
+        .eq("project_update_id", updateId);
+      if (cancelled) return;
+      if (error) return;
+      type Row = {
+        reason: string | null;
+        ref:
+          | (Pick<
+              Ref,
+              "id" | "title" | "image_path" | "image_width" | "image_height"
+            > | null)
+          | Pick<
+              Ref,
+              "id" | "title" | "image_path" | "image_width" | "image_height"
+            >[];
+      };
+      const rows = (data ?? []) as unknown as Row[];
+      const flat: RefLite[] = [];
+      for (const row of rows) {
+        const r = Array.isArray(row.ref) ? row.ref[0] ?? null : row.ref;
+        if (!r) continue;
+        flat.push({ ...r, reason: row.reason });
+      }
+      setLinked(flat);
+      setHydratedFromDb(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, updateId, hydratedFromDb]);
 
   useEffect(() => {
     if (!open || pending) return;
@@ -84,8 +126,8 @@ export function InspirationRefs({
     setError(null);
     setBusy(true);
     const trimmed = reason.trim();
-    const { error } = await supabase.from("project_refs").insert({
-      project_id: projectId,
+    const { error } = await supabase.from("project_update_refs").insert({
+      project_update_id: updateId,
       ref_id: pending.id,
       reason: trimmed || null,
       added_by: nickname || null,
@@ -105,9 +147,9 @@ export function InspirationRefs({
     setError(null);
     setBusy(true);
     const { error } = await supabase
-      .from("project_refs")
+      .from("project_update_refs")
       .delete()
-      .eq("project_id", projectId)
+      .eq("project_update_id", updateId)
       .eq("ref_id", refId);
     setBusy(false);
     if (error) {
@@ -117,13 +159,18 @@ export function InspirationRefs({
     setLinked((prev) => prev.filter((r) => r.id !== refId));
   }
 
+  const canEdit = hydrated && !!nickname;
+
+  // Compact: nothing to show, no add button → render nothing.
+  if (linked.length === 0 && !canEdit) return null;
+
   return (
-    <section className="flex flex-col gap-3">
-      <header className="flex items-center justify-between border-b border-border/60 pb-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          Inspiration — {linked.length}
-        </h2>
-        {hydrated && nickname ? (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          참고 ref{linked.length > 0 ? ` — ${linked.length}` : ""}
+        </p>
+        {canEdit ? (
           <Dialog
             open={open}
             onOpenChange={(o) => {
@@ -137,17 +184,17 @@ export function InspirationRefs({
             <DialogTrigger asChild>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-[11px]"
+                className="h-6 px-1.5 text-[10px]"
               >
-                <Plus className="size-3" /> ref 추가
+                <Plus className="size-3" /> 추가
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>
-                  {pending ? "왜 이 ref를 추가하나요?" : "영감 ref 추가"}
+                  {pending ? "왜 이 ref를 추가하나요?" : "참고 ref 추가"}
                 </DialogTitle>
               </DialogHeader>
               {pending ? (
@@ -171,7 +218,7 @@ export function InspirationRefs({
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                       rows={4}
-                      placeholder="추가하는 이유 (선택). 어떤 점이 영감이 됐나요?"
+                      placeholder="이 업데이트에 어떻게 영감이 됐나요? (선택)"
                       className="flex-1 text-sm"
                       disabled={busy}
                     />
@@ -264,12 +311,15 @@ export function InspirationRefs({
             </DialogContent>
           </Dialog>
         ) : null}
-      </header>
+      </div>
 
       {linked.length > 0 ? (
-        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+        <ul className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
           {linked.map((r) => (
-            <li key={r.id} className="group relative overflow-hidden bg-muted">
+            <li
+              key={r.id}
+              className="group relative overflow-hidden bg-muted"
+            >
               <Link
                 href={`/ref/${r.id}`}
                 className="block"
@@ -286,37 +336,33 @@ export function InspirationRefs({
                     src={publicImageUrl(r.image_path)}
                     alt={r.title ?? "ref"}
                     fill
-                    sizes="120px"
+                    sizes="100px"
                     className="object-cover"
                   />
                   {r.reason ? (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <p className="line-clamp-3 text-[10px] leading-tight text-white">
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <p className="line-clamp-2 text-[9px] leading-tight text-white">
                         {r.reason}
                       </p>
                     </div>
                   ) : null}
                 </div>
               </Link>
-              {hydrated && nickname ? (
+              {canEdit ? (
                 <button
                   type="button"
                   onClick={() => void remove(r.id)}
                   disabled={busy}
-                  className="absolute right-1 top-1 rounded-full bg-background/90 p-0.5 text-muted-foreground opacity-70 transition-opacity hover:text-destructive hover:opacity-100 disabled:opacity-40"
+                  className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 text-muted-foreground opacity-70 transition-opacity hover:text-destructive hover:opacity-100 disabled:opacity-40"
                   aria-label="remove"
                 >
-                  <X className="size-3" />
+                  <X className="size-2.5" />
                 </button>
               ) : null}
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-          연결된 ref가 없습니다.
-        </p>
-      )}
-    </section>
+      ) : null}
+    </div>
   );
 }

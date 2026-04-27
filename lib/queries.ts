@@ -423,23 +423,73 @@ export async function fetchProjectUpdates(
   return (data ?? []) as ProjectUpdate[];
 }
 
+export type InspirationRef = RefWithDesigners & {
+  reason: string | null;
+  added_by: string | null;
+};
+
 export async function fetchProjectInspirationRefs(
   projectId: string,
-): Promise<RefWithDesigners[]> {
+): Promise<InspirationRef[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("project_refs")
-    .select(`ref:refs(${REF_COLUMNS})`)
+    .select(`reason, added_by, ref:refs(${REF_COLUMNS})`)
     .eq("project_id", projectId);
   if (error) return [];
-  type Row = { ref: RefRow | RefRow[] | null };
+  type Row = {
+    reason: string | null;
+    added_by: string | null;
+    ref: RefRow | RefRow[] | null;
+  };
   const rows = (data ?? []) as unknown as Row[];
-  const bare = flatten(
-    rows
-      .map((r) => (Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref))
-      .filter((r): r is RefRow => r !== null),
-  );
-  return attachRatings(bare);
+  const meta = new Map<string, { reason: string | null; added_by: string | null }>();
+  const refRows: RefRow[] = [];
+  for (const row of rows) {
+    const ref = Array.isArray(row.ref) ? row.ref[0] ?? null : row.ref;
+    if (!ref) continue;
+    refRows.push(ref);
+    meta.set(ref.id, { reason: row.reason, added_by: row.added_by });
+  }
+  const bare = flatten(refRows);
+  const withRatings = await attachRatings(bare);
+  return withRatings.map((r) => ({
+    ...r,
+    reason: meta.get(r.id)?.reason ?? null,
+    added_by: meta.get(r.id)?.added_by ?? null,
+  }));
+}
+
+export async function fetchUpdateRefs(
+  updateId: string,
+): Promise<InspirationRef[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("project_update_refs")
+    .select(`reason, added_by, ref:refs(${REF_COLUMNS})`)
+    .eq("project_update_id", updateId);
+  if (error) return [];
+  type Row = {
+    reason: string | null;
+    added_by: string | null;
+    ref: RefRow | RefRow[] | null;
+  };
+  const rows = (data ?? []) as unknown as Row[];
+  const meta = new Map<string, { reason: string | null; added_by: string | null }>();
+  const refRows: RefRow[] = [];
+  for (const row of rows) {
+    const ref = Array.isArray(row.ref) ? row.ref[0] ?? null : row.ref;
+    if (!ref) continue;
+    refRows.push(ref);
+    meta.set(ref.id, { reason: row.reason, added_by: row.added_by });
+  }
+  const bare = flatten(refRows);
+  const withRatings = await attachRatings(bare);
+  return withRatings.map((r) => ({
+    ...r,
+    reason: meta.get(r.id)?.reason ?? null,
+    added_by: meta.get(r.id)?.added_by ?? null,
+  }));
 }
 
 // Polymorphic notes fetch — accepts the same target shape that NoteList uses.
