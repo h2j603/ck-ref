@@ -704,6 +704,25 @@ export async function fetchRefAnnotations(
   return (data ?? []) as RefAnnotation[];
 }
 
+export async function fetchRefImageAnnotations(
+  refImageIds: string[],
+): Promise<Record<string, RefAnnotation[]>> {
+  if (refImageIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ref_annotations")
+    .select("*")
+    .in("ref_image_id", refImageIds)
+    .order("created_at", { ascending: true });
+  if (error) return {};
+  const grouped: Record<string, RefAnnotation[]> = {};
+  for (const row of (data ?? []) as RefAnnotation[]) {
+    if (!row.ref_image_id) continue;
+    (grouped[row.ref_image_id] ??= []).push(row);
+  }
+  return grouped;
+}
+
 export async function fetchRefRatings(refId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase

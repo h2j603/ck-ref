@@ -10,7 +10,6 @@ import { RefLinks } from "@/components/detail/RefLinks";
 import { SimilarRefs } from "@/components/detail/SimilarRefs";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Badge } from "@/components/ui/badge";
-import Image from "next/image";
 
 import {
   fetchLinkedRefs,
@@ -19,6 +18,7 @@ import {
   fetchRef,
   fetchRefAnnotations,
   fetchRefExtraImages,
+  fetchRefImageAnnotations,
   fetchRefRatings,
   fetchSimilarRefs,
 } from "@/lib/queries";
@@ -43,6 +43,9 @@ export default async function RefDetailPage({
       fetchProfiles().catch(() => []),
       fetchRefExtraImages(id).catch(() => []),
     ]);
+  const extraAnnotations = await fetchRefImageAnnotations(
+    extras.map((e) => e.id),
+  ).catch(() => ({}) as Record<string, never>);
   const url = publicImageUrl(ref.image_path);
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
@@ -65,19 +68,16 @@ export default async function RefDetailPage({
               const ew = img.image_width ?? 4;
               const eh = img.image_height ?? 5;
               return (
-                <div
+                <AnnotationLayer
                   key={img.id}
-                  className="relative w-full bg-muted"
-                  style={{ aspectRatio: `${ew} / ${eh}` }}
-                >
-                  <Image
-                    src={publicImageUrl(img.image_path)}
-                    alt={`${ref.title ?? "untitled"} ${i + 2}`}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 70vw"
-                    className="object-contain"
-                  />
-                </div>
+                  target={{ kind: "ref_image", id: img.id }}
+                  imageUrl={publicImageUrl(img.image_path)}
+                  alt={`${ref.title ?? "untitled"} ${i + 2}`}
+                  width={ew}
+                  height={eh}
+                  initial={extraAnnotations[img.id] ?? []}
+                  profiles={profiles}
+                />
               );
             })}
           </div>

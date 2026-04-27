@@ -57,7 +57,11 @@ export function AnnotationLayer({
   const [error, setError] = useState<string | null>(null);
 
   const targetColumn =
-    target.kind === "ref" ? "ref_id" : "project_update_id";
+    target.kind === "ref"
+      ? "ref_id"
+      : target.kind === "ref_image"
+        ? "ref_image_id"
+        : "project_update_id";
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +115,7 @@ export function AnnotationLayer({
         .from("ref_annotations")
         .insert({
           ref_id: target.kind === "ref" ? target.id : null,
+          ref_image_id: target.kind === "ref_image" ? target.id : null,
           project_update_id:
             target.kind === "project_update" ? target.id : null,
           kind: "point",
