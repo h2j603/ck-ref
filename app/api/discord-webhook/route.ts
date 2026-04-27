@@ -10,6 +10,11 @@ import type { Profile } from "@/lib/profiles";
 // to a Discord channel webhook. Each message is sent under the actor's own
 // profile name + avatar (Discord allows per-message username/avatar override
 // on webhooks) so the channel reads like a team feed.
+//
+// Note: every table that should produce a Discord message needs its own
+// Database Webhook in Supabase. Currently expected: refs, notes,
+// ref_annotations, ref_ratings, project_updates — all on INSERT, all pointing
+// at this URL with the SUPABASE_WEBHOOK_SECRET as a Bearer header.
 
 type SupabaseHookPayload = {
   type: "INSERT" | "UPDATE" | "DELETE";
@@ -20,6 +25,40 @@ type SupabaseHookPayload = {
 };
 
 const SNIPPET_LIMIT = 280;
+
+// Distinct color per event kind so the channel scans well at a glance. The
+// actor's profile color still appears via the avatar override in the message
+// header.
+const EVENT_COLOR = {
+  note: 0x3b82f6,
+  reply: 0x64748b,
+  annotation: 0xa855f7,
+  rating: 0xeab308,
+  ref_upload: 0x22c55e,
+  project_update: 0xf97316,
+} as const;
+
+const EVENT_EMOJI = {
+  note: "📝",
+  reply: "💬",
+  annotation: "✏️",
+  rating: "⭐",
+  ref_upload: "🆕",
+  project_update: "🛠️",
+} as const;
+
+type EventKind = keyof typeof EVENT_COLOR;
+
+// Only ref uploads and WIP updates ping the channel. Notes/replies/
+// annotations/ratings stay silent — they're frequent and would be noisy.
+const PING_EVERYONE: ReadonlySet<EventKind> = new Set(["ref_upload", "project_update"]);
+
+type Built = {
+  kind: EventKind;
+  actorKey: string | null;
+  description: string;
+  imageUrl?: string;
+};
 
 export async function POST(req: Request) {
   const rawSecret = process.env.SUPABASE_WEBHOOK_SECRET;
@@ -71,12 +110,13 @@ export async function POST(req: Request) {
   }
 
   let buildError: string | null = null;
-  const message = await buildMessage(payload).catch((err) => {
+  const profiles = await fetchProfiles().catch(() => [] as Profile[]);
+  const built = await buildEvent(payload, profiles).catch((err) => {
     buildError = err instanceof Error ? err.message : String(err);
     console.error("discord webhook build failed", err);
     return null;
   });
-  if (!message) {
+  if (!built) {
     return NextResponse.json({
       ok: true,
       sent: false,
@@ -85,6 +125,24 @@ export async function POST(req: Request) {
       buildError,
     });
   }
+
+  const actor = findProfile(profiles, built.actorKey);
+  const ping = PING_EVERYONE.has(built.kind);
+
+  const message = {
+    ...senderFor(actor),
+    ...(ping ? { content: "@everyone" } : {}),
+    embeds: [
+      {
+        description: `${EVENT_EMOJI[built.kind]} ${built.description}`,
+        color: EVENT_COLOR[built.kind],
+        ...(built.imageUrl ? { image: { url: built.imageUrl } } : {}),
+      },
+    ],
+    allowed_mentions: ping
+      ? { parse: ["everyone"] as const }
+      : { parse: [] as const },
+  };
 
   try {
     const res = await fetch(discordUrl, {
@@ -132,13 +190,6 @@ function senderFor(profile: Profile | null) {
   };
 }
 
-function colorInt(profile: Profile | null): number | undefined {
-  if (!profile) return undefined;
-  const m = profile.color.replace("#", "");
-  const n = parseInt(m, 16);
-  return Number.isFinite(n) ? n : undefined;
-}
-
 function snippet(text: string | null | undefined): string | null {
   if (!text) return null;
   const t = text.trim();
@@ -146,24 +197,14 @@ function snippet(text: string | null | undefined): string | null {
   return t.length > SNIPPET_LIMIT ? `${t.slice(0, SNIPPET_LIMIT)}…` : t;
 }
 
-type Embed = {
-  description: string;
-  color?: number;
-  image?: { url: string };
-};
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
-type DiscordMessage = {
-  username: string;
-  avatar_url?: string;
-  embeds: Embed[];
-};
-
-async function buildMessage(
+async function buildEvent(
   payload: SupabaseHookPayload,
-): Promise<DiscordMessage | null> {
+  profiles: Profile[],
+): Promise<Built | null> {
   const { table, record } = payload;
   if (!record) return null;
-  const profiles = await fetchProfiles().catch(() => []);
   const site = siteUrl();
   const supabase = await createClient();
 
@@ -171,28 +212,25 @@ async function buildMessage(
     case "notes":
       return buildNote(supabase, profiles, record, site);
     case "ref_annotations":
-      return buildAnnotation(supabase, profiles, record, site);
+      return buildAnnotation(supabase, record, site);
     case "ref_ratings":
-      return buildRating(supabase, profiles, record, site);
+      return buildRating(supabase, record, site);
     case "refs":
-      return buildRefUpload(profiles, record, site);
+      return buildRefUpload(record, site);
     case "project_updates":
-      return buildProjectUpdate(supabase, profiles, record, site);
+      return buildProjectUpdate(supabase, record, site);
     default:
       return null;
   }
 }
-
-type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 async function buildNote(
   supabase: SupabaseClient,
   profiles: Profile[],
   record: Record<string, unknown>,
   site: string,
-): Promise<DiscordMessage | null> {
+): Promise<Built | null> {
   const author = String(record.author ?? "");
-  const profile = findProfile(profiles, author);
   const isReply = Boolean(record.parent_id);
   const verb = isReply ? "답글을 남겼어요" : "노트를 남겼어요";
   const body = snippet(
@@ -211,9 +249,10 @@ async function buildNote(
       .eq("id", record.ref_id as string)
       .maybeSingle();
     if (!data) return null;
+    const r = data as { id: string; title: string | null };
     targetLabel = "ref";
-    targetTitle = ((data as { title: string | null }).title ?? "untitled");
-    targetUrl = `${site}/ref/${(data as { id: string }).id}#note-${noteId}`;
+    targetTitle = r.title ?? "untitled";
+    targetUrl = `${site}/ref/${r.id}#note-${noteId}`;
   } else if (record.project_id) {
     const { data } = await supabase
       .from("projects")
@@ -221,68 +260,10 @@ async function buildNote(
       .eq("id", record.project_id as string)
       .maybeSingle();
     if (!data) return null;
+    const p = data as { id: string; title: string };
     targetLabel = "작업";
-    targetTitle = (data as { title: string }).title;
-    targetUrl = `${site}/wip/${(data as { id: string }).id}#note-${noteId}`;
-  } else if (record.project_update_id) {
-    const { data } = await supabase
-      .from("project_updates")
-      .select("project_id, projects(title)")
-      .eq("id", record.project_update_id as string)
-      .maybeSingle();
-    if (!data) return null;
-    type Row = {
-      project_id: string;
-      projects:
-        | { title: string }
-        | { title: string }[]
-        | null;
-    };
-    const r = data as Row;
-    const proj = Array.isArray(r.projects) ? r.projects[0] : r.projects;
-    targetLabel = "업데이트";
-    targetTitle = proj?.title ?? "untitled";
-    targetUrl = `${site}/wip/${r.project_id}#note-${noteId}`;
-  } else {
-    return null;
-  }
-
-  return {
-    ...senderFor(profile),
-    embeds: [
-      {
-        description:
-          `**${targetLabel}에 ${verb}** — [${targetTitle}](${targetUrl})` +
-          (body ? `\n> ${body}` : ""),
-        color: colorInt(profile),
-      },
-    ],
-  };
-}
-
-async function buildAnnotation(
-  supabase: SupabaseClient,
-  profiles: Profile[],
-  record: Record<string, unknown>,
-  site: string,
-): Promise<DiscordMessage | null> {
-  const profile = findProfile(profiles, String(record.author ?? ""));
-  const annId = String(record.id);
-  const body = snippet(record.body as string);
-  let label = "ref";
-  let title = "untitled";
-  let url = site;
-
-  if (record.ref_id) {
-    const { data } = await supabase
-      .from("refs")
-      .select("id, title")
-      .eq("id", record.ref_id as string)
-      .maybeSingle();
-    if (!data) return null;
-    label = "ref";
-    title = ((data as { title: string | null }).title ?? "untitled");
-    url = `${site}/ref/${(data as { id: string }).id}#ann-${annId}`;
+    targetTitle = p.title;
+    targetUrl = `${site}/wip/${p.id}#note-${noteId}`;
   } else if (record.project_update_id) {
     const { data } = await supabase
       .from("project_updates")
@@ -296,6 +277,62 @@ async function buildAnnotation(
     };
     const r = data as Row;
     const proj = Array.isArray(r.projects) ? r.projects[0] : r.projects;
+    targetLabel = "업데이트";
+    targetTitle = proj?.title ?? "untitled";
+    targetUrl = `${site}/wip/${r.project_id}#update-${record.project_update_id as string}`;
+  } else {
+    return null;
+  }
+
+  const authorProfile = findProfile(profiles, author);
+  const authorName = authorProfile?.display_name ?? author;
+
+  return {
+    kind: isReply ? "reply" : "note",
+    actorKey: author,
+    description:
+      `**${authorName}**님이 ${targetLabel}에 ${verb} — [${targetTitle}](${targetUrl})` +
+      (body ? `\n> ${body.replace(/\n/g, "\n> ")}` : ""),
+  };
+}
+
+async function buildAnnotation(
+  supabase: SupabaseClient,
+  record: Record<string, unknown>,
+  site: string,
+): Promise<Built | null> {
+  const author = String(record.author ?? "");
+  const annId = String(record.id);
+  const body = snippet(record.body as string);
+  let label = "ref";
+  let title = "untitled";
+  let url = site;
+
+  if (record.ref_id) {
+    const { data } = await supabase
+      .from("refs")
+      .select("id, title")
+      .eq("id", record.ref_id as string)
+      .maybeSingle();
+    if (!data) return null;
+    const r = data as { id: string; title: string | null };
+    label = "ref";
+    title = r.title ?? "untitled";
+    url = `${site}/ref/${r.id}#ann-${annId}`;
+  } else if (record.project_update_id) {
+    const { data } = await supabase
+      .from("project_updates")
+      .select("id, project_id, projects(title)")
+      .eq("id", record.project_update_id as string)
+      .maybeSingle();
+    if (!data) return null;
+    type Row = {
+      id: string;
+      project_id: string;
+      projects: { title: string } | { title: string }[] | null;
+    };
+    const r = data as Row;
+    const proj = Array.isArray(r.projects) ? r.projects[0] : r.projects;
     label = "업데이트";
     title = proj?.title ?? "untitled";
     url = `${site}/wip/${r.project_id}#ann-${annId}`;
@@ -304,25 +341,19 @@ async function buildAnnotation(
   }
 
   return {
-    ...senderFor(profile),
-    embeds: [
-      {
-        description:
-          `**${label}에 주석** — [${title}](${url})` +
-          (body ? `\n> ${body}` : ""),
-        color: colorInt(profile),
-      },
-    ],
+    kind: "annotation",
+    actorKey: author,
+    description:
+      `**${label}에 주석** — [${title}](${url})` + (body ? `\n> ${body}` : ""),
   };
 }
 
 async function buildRating(
   supabase: SupabaseClient,
-  profiles: Profile[],
   record: Record<string, unknown>,
   site: string,
-): Promise<DiscordMessage | null> {
-  const profile = findProfile(profiles, String(record.user_key ?? ""));
+): Promise<Built | null> {
+  const userKey = String(record.user_key ?? "");
   const stars = Number(record.stars ?? 0);
   const { data } = await supabase
     .from("refs")
@@ -330,68 +361,53 @@ async function buildRating(
     .eq("id", record.ref_id as string)
     .maybeSingle();
   if (!data) return null;
-  const title = (data as { title: string | null }).title ?? "untitled";
-  const url = `${site}/ref/${(data as { id: string }).id}`;
+  const r = data as { id: string; title: string | null };
+  const title = r.title ?? "untitled";
+  const url = `${site}/ref/${r.id}`;
   const filled = "★".repeat(stars);
   const empty = "☆".repeat(Math.max(0, 5 - stars));
   return {
-    ...senderFor(profile),
-    embeds: [
-      {
-        description: `**별점 ${filled}${empty}** — [${title}](${url})`,
-        color: colorInt(profile),
-      },
-    ],
+    kind: "rating",
+    actorKey: userKey,
+    description: `**별점 ${filled}${empty}** — [${title}](${url})`,
   };
 }
 
 function buildRefUpload(
-  profiles: Profile[],
   record: Record<string, unknown>,
   site: string,
-): DiscordMessage | null {
-  const profile = findProfile(profiles, String(record.created_by ?? ""));
+): Built {
   const id = String(record.id);
   const title = (record.title as string | null) ?? "untitled";
   const url = `${site}/ref/${id}`;
   return {
-    ...senderFor(profile),
-    embeds: [
-      {
-        description: `**새 ref 업로드** — [${title}](${url})`,
-        color: colorInt(profile),
-        image: { url: publicImageUrl(record.image_path as string) },
-      },
-    ],
+    kind: "ref_upload",
+    actorKey: String(record.created_by ?? "") || null,
+    description: `**새 ref 업로드** — [${title}](${url})`,
+    imageUrl: publicImageUrl(record.image_path as string),
   };
 }
 
 async function buildProjectUpdate(
   supabase: SupabaseClient,
-  profiles: Profile[],
   record: Record<string, unknown>,
   site: string,
-): Promise<DiscordMessage | null> {
-  const profile = findProfile(profiles, String(record.created_by ?? ""));
+): Promise<Built | null> {
   const { data } = await supabase
     .from("projects")
     .select("id, title")
     .eq("id", record.project_id as string)
     .maybeSingle();
   if (!data) return null;
-  const title = (data as { title: string }).title;
-  const url = `${site}/wip/${(data as { id: string }).id}`;
+  const p = data as { id: string; title: string };
+  const updateId = String(record.id);
+  const url = `${site}/wip/${p.id}#update-${updateId}`;
   const body = snippet(record.body as string);
   return {
-    ...senderFor(profile),
-    embeds: [
-      {
-        description:
-          `**작업 업데이트** — [${title}](${url})` +
-          (body ? `\n> ${body}` : ""),
-        color: colorInt(profile),
-        image: { url: publicImageUrl(record.image_path as string) },
-      },
-    ],
+    kind: "project_update",
+    actorKey: String(record.created_by ?? "") || null,
+    description:
+      `**작업 업데이트** — [${p.title}](${url})` + (body ? `\n> ${body}` : ""),
+    imageUrl: publicImageUrl(record.image_path as string),
   };
 }
