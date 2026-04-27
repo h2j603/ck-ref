@@ -5,6 +5,7 @@ import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
 import {
   embedImage,
   embeddingsConfigured,
+  embeddingsProvider,
   vectorLiteral,
 } from "@/lib/embedding";
 import { isProfileKey } from "@/lib/profiles";
@@ -115,6 +116,7 @@ export async function GET(request: Request) {
   ]);
   return NextResponse.json({
     configured: embeddingsConfigured(),
+    provider: embeddingsProvider(),
     total: total ?? 0,
     missing: missing ?? 0,
   });

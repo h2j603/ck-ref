@@ -5,7 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
-type Stats = { configured: boolean; total: number; missing: number };
+type Stats = {
+  configured: boolean;
+  provider: "jina" | "generic" | "none";
+  total: number;
+  missing: number;
+};
 type RunResult = {
   ok: boolean;
   processed: number;
@@ -110,7 +115,7 @@ export function EmbedAdminClient() {
             <p>
               <span className="text-muted-foreground">Provider:</span>{" "}
               <span className={stats.configured ? "" : "text-destructive"}>
-                {stats.configured ? "configured" : "not configured"}
+                {stats.configured ? stats.provider : "not configured"}
               </span>
             </p>
             <p>
@@ -131,8 +136,12 @@ export function EmbedAdminClient() {
         )}
         {!stats?.configured ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Vercel 환경변수 <code className="font-mono">HF_API_TOKEN</code> 을
-            설정한 뒤 새로고침하세요.
+            Vercel 환경변수{" "}
+            <code className="font-mono">JINA_API_TOKEN</code> 을 설정한 뒤
+            재배포하면 여기 <code className="font-mono">jina</code> 가 떠야
+            해요. (또는 generic provider 쓰려면{" "}
+            <code className="font-mono">EMBEDDING_API_URL</code> +{" "}
+            <code className="font-mono">EMBEDDING_API_TOKEN</code>)
           </p>
         ) : null}
       </section>
