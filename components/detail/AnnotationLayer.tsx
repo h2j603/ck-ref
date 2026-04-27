@@ -74,6 +74,19 @@ export function AnnotationLayer({
     };
   }, [supabase, refId]);
 
+  // Open the annotation referenced by #ann-<id> in the URL — used by activity
+  // feed deeplinks. We re-evaluate after items load so the matched one
+  // actually exists in state.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const m = window.location.hash.match(/^#ann-([0-9a-f-]+)$/i);
+    if (!m) return;
+    const target = m[1];
+    if (items.some((a) => a.id === target)) {
+      setOpenId(target);
+    }
+  }, [items]);
+
   function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
     if (!addMode || !nickname || draft) return;
     if ((e.target as HTMLElement).closest("[data-annotation]")) return;
