@@ -410,6 +410,29 @@ async function buildAnnotation(
     path = `/ref/${r.id}#ann-${annId}`;
     url = appendDiscordTrust(`${site}${path}`);
     thumbnailPath = r.image_path;
+  } else if (record.ref_image_id) {
+    // Annotation on a ref's extra image. Resolve back to the parent ref so
+    // the link can deeplink to the page (the image itself doesn't have a
+    // standalone route — it's stacked under the cover on /ref/<id>).
+    const { data } = await supabase
+      .from("ref_images")
+      .select("id, image_path, ref:refs(id, title)")
+      .eq("id", record.ref_image_id as string)
+      .maybeSingle();
+    if (!data) return null;
+    type Row = {
+      id: string;
+      image_path: string | null;
+      ref: { id: string; title: string | null } | { id: string; title: string | null }[] | null;
+    };
+    const row = data as Row;
+    const ref = Array.isArray(row.ref) ? row.ref[0] : row.ref;
+    if (!ref) return null;
+    label = "ref";
+    title = ref.title ?? "untitled";
+    path = `/ref/${ref.id}#ann-${annId}`;
+    url = appendDiscordTrust(`${site}${path}`);
+    thumbnailPath = row.image_path;
   } else if (record.project_update_id) {
     const { data } = await supabase
       .from("project_updates")
