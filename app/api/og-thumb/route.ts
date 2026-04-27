@@ -8,18 +8,90 @@ import {
   safeUrl,
 } from "@/lib/og";
 
-// "Are.na-style" thumbnail fetch: given a page URL, resolve its
-// og:image (or twitter:image / first <img> in <head>) and stream the
-// image bytes back. Used by the upload page to let users paste a link
-// and get a cover for the ref without having to download/upload by hand.
+// "Are.na-style" thumbnail fetch: given a page URL, render the page and
+// hand back a screenshot. We use Microlink (https://microlink.io) — the
+// free tier handles 50 requests/day per IP, plenty for a 3-person team.
+// MICROLINK_API_KEY can be set to enable the paid pro tier with higher
+// limits and faster cold starts.
+//
+// If Microlink fails (rate limited, target unreachable, paywalled site,
+// etc.) we fall back to the original og:image extraction so the user
+// still gets a thumbnail when one is available.
 
-export async function GET(request: Request) {
-  const target = safeUrl(new URL(request.url).searchParams.get("url"));
-  if (!target) {
-    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+const MICROLINK_API = "https://api.microlink.io";
+const MICROLINK_PRO_API = "https://pro.microlink.io";
+
+type Result = {
+  buf: ArrayBuffer;
+  contentType: string;
+  title: string | null;
+  source: "screenshot" | "og";
+};
+
+async function fromMicrolink(url: string): Promise<Result | null> {
+  const key = process.env.MICROLINK_API_KEY?.trim() || null;
+  const endpoint = key ? MICROLINK_PRO_API : MICROLINK_API;
+  const params = new URLSearchParams({
+    url,
+    screenshot: "true",
+    meta: "true",
+    // Bigger viewport so editorial layouts read better in the thumbnail.
+    viewport: "1280x800",
+  });
+  let res: Response;
+  try {
+    res = await fetch(`${endpoint}?${params.toString()}`, {
+      headers: key ? { "x-api-key": key } : {},
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS * 3),
+    });
+  } catch {
+    return null;
   }
+  if (!res.ok) return null;
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    return null;
+  }
+  type MicrolinkResp = {
+    status?: string;
+    data?: {
+      title?: string | null;
+      screenshot?: { url?: string | null } | null;
+    };
+  };
+  const j = json as MicrolinkResp;
+  if (j.status !== "success") return null;
+  const screenshotUrl = j.data?.screenshot?.url;
+  if (!screenshotUrl) return null;
 
-  // Step 1: pull the page HTML and extract og metadata.
+  // Microlink hosts the screenshot on their CDN — proxy it through us so
+  // the upload page doesn't have to deal with cross-origin reads.
+  let imgRes: Response;
+  try {
+    imgRes = await fetch(screenshotUrl, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+  if (!imgRes.ok) return null;
+  const ct = imgRes.headers.get("content-type") || "image/png";
+  if (!ct.startsWith("image/")) return null;
+  const len = imgRes.headers.get("content-length");
+  if (len && Number(len) > MAX_BYTES) return null;
+  const buf = await imgRes.arrayBuffer();
+  if (buf.byteLength > MAX_BYTES) return null;
+  return {
+    buf,
+    contentType: ct,
+    title: j.data?.title?.trim() || null,
+    source: "screenshot",
+  };
+}
+
+async function fromOgImage(target: URL): Promise<Result | null> {
   let pageRes: Response;
   try {
     pageRes = await fetch(target.href, {
@@ -33,34 +105,15 @@ export async function GET(request: Request) {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch {
-    return NextResponse.json(
-      { error: "URL을 불러오지 못했어요." },
-      { status: 502 },
-    );
+    return null;
   }
-  if (!pageRes.ok) {
-    return NextResponse.json(
-      { error: `원격 서버 응답 ${pageRes.status}` },
-      { status: 502 },
-    );
-  }
+  if (!pageRes.ok) return null;
   const ct = pageRes.headers.get("content-type") ?? "";
-  if (!ct.includes("text/html") && !ct.includes("xml")) {
-    return NextResponse.json(
-      { error: "HTML 페이지가 아니에요." },
-      { status: 415 },
-    );
-  }
+  if (!ct.includes("text/html") && !ct.includes("xml")) return null;
   const html = await pageRes.text();
   const meta = parseOg(html, pageRes.url || target.href);
-  if (!meta.image) {
-    return NextResponse.json(
-      { error: "이 페이지에서 og:image를 찾지 못했어요." },
-      { status: 404 },
-    );
-  }
+  if (!meta.image) return null;
 
-  // Step 2: download the OG image itself.
   let imgRes: Response;
   try {
     imgRes = await fetch(meta.image, {
@@ -69,43 +122,44 @@ export async function GET(request: Request) {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch {
-    return NextResponse.json(
-      { error: "썸네일 이미지를 가져오지 못했어요." },
-      { status: 502 },
-    );
+    return null;
   }
-  if (!imgRes.ok) {
-    return NextResponse.json(
-      { error: `이미지 응답 ${imgRes.status}` },
-      { status: 502 },
-    );
-  }
+  if (!imgRes.ok) return null;
   const imgCt = imgRes.headers.get("content-type") ?? "";
-  if (!imgCt.startsWith("image/")) {
+  if (!imgCt.startsWith("image/")) return null;
+  const len = imgRes.headers.get("content-length");
+  if (len && Number(len) > MAX_BYTES) return null;
+  const buf = await imgRes.arrayBuffer();
+  if (buf.byteLength > MAX_BYTES) return null;
+  return { buf, contentType: imgCt, title: meta.title, source: "og" };
+}
+
+export async function GET(request: Request) {
+  const target = safeUrl(new URL(request.url).searchParams.get("url"));
+  if (!target) {
+    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+  }
+
+  // Are.na-style: actual page screenshot first.
+  const result =
+    (await fromMicrolink(target.href)) ?? (await fromOgImage(target));
+  if (!result) {
     return NextResponse.json(
-      { error: "썸네일이 이미지가 아니에요." },
-      { status: 415 },
+      {
+        error:
+          "스크린샷도, og:image도 가져오지 못했어요. 직접 이미지를 첨부해주세요.",
+      },
+      { status: 502 },
     );
   }
-  const len = imgRes.headers.get("content-length");
-  if (len && Number(len) > MAX_BYTES) {
-    return NextResponse.json({ error: "이미지가 너무 커요." }, { status: 413 });
-  }
 
-  const buf = await imgRes.arrayBuffer();
-  if (buf.byteLength > MAX_BYTES) {
-    return new NextResponse("Too large", { status: 413 });
-  }
-
-  // Surface the metadata we already fetched as headers so the client can
-  // pre-fill the title field without a second round trip.
   const headers = new Headers({
-    "Content-Type": imgCt,
+    "Content-Type": result.contentType,
     "Cache-Control": "public, max-age=300",
+    "X-Thumb-Source": result.source,
   });
-  if (meta.title) {
-    // Header values must be ASCII; encode and let the client decode.
-    headers.set("X-Og-Title", encodeURIComponent(meta.title));
+  if (result.title) {
+    headers.set("X-Og-Title", encodeURIComponent(result.title));
   }
-  return new NextResponse(buf, { status: 200, headers });
+  return new NextResponse(result.buf, { status: 200, headers });
 }
