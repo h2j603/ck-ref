@@ -164,6 +164,18 @@ export function UpdateRefs({
     setLinked((prev) => prev.filter((r) => r.id !== refId));
   }
 
+  async function updateReason(refId: string, next: string | null) {
+    const { error } = await supabase
+      .from("project_update_refs")
+      .update({ reason: next })
+      .eq("project_update_id", updateId)
+      .eq("ref_id", refId);
+    if (error) throw new Error(error.message);
+    setLinked((prev) =>
+      prev.map((r) => (r.id === refId ? { ...r, reason: next } : r)),
+    );
+  }
+
   const canEdit = hydrated && !!nickname;
 
   // Compact: nothing to show, no add button → render nothing.
@@ -327,6 +339,8 @@ export function UpdateRefs({
                   reason={r.reason}
                   addedBy={r.added_by ?? null}
                   compact
+                  onSave={(next) => updateReason(r.id, next)}
+                  onClear={() => updateReason(r.id, null)}
                 />
               ) : null}
               <Link

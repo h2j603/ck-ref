@@ -256,6 +256,17 @@ export function MetadataForm() {
         if (linkErr) throw linkErr;
       }
 
+      // Kick off image-embedding compute in the background. We don't await
+      // it — even if the provider is slow or unconfigured, the ref is
+      // saved and visible immediately. The reranker will pick the
+      // embedding up the next time someone opens the detail page.
+      void fetch("/api/embed-ref", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: refId }),
+        keepalive: true,
+      }).catch(() => {});
+
       setProgress("완료. 인덱스로 이동합니다.");
       // Full reload so the newly-inserted ref shows up in the index RSC and
       // we don't fight the router cache. The unique query param defeats

@@ -635,6 +635,12 @@ export async function fetchRefExtraImages(refId: string): Promise<RefImage[]> {
   return (data ?? []) as RefImage[];
 }
 
+// Visual-similarity weight for the hybrid score. Cosine similarity is in
+// [-1, 1] but in practice CLIP image-image scores live in [0.5, 1]. Using
+// 8 puts a perfect visual match worth roughly the same as a ~4-tag overlap,
+// which felt right in casual testing.
+const VISUAL_WEIGHT = 8;
+
 export async function fetchSimilarRefs(
   refId: string,
   limit = 6,
@@ -643,7 +649,7 @@ export async function fetchSimilarRefs(
   const { data: current, error } = await supabase
     .from("refs")
     .select(
-      "id, tags, color_hue, genre, medium, ref_designers(designer_id)",
+      "id, tags, color_hue, genre, medium, ref_designers(designer_id), embedding",
     )
     .eq("id", refId)
     .maybeSingle();
@@ -655,16 +661,51 @@ export async function fetchSimilarRefs(
     genre: string | null;
     medium: string | null;
     ref_designers: { designer_id: string }[] | null;
+    embedding: number[] | string | null;
   };
   const cur = current as Cur;
   const designerIds = (cur.ref_designers ?? []).map((rd) => rd.designer_id);
   const tags = cur.tags ?? [];
+
+  // If the current ref has an embedding, query pgvector for the top-N
+  // nearest neighbors and merge their visual similarity into the metadata
+  // score. Otherwise fall back to metadata-only over a recent window.
+  const visualScores = new Map<string, number>();
+  if (cur.embedding != null) {
+    const queryEmbedding =
+      typeof cur.embedding === "string"
+        ? cur.embedding
+        : `[${(cur.embedding as number[]).join(",")}]`;
+    const { data: nn } = await supabase.rpc("similar_refs_by_embedding", {
+      query_embedding: queryEmbedding,
+      match_count: 30,
+      exclude_id: refId,
+    });
+    for (const row of (nn ?? []) as { id: string; similarity: number }[]) {
+      visualScores.set(row.id, row.similarity);
+    }
+  }
 
   // Pull a window of recent refs and score them against the current one.
   // For a 3-user archive this is plenty; we're not paginating millions.
   const candidates = await fetchRefs({}, 200).catch(
     () => [] as RefWithDesigners[],
   );
+
+  // Make sure every visual neighbor is in the candidate set, even if it's
+  // older than the recent window — we don't want to miss a strong match
+  // just because it was uploaded last year.
+  const candidateIds = new Set(candidates.map((c) => c.id));
+  const missingVisualIds = [...visualScores.keys()].filter(
+    (id) => !candidateIds.has(id) && id !== refId,
+  );
+  if (missingVisualIds.length > 0) {
+    const extras = await fetchRefsByIds(missingVisualIds).catch(
+      () => [] as RefWithDesigners[],
+    );
+    candidates.push(...extras);
+  }
+
   const scored = candidates
     .filter((r) => r.id !== refId)
     .map((r) => {
@@ -684,11 +725,27 @@ export async function fetchSimilarRefs(
       ) {
         score += 1;
       }
+      const visual = visualScores.get(r.id);
+      if (visual !== undefined) {
+        score += visual * VISUAL_WEIGHT;
+      }
       return { r, score };
     })
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || b.r.created_at.localeCompare(a.r.created_at));
   return scored.slice(0, limit).map((s) => s.r);
+}
+
+async function fetchRefsByIds(ids: string[]): Promise<RefWithDesigners[]> {
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("refs")
+    .select(REF_COLUMNS)
+    .in("id", ids);
+  if (error) return [];
+  const bare = flatten(data as RefRow[]);
+  return attachRatings(bare);
 }
 
 export async function fetchRefAnnotations(
