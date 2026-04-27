@@ -1,7 +1,8 @@
 import { cn } from "@/lib/utils";
 
-// Flat single-color kiwi-fruit silhouette: a slightly elongated body with a
-// small leaf hint on top. Filled = solid currentColor; empty = outline.
+// Flat single-color kiwi bird silhouette: plump round body, long thin beak,
+// two skinny legs. One currentColor; filled = solid body + beak, empty =
+// outline only. Legs are stroked either way so they read at small sizes.
 export function KiwiIcon({
   filled = false,
   className,
@@ -12,7 +13,6 @@ export function KiwiIcon({
   return (
     <svg
       viewBox="0 0 24 24"
-      fill="none"
       aria-hidden
       className={cn(
         "shrink-0",
@@ -20,22 +20,30 @@ export function KiwiIcon({
         className,
       )}
     >
-      <path
-        d="M12 13 c0 -5 0 -8 4 -8 c-1 3 -2 5 -4 5"
+      {/* body */}
+      <ellipse
+        cx="10"
+        cy="12"
+        rx="7"
+        ry="6"
         fill={filled ? "currentColor" : "none"}
         stroke="currentColor"
         strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
-      <ellipse
-        cx="12"
-        cy="14"
-        rx="7"
-        ry="7.5"
+      {/* beak — slim triangle off the front */}
+      <path
+        d="M16 11 L22.5 12.5 L16 13.2 Z"
         fill={filled ? "currentColor" : "none"}
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      {/* legs */}
+      <path
+        d="M8.5 18 L8.5 21 M12.5 18 L12.5 21"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
       />
     </svg>
   );
