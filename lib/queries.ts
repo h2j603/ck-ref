@@ -381,6 +381,62 @@ export async function fetchBoardRefs(boardId: string) {
   return attachRatings(bare);
 }
 
+export async function fetchSimilarRefs(
+  refId: string,
+  limit = 6,
+): Promise<RefWithDesigners[]> {
+  const supabase = await createClient();
+  const { data: current, error } = await supabase
+    .from("refs")
+    .select(
+      "id, tags, color_hue, genre, medium, ref_designers(designer_id)",
+    )
+    .eq("id", refId)
+    .maybeSingle();
+  if (error || !current) return [];
+  type Cur = {
+    id: string;
+    tags: string[] | null;
+    color_hue: number | null;
+    genre: string | null;
+    medium: string | null;
+    ref_designers: { designer_id: string }[] | null;
+  };
+  const cur = current as Cur;
+  const designerIds = (cur.ref_designers ?? []).map((rd) => rd.designer_id);
+  const tags = cur.tags ?? [];
+
+  // Pull a window of recent refs and score them against the current one.
+  // For a 3-user archive this is plenty; we're not paginating millions.
+  const candidates = await fetchRefs({}, 200).catch(
+    () => [] as RefWithDesigners[],
+  );
+  const scored = candidates
+    .filter((r) => r.id !== refId)
+    .map((r) => {
+      let score = 0;
+      const sharedDesigners = r.designers.filter((d) =>
+        designerIds.includes(d.id),
+      ).length;
+      score += sharedDesigners * 5;
+      const sharedTags = r.tags.filter((t) => tags.includes(t)).length;
+      score += sharedTags * 2;
+      if (r.genre && r.genre === cur.genre) score += 1;
+      if (r.medium && r.medium === cur.medium) score += 1;
+      if (
+        cur.color_hue !== null &&
+        r.color_hue !== null &&
+        Math.abs(cur.color_hue - r.color_hue) <= 20
+      ) {
+        score += 1;
+      }
+      return { r, score };
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score || b.r.created_at.localeCompare(a.r.created_at));
+  return scored.slice(0, limit).map((s) => s.r);
+}
+
 export async function fetchRefRatings(refId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
