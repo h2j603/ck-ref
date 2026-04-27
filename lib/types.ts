@@ -85,8 +85,11 @@ export type Note = {
 export type RefAnnotation = {
   id: string;
   ref_id: string;
+  kind: "point" | "area";
   x_pct: number;
   y_pct: number;
+  w_pct: number | null;
+  h_pct: number | null;
   body: string;
   author: string;
   created_at: string;

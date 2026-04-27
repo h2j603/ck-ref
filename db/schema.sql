@@ -172,13 +172,21 @@ for each row execute procedure touch_updated_at();
 create table if not exists ref_annotations (
   id          uuid primary key default gen_random_uuid(),
   ref_id      uuid not null references refs(id) on delete cascade,
+  kind        text not null default 'point' check (kind in ('point', 'area')),
   x_pct       numeric not null check (x_pct >= 0 and x_pct <= 100),
   y_pct       numeric not null check (y_pct >= 0 and y_pct <= 100),
+  w_pct       numeric check (w_pct is null or (w_pct > 0 and w_pct <= 100)),
+  h_pct       numeric check (h_pct is null or (h_pct > 0 and h_pct <= 100)),
   body        text not null,
   author      text not null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- Existing deployments: add the columns idempotently.
+alter table ref_annotations add column if not exists kind text not null default 'point';
+alter table ref_annotations add column if not exists w_pct numeric;
+alter table ref_annotations add column if not exists h_pct numeric;
 
 create index if not exists ref_annotations_ref_idx on ref_annotations (ref_id, created_at desc);
 
