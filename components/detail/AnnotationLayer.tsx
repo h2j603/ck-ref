@@ -1,8 +1,8 @@
 "use client";
 
-import { Eye, EyeOff, Pencil, Square, Trash2, X } from "lucide-react";
+import { Eye, EyeOff, Pencil, Plus, Trash2, X } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,20 +16,10 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { RefAnnotation } from "@/lib/types";
 
-type AddKind = "point" | "area" | null;
-
-type DraftPoint = {
-  kind: "new-point";
+type DraftNew = {
+  kind: "new";
   x_pct: number;
   y_pct: number;
-  body: string;
-};
-type DraftArea = {
-  kind: "new-area";
-  x_pct: number;
-  y_pct: number;
-  w_pct: number;
-  h_pct: number;
   body: string;
 };
 type DraftEdit = {
@@ -37,14 +27,7 @@ type DraftEdit = {
   id: string;
   body: string;
 };
-type Draft = DraftPoint | DraftArea | DraftEdit;
-
-type Dragging = {
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-};
+type Draft = DraftNew | DraftEdit;
 
 export function AnnotationLayer({
   refId,
@@ -69,14 +52,12 @@ export function AnnotationLayer({
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [items, setItems] = useState<RefAnnotation[]>(initial);
-  const [addKind, setAddKind] = useState<AddKind>(null);
+  const [addMode, setAddMode] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [dragging, setDragging] = useState<Dragging | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,76 +74,14 @@ export function AnnotationLayer({
     };
   }, [supabase, refId]);
 
-  function pctFromEvent(e: React.PointerEvent<HTMLDivElement>) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    return {
-      x: Math.max(0, Math.min(100, x)),
-      y: Math.max(0, Math.min(100, y)),
-    };
-  }
-
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (!addKind || !nickname || draft) return;
+  function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!addMode || !nickname || draft) return;
     if ((e.target as HTMLElement).closest("[data-annotation]")) return;
-    // Only react to primary button on mouse / pen; touch always goes through.
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const { x, y } = pctFromEvent(e);
-    if (addKind === "point") {
-      setDraft({ kind: "new-point", x_pct: x, y_pct: y, body: "" });
-      setOpenId(null);
-    } else {
-      setDragging({ startX: x, startY: y, endX: x, endY: y });
-    }
-  }
-
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!dragging) return;
-    e.preventDefault();
-    const { x, y } = pctFromEvent(e);
-    setDragging({ ...dragging, endX: x, endY: y });
-  }
-
-  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (!dragging) return;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    const x = Math.min(dragging.startX, dragging.endX);
-    const y = Math.min(dragging.startY, dragging.endY);
-    const w = Math.abs(dragging.endX - dragging.startX);
-    const h = Math.abs(dragging.endY - dragging.startY);
-    setDragging(null);
-    // Treat a near-stationary drag as a point so a tap doesn't fizzle.
-    if (w < 0.5 && h < 0.5) {
-      setDraft({
-        kind: "new-point",
-        x_pct: dragging.startX,
-        y_pct: dragging.startY,
-        body: "",
-      });
-      setOpenId(null);
-      return;
-    }
-    setDraft({
-      kind: "new-area",
-      x_pct: x,
-      y_pct: y,
-      w_pct: Math.max(w, 1),
-      h_pct: Math.max(h, 1),
-      body: "",
-    });
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x_pct = ((e.clientX - rect.left) / rect.width) * 100;
+    const y_pct = ((e.clientY - rect.top) / rect.height) * 100;
+    setDraft({ kind: "new", x_pct, y_pct, body: "" });
     setOpenId(null);
-  }
-
-  function handlePointerCancel(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    setDragging(null);
   }
 
   async function saveDraft() {
@@ -174,32 +93,19 @@ export function AnnotationLayer({
     }
     setBusy(true);
     setError(null);
-    if (draft.kind === "new-point" || draft.kind === "new-area") {
-      const payload =
-        draft.kind === "new-point"
-          ? {
-              ref_id: refId,
-              kind: "point",
-              x_pct: draft.x_pct,
-              y_pct: draft.y_pct,
-              w_pct: null,
-              h_pct: null,
-              body,
-              author: nickname,
-            }
-          : {
-              ref_id: refId,
-              kind: "area",
-              x_pct: draft.x_pct,
-              y_pct: draft.y_pct,
-              w_pct: draft.w_pct,
-              h_pct: draft.h_pct,
-              body,
-              author: nickname,
-            };
+    if (draft.kind === "new") {
       const { data, error } = await supabase
         .from("ref_annotations")
-        .insert(payload)
+        .insert({
+          ref_id: refId,
+          kind: "point",
+          x_pct: draft.x_pct,
+          y_pct: draft.y_pct,
+          w_pct: null,
+          h_pct: null,
+          body,
+          author: nickname,
+        })
         .select("*")
         .single();
       setBusy(false);
@@ -210,7 +116,7 @@ export function AnnotationLayer({
       const created = data as RefAnnotation;
       setItems((prev) => [...prev, created]);
       setDraft(null);
-      setAddKind(null);
+      setAddMode(false);
       setOpenId(created.id);
     } else {
       const { data, error } = await supabase
@@ -259,29 +165,19 @@ export function AnnotationLayer({
   return (
     <div className="flex flex-col gap-2">
       <div
-        ref={containerRef}
         className={cn(
           "relative w-full select-none bg-muted",
-          addKind && "cursor-crosshair touch-none",
+          addMode && "cursor-crosshair",
         )}
         style={{ aspectRatio: `${width} / ${height}` }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
+        onClick={handleImageClick}
       >
         <Image
           src={imageUrl}
           alt={alt}
           fill
           sizes="(max-width: 1024px) 100vw, 70vw"
-          className={cn(
-            "object-contain",
-            // Let pointer events pass through to the container while drawing
-            // so the browser doesn't try to drag-save the image and so the
-            // image surface doesn't swallow touchmove on mobile.
-            addKind && "pointer-events-none",
-          )}
+          className="object-contain"
           draggable={false}
           priority
         />
@@ -324,9 +220,7 @@ export function AnnotationLayer({
             })
           : null}
 
-        {dragging ? <DraggingPreview {...dragging} /> : null}
-
-        {draft?.kind === "new-point" ? (
+        {draft?.kind === "new" ? (
           <NewPoint
             x_pct={draft.x_pct}
             y_pct={draft.y_pct}
@@ -335,30 +229,7 @@ export function AnnotationLayer({
               (nickname && findProfile(profiles, nickname)?.color) ?? "#a8a29e"
             }
             onChange={(v) =>
-              setDraft((d) =>
-                d && d.kind === "new-point" ? { ...d, body: v } : d,
-              )
-            }
-            onSave={() => void saveDraft()}
-            onCancel={() => setDraft(null)}
-            busy={busy}
-          />
-        ) : null}
-
-        {draft?.kind === "new-area" ? (
-          <NewArea
-            x_pct={draft.x_pct}
-            y_pct={draft.y_pct}
-            w_pct={draft.w_pct}
-            h_pct={draft.h_pct}
-            body={draft.body}
-            color={
-              (nickname && findProfile(profiles, nickname)?.color) ?? "#a8a29e"
-            }
-            onChange={(v) =>
-              setDraft((d) =>
-                d && d.kind === "new-area" ? { ...d, body: v } : d,
-              )
+              setDraft((d) => (d && d.kind === "new" ? { ...d, body: v } : d))
             }
             onSave={() => void saveDraft()}
             onCancel={() => setDraft(null)}
@@ -374,34 +245,18 @@ export function AnnotationLayer({
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {hydrated && nickname ? (
-            <>
-              <Button
-                type="button"
-                variant={addKind === "point" ? "default" : "outline"}
-                size="sm"
-                className="h-7 px-2 text-[11px]"
-                onClick={() => {
-                  setAddKind((k) => (k === "point" ? null : "point"));
-                  setDraft(null);
-                }}
-              >
-                <span aria-hidden className="size-2 rounded-full bg-current" />
-                점 주석
-              </Button>
-              <Button
-                type="button"
-                variant={addKind === "area" ? "default" : "outline"}
-                size="sm"
-                className="h-7 px-2 text-[11px]"
-                onClick={() => {
-                  setAddKind((k) => (k === "area" ? null : "area"));
-                  setDraft(null);
-                }}
-              >
-                <Square className="size-3" />
-                영역 주석
-              </Button>
-            </>
+            <Button
+              type="button"
+              variant={addMode ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2 text-[11px]"
+              onClick={() => {
+                setAddMode((m) => !m);
+                setDraft(null);
+              }}
+            >
+              <Plus className="size-3" /> {addMode ? "취소" : "주석 추가"}
+            </Button>
           ) : null}
           <Button
             type="button"
@@ -453,77 +308,26 @@ function AnnotationView({
     profile?.display_name?.slice(0, 1) ?? annotation.author.slice(0, 1);
   const color = profile?.color ?? "#a8a29e";
 
-  if (annotation.kind === "area" && annotation.w_pct && annotation.h_pct) {
-    const popoverRight = annotation.x_pct + annotation.w_pct / 2 > 60;
-    const popoverBottom = annotation.y_pct + annotation.h_pct / 2 > 60;
-    return (
-      <div
-        data-annotation
-        className="absolute"
-        style={{
-          left: `${annotation.x_pct}%`,
-          top: `${annotation.y_pct}%`,
-          width: `${annotation.w_pct}%`,
-          height: `${annotation.h_pct}%`,
-        }}
-      >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle(!open);
-          }}
-          className={cn(
-            "absolute inset-0 border-2 transition-colors",
-            open ? "bg-current/15" : "bg-current/5 hover:bg-current/10",
-          )}
-          style={{ borderColor: color, color }}
-          aria-label={`area annotation by ${annotation.author}`}
-        />
-        <span
-          aria-hidden
-          className="absolute -left-1 -top-1 flex size-5 items-center justify-center rounded-full border border-white text-[9px] font-medium text-white shadow ring-2 ring-black/30"
-          style={{ backgroundColor: color }}
-        >
-          {initial}
-        </span>
-        {open ? (
-          <Popover
-            color={color}
-            displayName={profile?.display_name ?? annotation.author}
-            body={annotation.body}
-            editing={editing}
-            draftBody={draftBody}
-            isMine={isMine}
-            busy={busy}
-            onToggle={onToggle}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onDraftChange={onDraftChange}
-            onSave={onSave}
-            onCancelEdit={onCancelEdit}
-            anchor={
-              popoverRight
-                ? { right: "100%", marginRight: 8 }
-                : { left: "100%", marginLeft: 8 }
-            }
-            verticalAnchor={popoverBottom ? "bottom" : "top"}
-          />
-        ) : null}
-      </div>
-    );
-  }
+  // Existing rows from the brief 'area' experiment are rendered as a point at
+  // their visual center so the data isn't lost.
+  const cx =
+    annotation.kind === "area" && annotation.w_pct
+      ? annotation.x_pct + annotation.w_pct / 2
+      : annotation.x_pct;
+  const cy =
+    annotation.kind === "area" && annotation.h_pct
+      ? annotation.y_pct + annotation.h_pct / 2
+      : annotation.y_pct;
 
-  // Point
-  const popoverRight = annotation.x_pct > 60;
-  const popoverBottom = annotation.y_pct > 60;
+  const popoverRight = cx > 60;
+  const popoverBottom = cy > 60;
   return (
     <div
       data-annotation
       className="absolute"
       style={{
-        left: `${annotation.x_pct}%`,
-        top: `${annotation.y_pct}%`,
+        left: `${cx}%`,
+        top: `${cy}%`,
         transform: "translate(-50%, -50%)",
       }}
     >
@@ -601,15 +405,12 @@ function Popover({
   return (
     <div
       data-annotation
-      className={cn(
-        "absolute z-10 flex w-56 flex-col gap-2 rounded-md border border-border bg-background p-3 text-sm shadow-lg",
-      )}
+      className="absolute z-10 flex w-56 flex-col gap-2 rounded-md border border-border bg-background p-3 text-sm shadow-lg"
       style={{
         ...anchor,
         ...(verticalAnchor === "top" ? { top: 12 } : { bottom: 12 }),
       }}
       onClick={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-2">
         <span
@@ -679,30 +480,6 @@ function Popover({
   );
 }
 
-function DraggingPreview({
-  startX,
-  startY,
-  endX,
-  endY,
-}: Dragging) {
-  const x = Math.min(startX, endX);
-  const y = Math.min(startY, endY);
-  const w = Math.abs(endX - startX);
-  const h = Math.abs(endY - startY);
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute border-2 border-foreground/60 bg-foreground/10"
-      style={{
-        left: `${x}%`,
-        top: `${y}%`,
-        width: `${w}%`,
-        height: `${h}%`,
-      }}
-    />
-  );
-}
-
 function NewPoint({
   x_pct,
   y_pct,
@@ -733,7 +510,6 @@ function NewPoint({
         top: `${y_pct}%`,
         transform: "translate(-50%, -50%)",
       }}
-      onPointerDown={(e) => e.stopPropagation()}
     >
       <span
         aria-hidden
@@ -742,138 +518,42 @@ function NewPoint({
       >
         +
       </span>
-      <DraftEditor
-        body={body}
-        onChange={onChange}
-        onSave={onSave}
-        onCancel={onCancel}
-        busy={busy}
-        anchor={popoverRight ? { right: 12 } : { left: 12 }}
-        verticalAnchor={popoverBottom ? "bottom" : "top"}
-      />
-    </div>
-  );
-}
-
-function NewArea({
-  x_pct,
-  y_pct,
-  w_pct,
-  h_pct,
-  body,
-  onChange,
-  onSave,
-  onCancel,
-  busy,
-  color,
-}: {
-  x_pct: number;
-  y_pct: number;
-  w_pct: number;
-  h_pct: number;
-  body: string;
-  onChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  busy: boolean;
-  color: string;
-}) {
-  const popoverRight = x_pct + w_pct / 2 > 60;
-  const popoverBottom = y_pct + h_pct / 2 > 60;
-  return (
-    <div
-      data-annotation
-      className="absolute z-20"
-      style={{
-        left: `${x_pct}%`,
-        top: `${y_pct}%`,
-        width: `${w_pct}%`,
-        height: `${h_pct}%`,
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-    >
       <div
-        aria-hidden
-        className="absolute inset-0 border-2 bg-current/10"
-        style={{ borderColor: color, color }}
-      />
-      <span
-        aria-hidden
-        className="absolute -left-1 -top-1 flex size-5 items-center justify-center rounded-full border border-white text-[9px] font-medium text-white shadow ring-2 ring-black/30"
-        style={{ backgroundColor: color }}
+        data-annotation
+        className="absolute z-10 flex w-56 flex-col gap-2 rounded-md border border-border bg-background p-3 shadow-lg"
+        style={{
+          ...(popoverRight ? { right: 12 } : { left: 12 }),
+          ...(popoverBottom ? { bottom: 12 } : { top: 12 }),
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
-        +
-      </span>
-      <DraftEditor
-        body={body}
-        onChange={onChange}
-        onSave={onSave}
-        onCancel={onCancel}
-        busy={busy}
-        anchor={
-          popoverRight
-            ? { right: "100%", marginRight: 8 }
-            : { left: "100%", marginLeft: 8 }
-        }
-        verticalAnchor={popoverBottom ? "bottom" : "top"}
-      />
-    </div>
-  );
-}
-
-function DraftEditor({
-  body,
-  onChange,
-  onSave,
-  onCancel,
-  busy,
-  anchor,
-  verticalAnchor,
-}: {
-  body: string;
-  onChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  busy: boolean;
-  anchor: React.CSSProperties;
-  verticalAnchor: "top" | "bottom";
-}) {
-  return (
-    <div
-      data-annotation
-      className="absolute z-10 flex w-56 flex-col gap-2 rounded-md border border-border bg-background p-3 shadow-lg"
-      style={{
-        ...anchor,
-        ...(verticalAnchor === "top" ? { top: 12 } : { bottom: 12 }),
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-    >
-      <Textarea
-        value={body}
-        onChange={(e) => onChange(e.target.value)}
-        rows={3}
-        autoFocus
-        placeholder="이 위치에 코멘트…"
-        className="text-sm"
-      />
-      <div className="flex justify-end gap-1.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onCancel}
-          disabled={busy}
-        >
-          취소
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={onSave}
-          disabled={busy || !body.trim()}
-        >
-          저장
-        </Button>
+        <Textarea
+          value={body}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="이 위치에 코멘트…"
+          className="text-sm"
+        />
+        <div className="flex justify-end gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            취소
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={onSave}
+            disabled={busy || !body.trim()}
+          >
+            저장
+          </Button>
+        </div>
       </div>
     </div>
   );
