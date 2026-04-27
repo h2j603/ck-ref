@@ -8,15 +8,22 @@ import {
   safeUrl,
 } from "@/lib/og";
 
-// "Are.na-style" thumbnail fetch: given a page URL, render the page and
-// hand back a screenshot. We use Microlink (https://microlink.io) — the
-// free tier handles 50 requests/day per IP, plenty for a 3-person team.
-// MICROLINK_API_KEY can be set to enable the paid pro tier with higher
-// limits and faster cold starts.
+// Two-mode URL thumbnail fetch:
 //
-// If Microlink fails (rate limited, target unreachable, paywalled site,
-// etc.) we fall back to the original og:image extraction so the user
-// still gets a thumbnail when one is available.
+//   ?mode=screenshot — Are.na-style: render the page and grab a real
+//     screenshot. Used when genre=web on the upload form, where the
+//     design *is* the page layout. Microlink (api.microlink.io, free
+//     tier 50 req/day per IP) does the rendering. MICROLINK_API_KEY
+//     enables the paid pro tier. Falls back to og:image if Microlink
+//     can't render (rate limited, unreachable, paywalled etc).
+//
+//   ?mode=og — original behavior: pull the page's og:image. Used when
+//     the ref's actual artwork is the og:image (editorial, poster,
+//     packaging refs that link to article/product pages whose hero
+//     image IS the design). Doesn't touch Microlink at all, saving
+//     the quota for screenshot calls that need it.
+//
+// Default is `og` so an absent mode param doesn't burn screenshot quota.
 
 const MICROLINK_API = "https://api.microlink.io";
 const MICROLINK_PRO_API = "https://pro.microlink.io";
@@ -135,19 +142,24 @@ async function fromOgImage(target: URL): Promise<Result | null> {
 }
 
 export async function GET(request: Request) {
-  const target = safeUrl(new URL(request.url).searchParams.get("url"));
+  const params = new URL(request.url).searchParams;
+  const target = safeUrl(params.get("url"));
   if (!target) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
+  const mode = params.get("mode") === "screenshot" ? "screenshot" : "og";
 
-  // Are.na-style: actual page screenshot first.
   const result =
-    (await fromMicrolink(target.href)) ?? (await fromOgImage(target));
+    mode === "screenshot"
+      ? (await fromMicrolink(target.href)) ?? (await fromOgImage(target))
+      : await fromOgImage(target);
   if (!result) {
     return NextResponse.json(
       {
         error:
-          "스크린샷도, og:image도 가져오지 못했어요. 직접 이미지를 첨부해주세요.",
+          mode === "screenshot"
+            ? "스크린샷도, og:image도 가져오지 못했어요. 직접 이미지를 첨부해주세요."
+            : "og:image를 찾지 못했어요. 직접 이미지를 첨부해주세요.",
       },
       { status: 502 },
     );

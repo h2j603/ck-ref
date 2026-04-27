@@ -35,10 +35,15 @@ export function DropZone({
   files,
   onChange,
   onUrlFetched,
+  genre,
 }: {
   files: UploadFile[];
   onChange: (files: UploadFile[]) => void;
   onUrlFetched?: (info: { url: string; title?: string }) => void;
+  // The current genre selection on the form. When "web" the URL fetch
+  // uses Are.na-style screenshots; otherwise it uses og:image so we
+  // capture the actual artwork rather than the page chrome.
+  genre?: string | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -96,7 +101,10 @@ export function DropZone({
     }
     setUrlBusy(true);
     try {
-      const res = await fetch(`/api/og-thumb?url=${encodeURIComponent(parsed.href)}`);
+      const mode = genre === "web" ? "screenshot" : "og";
+      const res = await fetch(
+        `/api/og-thumb?url=${encodeURIComponent(parsed.href)}&mode=${mode}`,
+      );
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as
           | { error?: string }
@@ -202,7 +210,9 @@ export function DropZone({
           <p className="text-xs text-destructive">{urlError}</p>
         ) : (
           <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            웹페이지의 og:image를 받아 썸네일로 추가해요. 소스 URL도 자동 입력.
+            {genre === "web"
+              ? "장르 web — 페이지 스크린샷을 떠와요. 소스 URL도 자동 입력."
+              : "og:image를 받아 썸네일로 추가해요. 소스 URL도 자동 입력. (장르 web에서는 스크린샷)"}
           </p>
         )}
       </div>
