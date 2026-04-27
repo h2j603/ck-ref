@@ -82,6 +82,17 @@ export type Note = {
   updated_at: string;
 };
 
+export type RefAnnotation = {
+  id: string;
+  ref_id: string;
+  x_pct: number;
+  y_pct: number;
+  body: string;
+  author: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // Join-row helper used when inserting after upload.
 export type RefDesigner = {
   ref_id: string;

@@ -164,6 +164,24 @@ create trigger notes_touch_trigger
 before update on notes
 for each row execute procedure touch_updated_at();
 
+-- REF ANNOTATIONS -----------------------------------------------------------
+-- Pinned comments anchored to a specific spot on a ref's image. Coordinates
+-- are stored as percentages so they survive any image resize / aspect at
+-- render time. Author is the profile key; the same trust model as notes.
+
+create table if not exists ref_annotations (
+  id          uuid primary key default gen_random_uuid(),
+  ref_id      uuid not null references refs(id) on delete cascade,
+  x_pct       numeric not null check (x_pct >= 0 and x_pct <= 100),
+  y_pct       numeric not null check (y_pct >= 0 and y_pct <= 100),
+  body        text not null,
+  author      text not null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists ref_annotations_ref_idx on ref_annotations (ref_id, created_at desc);
+
 -- REF RATINGS ---------------------------------------------------------------
 -- Each user (profile key) can rate a ref 1-5 once. Re-rating is an upsert
 -- on the composite key; un-rating is just a delete of that row. Average +
@@ -206,9 +224,10 @@ alter table boards        enable row level security;
 alter table board_items   enable row level security;
 alter table designers     enable row level security;
 alter table refs          enable row level security;
-alter table ref_designers enable row level security;
-alter table ref_ratings   enable row level security;
-alter table ref_links     enable row level security;
+alter table ref_designers   enable row level security;
+alter table ref_ratings     enable row level security;
+alter table ref_annotations enable row level security;
+alter table ref_links       enable row level security;
 alter table notes         enable row level security;
 
 drop policy if exists "anon all" on profiles;
@@ -237,6 +256,10 @@ create policy "anon all" on ref_designers
 
 drop policy if exists "anon all" on ref_ratings;
 create policy "anon all" on ref_ratings
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on ref_annotations;
+create policy "anon all" on ref_annotations
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on ref_links;

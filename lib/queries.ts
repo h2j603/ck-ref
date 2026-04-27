@@ -12,6 +12,7 @@ import {
   type Designer,
   type Note,
   type Ref,
+  type RefAnnotation,
   type RefSort,
   type RefWithDesigners,
 } from "@/lib/types";
@@ -479,6 +480,19 @@ export async function fetchSimilarRefs(
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || b.r.created_at.localeCompare(a.r.created_at));
   return scored.slice(0, limit).map((s) => s.r);
+}
+
+export async function fetchRefAnnotations(
+  refId: string,
+): Promise<RefAnnotation[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ref_annotations")
+    .select("*")
+    .eq("ref_id", refId)
+    .order("created_at", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as RefAnnotation[];
 }
 
 export async function fetchRefRatings(refId: string) {
