@@ -153,7 +153,14 @@ export function EditRefForm({
             inputMode="numeric"
             maxLength={4}
             placeholder="예: 2024"
+            list="ck-year-options"
           />
+          <datalist id="ck-year-options">
+            {Array.from({ length: 60 }, (_, i) => {
+              const y = new Date().getFullYear() - i;
+              return <option key={y} value={String(y)} />;
+            })}
+          </datalist>
         </Field>
         <Field label="출처 URL" full>
           <Input
