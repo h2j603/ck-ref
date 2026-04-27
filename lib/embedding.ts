@@ -96,9 +96,13 @@ async function fetchImageBase64(
 async function embedViaJina(imageUrl: string): Promise<EmbedResult> {
   const tk = jinaToken();
   if (!tk) return { ok: false, reason: "no_token" };
-  const fetched = await fetchImageBase64(imageUrl);
-  if (!fetched.ok) return fetched;
   const model = process.env.JINA_MODEL || JINA_DEFAULT_MODEL;
+
+  // Send the image URL rather than base64 bytes — Jina fetches it server
+  // side. This drops the request size (and the input token count, since
+  // they meter on data) dramatically: a full-res photo sent as base64
+  // can blow past their per-minute limit in a couple of calls. The
+  // storage URLs are public, so no auth handshake is needed.
 
   let res: Response;
   try {
@@ -111,7 +115,7 @@ async function embedViaJina(imageUrl: string): Promise<EmbedResult> {
       },
       body: JSON.stringify({
         model,
-        input: [{ image: fetched.base64 }],
+        input: [{ image: imageUrl }],
       }),
     });
   } catch (err) {
