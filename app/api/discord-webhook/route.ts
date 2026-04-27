@@ -56,6 +56,20 @@ const EVENT_EMOJI = {
 
 type EventKind = keyof typeof EVENT_COLOR;
 
+// Tables that have a builder in the switch in `buildEvent`. Used to tell a
+// misconfigured Database Webhook (table not handled here) apart from a
+// recognised table whose record happened to not match any sub-case.
+const HANDLED_TABLES: ReadonlySet<string> = new Set([
+  "notes",
+  "ref_annotations",
+  "ref_ratings",
+  "refs",
+  "project_updates",
+  "project_refs",
+  "project_update_refs",
+  "events",
+]);
+
 // Only new ref uploads and WIP updates ping the channel — those are the
 // rare, "everyone should look" events. Everything else (notes, replies,
 // annotations, ratings, ref-attaches) hits Discord and the bell silently.
@@ -132,6 +146,26 @@ export async function POST(req: Request) {
     });
   }
 
+  if (!HANDLED_TABLES.has(payload.table)) {
+    // A Database Webhook is configured for a table this route doesn't know
+    // how to format. Surface it loudly so it's easy to spot in logs and in
+    // net._http_response — silently returning "no_message" hid the fact
+    // that the route was reached but had nothing to do.
+    console.warn(
+      "discord webhook: unhandled table",
+      payload.table,
+      "type",
+      payload.type,
+    );
+    return NextResponse.json({
+      ok: true,
+      sent: false,
+      reason: "unknown_table",
+      type: payload.type,
+      table: payload.table,
+    });
+  }
+
   let buildError: string | null = null;
   const profiles = await fetchProfiles().catch(() => [] as Profile[]);
   const built = await buildEvent(payload, profiles).catch((err) => {
@@ -140,11 +174,27 @@ export async function POST(req: Request) {
     return null;
   });
   if (!built) {
+    // Builder returned null without throwing — usually because the record
+    // didn't fit any of the sub-cases inside the builder (e.g. a note that
+    // has neither ref_id nor project_id nor project_update_id). Include the
+    // record's keys so we can see at a glance which fields were/weren't set.
+    const recordKeys = payload.record ? Object.keys(payload.record) : [];
+    if (!buildError) {
+      console.warn(
+        "discord webhook: builder returned null",
+        "table",
+        payload.table,
+        "recordKeys",
+        recordKeys.join(","),
+      );
+    }
     return NextResponse.json({
       ok: true,
       sent: false,
       reason: buildError ? "build_threw" : "no_message",
+      type: payload.type,
       table: payload.table,
+      recordKeys,
       buildError,
     });
   }

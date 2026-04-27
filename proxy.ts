@@ -29,6 +29,26 @@ export function proxy(request: NextRequest) {
     return response;
   }
 
+  // Server-to-server callers (Supabase Database Webhooks, etc.) hitting an
+  // /api path that isn't in the matcher exclusion list don't have our auth
+  // cookie. Redirecting them to /gate just makes pg_net follow the redirect
+  // and store the HTML of the gate page in net._http_response — looks like
+  // a 200 OK but the real handler never ran. Return a JSON 401 instead so
+  // the misconfiguration is visible in the response body.
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      {
+        error: "unauthorized",
+        reason: "no_archive_auth_cookie",
+        path: request.nextUrl.pathname,
+      },
+      {
+        status: 401,
+        headers: { "Cache-Control": NO_STORE },
+      },
+    );
+  }
+
   // Discord deep links carry a signed ?d=<token>. When the token validates,
   // mark the session as trusted so the gate can skip the password step on
   // the next page-load — clicking from Discord shouldn't require typing the
