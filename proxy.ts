@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
+import {
+  DISCORD_TRUST_COOKIE,
+  DISCORD_TRUST_MAX_AGE,
+  DISCORD_TRUST_QUERY,
+  isValidDiscordTrustToken,
+} from "@/lib/discordTrust";
 import { isProfileKey } from "@/lib/profiles";
 
 // iOS Safari (and some CDNs) hold on to HTML responses across navigations
@@ -22,11 +28,29 @@ export function proxy(request: NextRequest) {
     response.headers.set("Expires", "0");
     return response;
   }
+
+  // Discord deep links carry a signed ?d=<token>. When the token validates,
+  // mark the session as trusted so the gate can skip the password step on
+  // the next page-load — clicking from Discord shouldn't require typing the
+  // password again.
+  const trustToken = request.nextUrl.searchParams.get(DISCORD_TRUST_QUERY);
+  const grantTrust = trustToken && isValidDiscordTrustToken(trustToken);
+
   const url = request.nextUrl.clone();
   url.pathname = "/gate";
   url.searchParams.set("from", request.nextUrl.pathname);
+  url.searchParams.delete(DISCORD_TRUST_QUERY);
   const response = NextResponse.redirect(url);
   response.headers.set("Cache-Control", NO_STORE);
+  if (grantTrust) {
+    response.cookies.set(DISCORD_TRUST_COOKIE, "1", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: DISCORD_TRUST_MAX_AGE,
+    });
+  }
   return response;
 }
 
