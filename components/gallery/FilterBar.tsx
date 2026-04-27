@@ -1,9 +1,11 @@
 "use client";
 
+import { Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -39,6 +41,9 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     () => params.getAll("tag").filter(Boolean),
     [params],
   );
+  const qParam = params.get("q") ?? "";
+  const [qDraft, setQDraft] = useState(qParam);
+  useEffect(() => setQDraft(qParam), [qParam]);
 
   function update(next: Record<string, string | string[] | null>) {
     const sp = new URLSearchParams(params.toString());
@@ -67,10 +72,49 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     medium !== ALL ||
     language !== ALL ||
     hue !== null ||
+    qParam !== "" ||
     activeTags.length > 0;
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = qDraft.trim();
+    update({ q: trimmed || null });
+  }
 
   return (
     <section className="flex flex-col gap-4 pb-6">
+      <form
+        onSubmit={submitSearch}
+        className="relative flex items-center gap-2"
+      >
+        <div className="relative flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={qDraft}
+            onChange={(e) => setQDraft(e.target.value)}
+            placeholder="검색 — 제목 / 태그 / 디자이너 / 노트"
+            className="h-9 pl-8 pr-8 font-mono text-[12px]"
+            inputMode="search"
+            type="search"
+          />
+          {qParam ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQDraft("");
+                update({ q: null });
+              }}
+              aria-label="clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </form>
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect
           label="Genre"
@@ -111,15 +155,17 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
         {hasFilter ? (
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              setQDraft("");
               update({
                 genre: null,
                 medium: null,
                 language: null,
                 hue: null,
+                q: null,
                 tag: [],
-              })
-            }
+              });
+            }}
             className="ml-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
           >
             reset

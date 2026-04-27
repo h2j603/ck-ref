@@ -96,10 +96,53 @@ export type RefFilter = {
   hue?: HueBucket;
   userKey?: string;
   sort?: RefSort;
+  q?: string;
 };
+
+// Searches title, tags (exact), designer name, and note bodies (body / pros /
+// cons). Each is a separate query; we union the matching ref IDs in JS. The
+// caller filters refs to this set.
+async function searchRefIds(q: string): Promise<Set<string>> {
+  const supabase = await createClient();
+  const like = `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
+  const [titleRes, tagRes, designerRes, bodyRes, prosRes, consRes] =
+    await Promise.all([
+      supabase.from("refs").select("id").ilike("title", like).limit(500),
+      supabase.from("refs").select("id").contains("tags", [q]).limit(500),
+      supabase
+        .from("designers")
+        .select("ref_designers(ref_id)")
+        .ilike("name", like)
+        .limit(50),
+      supabase.from("notes").select("ref_id").ilike("body", like).limit(500),
+      supabase.from("notes").select("ref_id").ilike("pros", like).limit(500),
+      supabase.from("notes").select("ref_id").ilike("cons", like).limit(500),
+    ]);
+
+  const ids = new Set<string>();
+  for (const r of titleRes.data ?? []) ids.add((r as { id: string }).id);
+  for (const r of tagRes.data ?? []) ids.add((r as { id: string }).id);
+  for (const d of (designerRes.data ?? []) as {
+    ref_designers: { ref_id: string }[] | null;
+  }[]) {
+    for (const rd of d.ref_designers ?? []) ids.add(rd.ref_id);
+  }
+  for (const n of bodyRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
+  for (const n of prosRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
+  for (const n of consRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
+  return ids;
+}
 
 export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
   const supabase = await createClient();
+
+  // Resolve text search up front; an empty match-set means no results, which
+  // we return immediately rather than feeding [] into .in(...).
+  let searchIds: Set<string> | null = null;
+  if (filter.q && filter.q.trim()) {
+    searchIds = await searchRefIds(filter.q.trim());
+    if (searchIds.size === 0) return [];
+  }
 
   let query = supabase
     .from("refs")
@@ -107,6 +150,7 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  if (searchIds) query = query.in("id", [...searchIds]);
   if (filter.userKey) query = query.eq("created_by", filter.userKey);
   if (filter.genre) query = query.eq("genre", filter.genre);
   if (filter.medium) query = query.eq("medium", filter.medium);
