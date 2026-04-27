@@ -253,6 +253,7 @@ create table if not exists notes (
   body              text,
   pros              text,
   cons              text,
+  image_paths       text[] not null default '{}',
   author            text not null,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
@@ -264,6 +265,7 @@ alter table notes add column if not exists cons text;
 alter table notes add column if not exists parent_id uuid references notes(id) on delete cascade;
 alter table notes add column if not exists project_id uuid references projects(id) on delete cascade;
 alter table notes add column if not exists project_update_id uuid references project_updates(id) on delete cascade;
+alter table notes add column if not exists image_paths text[] not null default '{}';
 alter table notes alter column body drop not null;
 alter table notes alter column ref_id drop not null;
 
