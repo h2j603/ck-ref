@@ -26,6 +26,7 @@ type SearchParams = Promise<{
   language?: string;
   hue?: string;
   sort?: string;
+  q?: string;
   tag?: string | string[];
 }>;
 
@@ -47,6 +48,7 @@ export default async function HomePage({
     language: sp.language,
     hue,
     sort,
+    q: sp.q,
     tags: sp.tag ? (Array.isArray(sp.tag) ? sp.tag : [sp.tag]) : undefined,
   };
 
