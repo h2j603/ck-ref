@@ -350,12 +350,22 @@ export async function fetchProjects(filter?: {
   status?: ProjectStatus;
 }): Promise<ProjectSummary[]> {
   const supabase = await createClient();
+  // We need two facts about each project's updates: (a) the latest one (for
+  // the cover), (b) the total count. Pull both in a single roundtrip:
+  //   - the embed asks PostgREST to order project_updates by created_at desc
+  //     so updates[0] is guaranteed to be the latest
+  //   - a parallel head-count query gives the total per project, since the
+  //     embed doesn't easily expose count without dragging every row
   let q = supabase
     .from("projects")
     .select(
       "*, project_updates(image_path, image_width, image_height, created_at)",
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("created_at", {
+      ascending: false,
+      referencedTable: "project_updates",
+    });
   if (filter?.status) q = q.eq("status", filter.status);
   const { data, error } = await q;
   if (error) throw error;
@@ -369,19 +379,18 @@ export async function fetchProjects(filter?: {
   };
   return (data ?? []).map((raw) => {
     const row = raw as Row;
-    const sorted = [...(row.project_updates ?? [])].sort((a, b) =>
-      b.created_at.localeCompare(a.created_at),
-    );
-    const cover = sorted[0]
+    const updates = row.project_updates ?? [];
+    const latest = updates[0] ?? null;
+    const cover = latest
       ? {
-          image_path: sorted[0].image_path,
-          image_width: sorted[0].image_width,
-          image_height: sorted[0].image_height,
+          image_path: latest.image_path,
+          image_width: latest.image_width,
+          image_height: latest.image_height,
         }
       : null;
     const { project_updates, ...rest } = row;
     void project_updates;
-    return { ...rest, update_count: sorted.length, cover };
+    return { ...rest, update_count: updates.length, cover };
   });
 }
 
