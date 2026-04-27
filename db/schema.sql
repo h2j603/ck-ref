@@ -5,6 +5,12 @@
 
 create extension if not exists "pgcrypto";
 
+-- pgvector backs the visual-similarity reranker on /ref/<id>. If the
+-- extension isn't installed (managed Postgres setups sometimes gate it),
+-- the embedding column below stays NULL and similar refs fall back to the
+-- metadata-only score path. Safe to skip if pgvector isn't available.
+create extension if not exists vector;
+
 -- PROFILES ------------------------------------------------------------------
 -- Fixed roster of three known users. `key` is the immutable identifier and
 -- matches what we store in localStorage and in created_by columns; only
@@ -163,6 +169,44 @@ create index if not exists refs_medium_idx     on refs (medium);
 alter table refs add column if not exists color_hex text;
 alter table refs add column if not exists color_hue smallint;
 create index if not exists refs_color_hue_idx on refs (color_hue);
+
+-- CLIP image embedding (vector(512)). Computed server-side via the embedding
+-- provider after upload; NULL until the backfill / async job catches up.
+-- Existing deployments without pgvector will skip this gracefully.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'vector') then
+    execute 'alter table refs add column if not exists embedding vector(512)';
+    execute 'create index if not exists refs_embedding_idx on refs using hnsw (embedding vector_cosine_ops)';
+  end if;
+end $$;
+
+-- Cosine-similarity nearest-neighbor lookup, called from the server via
+-- supabase.rpc(). Returns an empty set when pgvector is missing or no
+-- embeddings exist yet; the caller falls back to metadata scoring.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'vector') then
+    execute $f$
+      create or replace function similar_refs_by_embedding(
+        query_embedding vector(512),
+        match_count int,
+        exclude_id uuid
+      )
+      returns table (id uuid, similarity double precision)
+      language sql
+      stable
+      as $body$
+        select id, 1 - (embedding <=> query_embedding)::double precision as similarity
+        from refs
+        where embedding is not null
+          and id <> exclude_id
+        order by embedding <=> query_embedding
+        limit match_count
+      $body$
+    $f$;
+  end if;
+end $$;
 
 -- REF <-> DESIGNER ----------------------------------------------------------
 

@@ -121,6 +121,18 @@ export function InspirationRefs({
     setLinked((prev) => prev.filter((r) => r.id !== refId));
   }
 
+  async function updateReason(refId: string, next: string | null) {
+    const { error } = await supabase
+      .from("project_refs")
+      .update({ reason: next })
+      .eq("project_id", projectId)
+      .eq("ref_id", refId);
+    if (error) throw new Error(error.message);
+    setLinked((prev) =>
+      prev.map((r) => (r.id === refId ? { ...r, reason: next } : r)),
+    );
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <header className="flex items-center justify-between border-b border-border/60 pb-2">
@@ -275,7 +287,12 @@ export function InspirationRefs({
           {linked.map((r) => (
             <li key={r.id} className="relative overflow-hidden bg-muted">
               {r.reason ? (
-                <ReasonBadge reason={r.reason} addedBy={r.added_by ?? null} />
+                <ReasonBadge
+                  reason={r.reason}
+                  addedBy={r.added_by ?? null}
+                  onSave={(next) => updateReason(r.id, next)}
+                  onClear={() => updateReason(r.id, null)}
+                />
               ) : null}
               <Link
                 href={`/ref/${r.id}`}
