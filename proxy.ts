@@ -18,6 +18,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // run on every path except /gate, /api/auth, static files, and Next internals
-  matcher: ["/((?!gate|api/auth|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  // run on every path except /gate, /api/auth, /api/discord-webhook
+  // (server-to-server, no user cookie), static files, and Next internals
+  matcher: [
+    "/((?!gate|api/auth|api/discord-webhook|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+  ],
 };
