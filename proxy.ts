@@ -59,6 +59,6 @@ export const config = {
   // /api/embed-ref/backfill (all server-to-server, no user cookie),
   // static files, and Next internals
   matcher: [
-    "/((?!gate|api/auth|api/discord-webhook|api/embed-ref/backfill|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    "/((?!gate|api/auth|api/discord-webhook|api/embed-ref/backfill|api/cron|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };
