@@ -22,21 +22,36 @@ type SupabaseHookPayload = {
 const SNIPPET_LIMIT = 280;
 
 export async function POST(req: Request) {
-  const secret = process.env.SUPABASE_WEBHOOK_SECRET;
-  if (!secret) {
+  const rawSecret = process.env.SUPABASE_WEBHOOK_SECRET;
+  if (!rawSecret) {
     return NextResponse.json(
       { error: "SUPABASE_WEBHOOK_SECRET is not configured." },
       { status: 500 },
     );
   }
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Be tolerant of common configuration mistakes on either side: stray
+  // whitespace, accidental "Bearer " prefix on the env var, or a Supabase
+  // header that omits the "Bearer " prefix entirely.
+  const expected = rawSecret.trim().replace(/^Bearer\s+/i, "");
+  const provided = (req.headers.get("authorization") ?? "")
+    .trim()
+    .replace(/^Bearer\s+/i, "");
+  if (!provided || provided !== expected) {
+    const diag = {
+      hasHeader: req.headers.has("authorization"),
+      providedLen: provided.length,
+      expectedLen: expected.length,
+      sameLen: provided.length === expected.length,
+    };
+    console.error("discord webhook auth mismatch", JSON.stringify(diag));
+    return NextResponse.json(
+      { error: "unauthorized", ...diag },
+      { status: 401 },
+    );
   }
   const discordUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!discordUrl) {
-    // Configured-but-disabled is a valid state; just ack.
-    return NextResponse.json({ ok: true, sent: false });
+    return NextResponse.json({ ok: true, sent: false, reason: "no_discord_url" });
   }
 
   let payload: SupabaseHookPayload;
@@ -46,14 +61,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
   if (payload.type !== "INSERT" || !payload.record) {
-    return NextResponse.json({ ok: true, sent: false });
+    return NextResponse.json({
+      ok: true,
+      sent: false,
+      reason: "non_insert",
+      type: payload.type,
+      table: payload.table,
+    });
   }
 
+  let buildError: string | null = null;
   const message = await buildMessage(payload).catch((err) => {
+    buildError = err instanceof Error ? err.message : String(err);
     console.error("discord webhook build failed", err);
     return null;
   });
-  if (!message) return NextResponse.json({ ok: true, sent: false });
+  if (!message) {
+    return NextResponse.json({
+      ok: true,
+      sent: false,
+      reason: buildError ? "build_threw" : "no_message",
+      table: payload.table,
+      buildError,
+    });
+  }
 
   try {
     const res = await fetch(discordUrl, {
@@ -62,12 +93,26 @@ export async function POST(req: Request) {
       body: JSON.stringify(message),
     });
     if (!res.ok) {
-      console.error("discord webhook returned", res.status, await res.text());
+      const text = await res.text();
+      console.error("discord webhook returned", res.status, text);
+      return NextResponse.json({
+        ok: false,
+        sent: false,
+        reason: "discord_rejected",
+        discordStatus: res.status,
+        discordBody: text.slice(0, 500),
+      });
     }
   } catch (err) {
     console.error("discord webhook fetch failed", err);
+    return NextResponse.json({
+      ok: false,
+      sent: false,
+      reason: "fetch_failed",
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
-  return NextResponse.json({ ok: true, sent: true });
+  return NextResponse.json({ ok: true, sent: true, table: payload.table });
 }
 
 function siteUrl(): string {
