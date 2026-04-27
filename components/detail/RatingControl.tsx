@@ -1,8 +1,8 @@
 "use client";
 
+import { Star } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { KiwiIcon } from "@/components/icons/kiwi";
 import { NicknamePill } from "@/components/nickname-pill";
 import { useNickname } from "@/lib/nickname";
 import { isProfileKey } from "@/lib/profiles";
@@ -102,13 +102,20 @@ export function RatingControl({
                 onClick={() => setMy(n)}
                 onMouseEnter={() => canRate && setHover(n)}
                 disabled={!canRate || busy}
-                aria-label={`${n} kiwi${n === 1 ? "" : "s"}`}
+                aria-label={`${n} star${n === 1 ? "" : "s"}`}
                 className={cn(
                   "p-0.5 transition-transform disabled:cursor-not-allowed",
                   canRate ? "hover:scale-110" : "cursor-default",
                 )}
               >
-                <KiwiIcon filled={filled} className="size-5" />
+                <Star
+                  className={cn(
+                    "size-5",
+                    filled
+                      ? "fill-lime-500 stroke-lime-600"
+                      : "stroke-muted-foreground",
+                  )}
+                />
               </button>
             );
           })}
@@ -156,7 +163,15 @@ function MiniStars({ stars }: { stars: number }) {
   return (
     <span aria-label={`${stars} of 5`} className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((n) => (
-        <KiwiIcon key={n} filled={stars >= n} className="size-3" />
+        <Star
+          key={n}
+          className={cn(
+            "size-3",
+            stars >= n
+              ? "fill-lime-500 stroke-lime-600"
+              : "stroke-muted-foreground/40",
+          )}
+        />
       ))}
     </span>
   );
