@@ -1,36 +1,45 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
 import {
   embedImage,
   embeddingsConfigured,
   vectorLiteral,
 } from "@/lib/embedding";
+import { isProfileKey } from "@/lib/profiles";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/server";
 
 // One-shot backfill for refs that don't have an embedding yet. Walks up
 // to BATCH rows, embeds each in series (provider rate limits apply), and
-// reports counts. Run it after enabling the embedding provider — or
-// re-run anytime to top up.
+// reports counts.
 //
-// Authenticated by SUPABASE_WEBHOOK_SECRET so it isn't trivially
-// callable from the public web. Hit with:
-//   curl -X POST -H 'Authorization: Bearer <secret>' \
-//     https://<site>/api/embed-ref/backfill
+// Two ways to call it:
+//   1. Browser, signed in as a team profile — the in-app /admin/embed
+//      page hits this on each click. Cookie auth.
+//   2. Server-to-server with the SUPABASE_WEBHOOK_SECRET Bearer header,
+//      e.g. from a cron / curl. Same handler, secret auth.
 
 const BATCH = 25;
 const PER_REQUEST_DELAY_MS = 1500; // be polite to free-tier providers
 
-export async function POST(request: Request) {
+async function authorize(request: Request): Promise<boolean> {
   const rawSecret = process.env.SUPABASE_WEBHOOK_SECRET;
-  if (!rawSecret) {
-    return NextResponse.json({ error: "secret not configured" }, { status: 500 });
+  if (rawSecret) {
+    const expected = rawSecret.trim().replace(/^Bearer\s+/i, "");
+    const provided = (request.headers.get("authorization") ?? "")
+      .trim()
+      .replace(/^Bearer\s+/i, "");
+    if (provided && provided === expected) return true;
   }
-  const expected = rawSecret.trim().replace(/^Bearer\s+/i, "");
-  const provided = (request.headers.get("authorization") ?? "")
-    .trim()
-    .replace(/^Bearer\s+/i, "");
-  if (!provided || provided !== expected) {
+  const store = await cookies();
+  const key = store.get(ARCHIVE_AUTH_COOKIE)?.value;
+  return !!key && isProfileKey(key);
+}
+
+export async function POST(request: Request) {
+  if (!(await authorize(request))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -80,5 +89,25 @@ export async function POST(request: Request) {
     succeeded,
     failed,
     moreLikely: rows.length === BATCH,
+  });
+}
+
+// Quick stats for the in-app admin page.
+export async function GET(request: Request) {
+  if (!(await authorize(request))) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const supabase = await createClient();
+  const [{ count: total }, { count: missing }] = await Promise.all([
+    supabase.from("refs").select("*", { count: "exact", head: true }),
+    supabase
+      .from("refs")
+      .select("*", { count: "exact", head: true })
+      .is("embedding", null),
+  ]);
+  return NextResponse.json({
+    configured: embeddingsConfigured(),
+    total: total ?? 0,
+    missing: missing ?? 0,
   });
 }
