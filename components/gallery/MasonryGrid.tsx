@@ -6,17 +6,10 @@ import { RefCard } from "./RefCard";
 import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
 import type { RefWithDesigners } from "@/lib/types";
 
-// Mobile breakpoints scale the user's pick down so phones don't end up with
-// 5 hairline columns.
+// Honor the user's pick at every breakpoint — the column selector is the
+// ground truth, even on phones.
 function breakpointsFor(cols: ColumnCount) {
-  return {
-    default: cols,
-    1536: cols,
-    1280: Math.min(cols, 4),
-    1024: Math.min(cols, 3),
-    768: Math.min(cols, 2),
-    480: Math.min(cols, 2),
-  };
+  return { default: cols };
 }
 
 export function MasonryGrid({ refs }: { refs: RefWithDesigners[] }) {

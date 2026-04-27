@@ -13,14 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { RefWithDesigners } from "@/lib/types";
 
 function breakpointsFor(cols: ColumnCount) {
-  return {
-    default: cols,
-    1536: cols,
-    1280: Math.min(cols, 4),
-    1024: Math.min(cols, 3),
-    768: Math.min(cols, 2),
-    480: Math.min(cols, 2),
-  };
+  return { default: cols };
 }
 
 export function BoardItemsGrid({
