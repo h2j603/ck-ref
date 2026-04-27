@@ -165,6 +165,8 @@ export const NOTIFICATION_KINDS = [
   "rating",
   "ref_upload",
   "project_update",
+  "ref_link",
+  "update_ref_link",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

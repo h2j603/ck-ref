@@ -341,7 +341,8 @@ create table if not exists notifications (
   recipient   text not null,
   actor       text,
   kind        text not null check (kind in (
-    'note', 'reply', 'annotation', 'rating', 'ref_upload', 'project_update'
+    'note', 'reply', 'annotation', 'rating', 'ref_upload', 'project_update',
+    'ref_link', 'update_ref_link'
   )),
   target_type text not null,
   target_id   uuid not null,
@@ -350,6 +351,15 @@ create table if not exists notifications (
   read_at     timestamptz,
   created_at  timestamptz not null default now()
 );
+
+-- Existing deployments: relax the kind constraint to admit the two new
+-- ref-attachment kinds. Idempotent.
+alter table notifications drop constraint if exists notifications_kind_check;
+alter table notifications add constraint notifications_kind_check
+  check (kind in (
+    'note', 'reply', 'annotation', 'rating', 'ref_upload', 'project_update',
+    'ref_link', 'update_ref_link'
+  ));
 
 create index if not exists notifications_recipient_idx
   on notifications (recipient, created_at desc);

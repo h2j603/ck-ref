@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ReasonBadge } from "@/components/wip/ReasonBadge";
 import { useNickname } from "@/lib/nickname";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
@@ -24,7 +25,7 @@ import type { Ref } from "@/lib/types";
 type RefLite = Pick<
   Ref,
   "id" | "title" | "image_path" | "image_width" | "image_height"
-> & { reason?: string | null };
+> & { reason?: string | null; added_by?: string | null };
 
 export function InspirationRefs({
   projectId,
@@ -95,7 +96,10 @@ export function InspirationRefs({
       setError(error.message);
       return;
     }
-    setLinked((prev) => [...prev, { ...pending, reason: trimmed || null }]);
+    setLinked((prev) => [
+      ...prev,
+      { ...pending, reason: trimmed || null, added_by: nickname || null },
+    ]);
     setPending(null);
     setReason("");
     setOpen(false);
@@ -269,12 +273,14 @@ export function InspirationRefs({
       {linked.length > 0 ? (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           {linked.map((r) => (
-            <li key={r.id} className="group relative overflow-hidden bg-muted">
+            <li key={r.id} className="relative overflow-hidden bg-muted">
+              {r.reason ? (
+                <ReasonBadge reason={r.reason} addedBy={r.added_by ?? null} />
+              ) : null}
               <Link
                 href={`/ref/${r.id}`}
                 className="block"
                 aria-label={r.title ?? "ref"}
-                title={r.reason ?? undefined}
               >
                 <div
                   className="relative w-full"
@@ -289,13 +295,6 @@ export function InspirationRefs({
                     sizes="120px"
                     className="object-cover"
                   />
-                  {r.reason ? (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <p className="line-clamp-3 text-[10px] leading-tight text-white">
-                        {r.reason}
-                      </p>
-                    </div>
-                  ) : null}
                 </div>
               </Link>
               {hydrated && nickname ? (

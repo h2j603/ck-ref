@@ -22,6 +22,8 @@ const KIND_LABEL: Record<NotificationKind, string> = {
   rating: "별점",
   ref_upload: "새 ref",
   project_update: "업데이트",
+  ref_link: "ref 연결",
+  update_ref_link: "ref 첨부",
 };
 
 const POLL_INTERVAL_MS = 60_000;
