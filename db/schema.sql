@@ -28,6 +28,49 @@ insert into profiles (key, display_name, color) values
   ('혁',   '혁',   '#e879c2')
 on conflict (key) do nothing;
 
+-- WIP / PROJECTS ------------------------------------------------------------
+-- A `project` is one of our own works in progress. Updates are the time-
+-- ordered shots/posts under it; project_refs links inspiration refs.
+-- Discussion (notes/replies) attaches to projects and updates via the
+-- polymorphic columns added to `notes` further down.
+
+create table if not exists projects (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  description text,
+  status      text not null default 'in_progress' check (status in ('in_progress', 'done')),
+  created_at  timestamptz not null default now(),
+  created_by  text
+);
+
+create index if not exists projects_status_idx     on projects (status);
+create index if not exists projects_created_at_idx on projects (created_at desc);
+create index if not exists projects_created_by_idx on projects (created_by);
+
+create table if not exists project_updates (
+  id           uuid primary key default gen_random_uuid(),
+  project_id   uuid not null references projects(id) on delete cascade,
+  image_path   text not null,
+  image_width  int,
+  image_height int,
+  body         text,
+  created_at   timestamptz not null default now(),
+  created_by   text
+);
+
+create index if not exists project_updates_project_idx
+  on project_updates (project_id, created_at desc);
+
+create table if not exists project_refs (
+  project_id uuid not null references projects(id) on delete cascade,
+  ref_id     uuid not null references refs(id) on delete cascade,
+  added_at   timestamptz not null default now(),
+  added_by   text,
+  primary key (project_id, ref_id)
+);
+
+create index if not exists project_refs_ref_idx on project_refs (ref_id);
+
 -- BOARDS (moodboards) -------------------------------------------------------
 -- A board is a curated collection of refs. Anyone with a nickname can add or
 -- remove items from any board (3-person trust model); only the creator can
@@ -115,33 +158,52 @@ create index if not exists ref_designers_designer_idx on ref_designers (designer
 -- NOTES ---------------------------------------------------------------------
 
 create table if not exists notes (
-  id          uuid primary key default gen_random_uuid(),
-  ref_id      uuid not null references refs(id) on delete cascade,
-  parent_id   uuid references notes(id) on delete cascade,
-  body        text not null,
-  author      text not null,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  id                uuid primary key default gen_random_uuid(),
+  ref_id            uuid references refs(id) on delete cascade,
+  project_id        uuid references projects(id) on delete cascade,
+  project_update_id uuid references project_updates(id) on delete cascade,
+  parent_id         uuid references notes(id) on delete cascade,
+  body              text,
+  pros              text,
+  cons              text,
+  author            text not null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
 );
 
--- Optional structured sections. Either may be NULL or empty; the original
--- `body` column stays as the freeform note. Form-level validation requires
--- at least one of (body, pros, cons) to be non-empty.
+-- Migrations for already-deployed envs.
 alter table notes add column if not exists pros text;
 alter table notes add column if not exists cons text;
 alter table notes add column if not exists parent_id uuid references notes(id) on delete cascade;
+alter table notes add column if not exists project_id uuid references projects(id) on delete cascade;
+alter table notes add column if not exists project_update_id uuid references project_updates(id) on delete cascade;
 alter table notes alter column body drop not null;
+alter table notes alter column ref_id drop not null;
 
-create index if not exists notes_ref_idx on notes (ref_id, created_at desc);
-create index if not exists notes_parent_idx on notes (parent_id);
+-- Exactly one of (ref_id, project_id, project_update_id) must be set so we
+-- always know what the note is "about". The fkey + this check together act
+-- as a discriminated target.
+alter table notes drop constraint if exists notes_target_check;
+alter table notes add constraint notes_target_check check (
+  (ref_id is not null)::int +
+  (project_id is not null)::int +
+  (project_update_id is not null)::int = 1
+);
+
+create index if not exists notes_ref_idx           on notes (ref_id, created_at desc);
+create index if not exists notes_project_idx       on notes (project_id, created_at desc);
+create index if not exists notes_update_idx        on notes (project_update_id, created_at desc);
+create index if not exists notes_parent_idx        on notes (parent_id);
 
 -- Maintain refs.notes_count -------------------------------------------------
 
 create or replace function bump_notes_count() returns trigger language plpgsql as $$
 begin
-  if (tg_op = 'INSERT') then
+  -- Only refs maintain a denormalized count; project / update notes are
+  -- counted on read.
+  if (tg_op = 'INSERT' and new.ref_id is not null) then
     update refs set notes_count = notes_count + 1 where id = new.ref_id;
-  elsif (tg_op = 'DELETE') then
+  elsif (tg_op = 'DELETE' and old.ref_id is not null) then
     update refs set notes_count = greatest(notes_count - 1, 0) where id = old.ref_id;
   end if;
   return null;
@@ -230,10 +292,13 @@ create index if not exists ref_links_b_idx on ref_links (b_id);
 -- security policy". This app gates access at the proxy layer (single shared
 -- password), so we expose permissive policies for anon + authenticated.
 
-alter table profiles      enable row level security;
-alter table boards        enable row level security;
-alter table board_items   enable row level security;
-alter table designers     enable row level security;
+alter table profiles        enable row level security;
+alter table projects        enable row level security;
+alter table project_updates enable row level security;
+alter table project_refs    enable row level security;
+alter table boards          enable row level security;
+alter table board_items     enable row level security;
+alter table designers       enable row level security;
 alter table refs          enable row level security;
 alter table ref_designers   enable row level security;
 alter table ref_ratings     enable row level security;
@@ -243,6 +308,18 @@ alter table notes         enable row level security;
 
 drop policy if exists "anon all" on profiles;
 create policy "anon all" on profiles
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on projects;
+create policy "anon all" on projects
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_updates;
+create policy "anon all" on project_updates
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_refs;
+create policy "anon all" on project_refs
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on boards;

@@ -11,6 +11,9 @@ import {
   type Board,
   type Designer,
   type Note,
+  type Project,
+  type ProjectStatus,
+  type ProjectUpdate,
   type Ref,
   type RefAnnotation,
   type RefSort,
@@ -334,6 +337,135 @@ export async function fetchProfiles(): Promise<Profile[]> {
     const { password_hash, ...rest } = row;
     return { ...rest, has_password: password_hash !== null && password_hash !== "" };
   });
+}
+
+// PROJECTS (WIP) ------------------------------------------------------------
+
+export type ProjectSummary = Project & {
+  update_count: number;
+  cover: { image_path: string; image_width: number | null; image_height: number | null } | null;
+};
+
+export async function fetchProjects(filter?: {
+  status?: ProjectStatus;
+}): Promise<ProjectSummary[]> {
+  const supabase = await createClient();
+  let q = supabase
+    .from("projects")
+    .select(
+      "*, project_updates(image_path, image_width, image_height, created_at)",
+    )
+    .order("created_at", { ascending: false });
+  if (filter?.status) q = q.eq("status", filter.status);
+  const { data, error } = await q;
+  if (error) throw error;
+  type Row = Project & {
+    project_updates: {
+      image_path: string;
+      image_width: number | null;
+      image_height: number | null;
+      created_at: string;
+    }[];
+  };
+  return (data ?? []).map((raw) => {
+    const row = raw as Row;
+    const sorted = [...(row.project_updates ?? [])].sort((a, b) =>
+      b.created_at.localeCompare(a.created_at),
+    );
+    const cover = sorted[0]
+      ? {
+          image_path: sorted[0].image_path,
+          image_width: sorted[0].image_width,
+          image_height: sorted[0].image_height,
+        }
+      : null;
+    const { project_updates, ...rest } = row;
+    void project_updates;
+    return { ...rest, update_count: sorted.length, cover };
+  });
+}
+
+export async function fetchProject(id: string): Promise<Project | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as Project | null;
+}
+
+export async function fetchProjectUpdates(
+  projectId: string,
+): Promise<ProjectUpdate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("project_updates")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ProjectUpdate[];
+}
+
+export async function fetchProjectInspirationRefs(
+  projectId: string,
+): Promise<RefWithDesigners[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("project_refs")
+    .select(`ref:refs(${REF_COLUMNS})`)
+    .eq("project_id", projectId);
+  if (error) return [];
+  type Row = { ref: RefRow | RefRow[] | null };
+  const rows = (data ?? []) as unknown as Row[];
+  const bare = flatten(
+    rows
+      .map((r) => (Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref))
+      .filter((r): r is RefRow => r !== null),
+  );
+  return attachRatings(bare);
+}
+
+// Polymorphic notes fetch — accepts the same target shape that NoteList uses.
+export async function fetchNotesFor(target: {
+  kind: "ref" | "project" | "project_update";
+  id: string;
+}): Promise<Note[]> {
+  const supabase = await createClient();
+  const column =
+    target.kind === "ref"
+      ? "ref_id"
+      : target.kind === "project"
+        ? "project_id"
+        : "project_update_id";
+  // Top-level notes for the target + their replies (parent_id chain).
+  // Simplest: pull every note matching the target column, plus every note
+  // whose parent is in that set. Two queries; small at this scale.
+  const { data: top, error: topErr } = await supabase
+    .from("notes")
+    .select("*")
+    .eq(column, target.id)
+    .order("created_at", { ascending: true });
+  if (topErr) return [];
+  const rows = (top ?? []) as Note[];
+  const ids = rows.map((n) => n.id);
+  if (ids.length === 0) return [];
+  const { data: replies, error: replyErr } = await supabase
+    .from("notes")
+    .select("*")
+    .in("parent_id", ids)
+    .order("created_at", { ascending: true });
+  if (replyErr) return rows;
+  // Merge, dedupe by id (a note in `rows` is also returned in replies if it
+  // has parent_id pointing inside the set — shouldn't happen but defend).
+  const byId = new Map<string, Note>();
+  for (const n of rows) byId.set(n.id, n);
+  for (const n of (replies ?? []) as Note[]) byId.set(n.id, n);
+  return [...byId.values()].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at),
+  );
 }
 
 // BOARDS --------------------------------------------------------------------

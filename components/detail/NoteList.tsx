@@ -10,7 +10,26 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
-import type { Note } from "@/lib/types";
+import type { Note, NoteTarget } from "@/lib/types";
+
+function targetColumn(target: NoteTarget): string {
+  switch (target.kind) {
+    case "ref":
+      return "ref_id";
+    case "project":
+      return "project_id";
+    case "project_update":
+      return "project_update_id";
+  }
+}
+
+function targetPayload(target: NoteTarget): Record<string, string | null> {
+  return {
+    ref_id: target.kind === "ref" ? target.id : null,
+    project_id: target.kind === "project" ? target.id : null,
+    project_update_id: target.kind === "project_update" ? target.id : null,
+  };
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("ko-KR", {
@@ -37,10 +56,10 @@ function noteToDraft(note: Note): Draft {
 }
 
 export function NoteList({
-  refId,
+  target,
   initialNotes,
 }: {
-  refId: string;
+  target: NoteTarget;
   initialNotes: Note[];
 }) {
   const supabase = createClient();
@@ -54,21 +73,45 @@ export function NoteList({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Refetch on mount in case server data is stale.
+  // Refetch on mount in case server data is stale. Pulls top-level notes
+  // for this target plus any replies whose parent is in that set.
   useEffect(() => {
     let cancelled = false;
+    const column = targetColumn(target);
     void (async () => {
-      const { data, error } = await supabase
+      const top = await supabase
         .from("notes")
         .select("*")
-        .eq("ref_id", refId)
+        .eq(column, target.id)
         .order("created_at", { ascending: true });
-      if (!cancelled && !error && data) setNotes(data as Note[]);
+      if (cancelled || top.error || !top.data) return;
+      const rows = top.data as Note[];
+      const ids = rows.map((n) => n.id);
+      if (ids.length === 0) {
+        setNotes([]);
+        return;
+      }
+      const replies = await supabase
+        .from("notes")
+        .select("*")
+        .in("parent_id", ids)
+        .order("created_at", { ascending: true });
+      if (cancelled) return;
+      const merged = new Map<string, Note>();
+      for (const n of rows) merged.set(n.id, n);
+      if (!replies.error && replies.data) {
+        for (const n of replies.data as Note[]) merged.set(n.id, n);
+      }
+      setNotes(
+        [...merged.values()].sort((a, b) =>
+          a.created_at.localeCompare(b.created_at),
+        ),
+      );
     })();
     return () => {
       cancelled = true;
     };
-  }, [supabase, refId]);
+  }, [supabase, target]);
 
   const { topLevel, repliesByParent } = useMemo(() => {
     const top: Note[] = [];
@@ -106,7 +149,7 @@ export function NoteList({
     const { data, error } = await supabase
       .from("notes")
       .insert({
-        ref_id: refId,
+        ...targetPayload(target),
         parent_id: null,
         body: trimToNull(draft.body),
         pros: trimToNull(draft.pros),
@@ -137,7 +180,7 @@ export function NoteList({
     const { data, error } = await supabase
       .from("notes")
       .insert({
-        ref_id: refId,
+        ...targetPayload(target),
         parent_id: parentId,
         body,
         pros: null,

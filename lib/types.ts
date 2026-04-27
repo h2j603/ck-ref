@@ -73,7 +73,9 @@ export type RefRating = {
 
 export type Note = {
   id: string;
-  ref_id: string;
+  ref_id: string | null;
+  project_id: string | null;
+  project_update_id: string | null;
   parent_id: string | null;
   body: string | null;
   pros: string | null;
@@ -82,6 +84,35 @@ export type Note = {
   created_at: string;
   updated_at: string;
 };
+
+export const PROJECT_STATUSES = ["in_progress", "done"] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export type Project = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: ProjectStatus;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ProjectUpdate = {
+  id: string;
+  project_id: string;
+  image_path: string;
+  image_width: number | null;
+  image_height: number | null;
+  body: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
+// What a Note is about. Replies use the same target as their parent.
+export type NoteTarget =
+  | { kind: "ref"; id: string }
+  | { kind: "project"; id: string }
+  | { kind: "project_update"; id: string };
 
 export type RefAnnotation = {
   id: string;

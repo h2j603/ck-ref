@@ -140,7 +140,7 @@ export default async function RefDetailPage({
 
         <RefLinks refId={ref.id} initial={linked} />
         <SimilarRefs refs={similar} />
-        <NoteList refId={ref.id} initialNotes={notes} />
+        <NoteList target={{ kind: "ref", id: ref.id }} initialNotes={notes} />
       </aside>
     </div>
   );
