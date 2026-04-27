@@ -286,6 +286,7 @@ export function MetadataForm() {
       <DropZone
         files={files}
         onChange={setFiles}
+        genre={genre === NONE ? null : genre}
         onUrlFetched={({ url, title: ogTitle }) => {
           setSourceUrl(url);
           if (ogTitle && !title.trim()) setTitle(ogTitle);
