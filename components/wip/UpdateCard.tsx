@@ -60,7 +60,10 @@ export function UpdateCard({
   if (deleted) return null;
 
   return (
-    <article className="flex flex-col gap-3 border-b border-border/40 pb-6 last:border-b-0">
+    <article
+      id={`update-${update.id}`}
+      className="flex flex-col gap-3 scroll-mt-20 border-b border-border/40 pb-6 last:border-b-0"
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
           <NicknamePill nickname={update.created_by} />
