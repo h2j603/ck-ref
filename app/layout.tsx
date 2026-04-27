@@ -83,6 +83,13 @@ export default async function RootLayout({
               <span className="sm:hidden">WIP</span>
               <span className="hidden sm:inline">WIP</span>
             </Link>
+            <Link
+              href="/calendar"
+              className="transition-colors hover:text-foreground"
+            >
+              <span className="sm:hidden">CAL</span>
+              <span className="hidden sm:inline">Calendar</span>
+            </Link>
             <NotificationBell />
             <HeaderProfile profiles={profiles} />
           </nav>

@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   type Board,
   type Designer,
+  type CalendarEvent,
   type Note,
   type Notification,
   type Project,
@@ -1164,4 +1165,22 @@ export async function fetchNotificationsFor(
   const { data, error } = await q;
   if (error) return [];
   return (data ?? []) as Notification[];
+}
+
+// Calendar events in a (closed-open) date window. The view typically wants
+// a calendar month plus a few leading/trailing days from the adjacent
+// months to fill out the grid, so the window comes from the caller.
+export async function fetchEventsBetween(
+  fromIso: string,
+  toIso: string,
+): Promise<CalendarEvent[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .gte("starts_at", fromIso)
+    .lt("starts_at", toIso)
+    .order("starts_at", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as CalendarEvent[];
 }
