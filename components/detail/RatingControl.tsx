@@ -112,7 +112,7 @@ export function RatingControl({
                   className={cn(
                     "size-5",
                     filled
-                      ? "fill-lime-500 stroke-lime-600"
+                      ? "fill-lime-500 stroke-none"
                       : "stroke-muted-foreground",
                   )}
                 />
@@ -168,7 +168,7 @@ function MiniStars({ stars }: { stars: number }) {
           className={cn(
             "size-3",
             stars >= n
-              ? "fill-lime-500 stroke-lime-600"
+              ? "fill-lime-500 stroke-none"
               : "stroke-muted-foreground/40",
           )}
         />

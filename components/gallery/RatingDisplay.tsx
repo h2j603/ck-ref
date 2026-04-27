@@ -22,7 +22,7 @@ export function RatingDisplay({
         className={cn(
           "size-3 shrink-0",
           avg !== null
-            ? "fill-lime-500 stroke-lime-600"
+            ? "fill-lime-500 stroke-none"
             : "stroke-muted-foreground/40",
         )}
       />
