@@ -37,6 +37,7 @@ export function AnnotationLayer({
   height,
   initial,
   profiles,
+  sourceUrl,
 }: {
   target: AnnotationTarget;
   imageUrl: string;
@@ -45,6 +46,10 @@ export function AnnotationLayer({
   height: number;
   initial: RefAnnotation[];
   profiles: Profile[];
+  // When set and we're not in add-mode, clicking the image (anywhere
+  // outside an existing annotation pin) opens this URL in a new tab.
+  // Refs pass their source_url here; project updates don't have one.
+  sourceUrl?: string | null;
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
@@ -92,13 +97,25 @@ export function AnnotationLayer({
   }, [items]);
 
   function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!addMode || !nickname || draft) return;
+    // Annotation pins handle their own clicks (stopPropagation + the
+    // closest-check below) so neither path swallows them.
     if ((e.target as HTMLElement).closest("[data-annotation]")) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x_pct = ((e.clientX - rect.left) / rect.width) * 100;
-    const y_pct = ((e.clientY - rect.top) / rect.height) * 100;
-    setDraft({ kind: "new", x_pct, y_pct, body: "" });
-    setOpenId(null);
+
+    if (addMode && nickname && !draft) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x_pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const y_pct = ((e.clientY - rect.top) / rect.height) * 100;
+      setDraft({ kind: "new", x_pct, y_pct, body: "" });
+      setOpenId(null);
+      return;
+    }
+
+    // Not adding an annotation — fall through to the source link if the
+    // ref has one. Skip when an annotation popover is open so users can
+    // close it by clicking the image without being teleported away.
+    if (sourceUrl && openId === null && !draft) {
+      window.open(sourceUrl, "_blank", "noopener,noreferrer");
+    }
   }
 
   async function saveDraft() {
@@ -187,7 +204,9 @@ export function AnnotationLayer({
       <div
         className={cn(
           "relative w-full select-none bg-muted",
-          addMode && "cursor-crosshair",
+          addMode
+            ? "cursor-crosshair"
+            : sourceUrl && "cursor-pointer",
         )}
         style={{ aspectRatio: `${width} / ${height}` }}
         onClick={handleImageClick}
