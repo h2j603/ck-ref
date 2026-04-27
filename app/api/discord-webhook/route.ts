@@ -49,9 +49,9 @@ const EVENT_EMOJI = {
 
 type EventKind = keyof typeof EVENT_COLOR;
 
-// Only ref uploads and WIP updates ping the channel. Notes/replies/
-// annotations/ratings stay silent — they're frequent and would be noisy.
-const PING_EVERYONE: ReadonlySet<EventKind> = new Set(["ref_upload", "project_update"]);
+// Ref uploads, annotations, and WIP updates ping the channel.
+// Notes/replies/ratings stay silent — they're frequent and would be noisy.
+const PING_EVERYONE: ReadonlySet<EventKind> = new Set(["ref_upload", "annotation", "project_update"]);
 
 type Built = {
   kind: EventKind;
