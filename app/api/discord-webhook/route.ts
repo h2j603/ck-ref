@@ -37,6 +37,8 @@ const EVENT_COLOR = {
   rating: 0xeab308,
   ref_upload: 0x22c55e,
   project_update: 0xf97316,
+  ref_link: 0x14b8a6,
+  update_ref_link: 0x0d9488,
 } as const;
 
 const EVENT_EMOJI = {
@@ -46,13 +48,21 @@ const EVENT_EMOJI = {
   rating: "⭐",
   ref_upload: "🆕",
   project_update: "🛠️",
+  ref_link: "🔗",
+  update_ref_link: "🪡",
 } as const;
 
 type EventKind = keyof typeof EVENT_COLOR;
 
-// Ref uploads, annotations, and WIP updates ping the channel.
+// Ref uploads, annotations, WIP updates and ref-to-WIP links ping the channel.
 // Notes/replies/ratings stay silent — they're frequent and would be noisy.
-const PING_EVERYONE: ReadonlySet<EventKind> = new Set(["ref_upload", "annotation", "project_update"]);
+const PING_EVERYONE: ReadonlySet<EventKind> = new Set([
+  "ref_upload",
+  "annotation",
+  "project_update",
+  "ref_link",
+  "update_ref_link",
+]);
 
 type Built = {
   kind: EventKind;
@@ -272,6 +282,10 @@ async function buildEvent(
       return buildRefUpload(record, site);
     case "project_updates":
       return buildProjectUpdate(supabase, record, site);
+    case "project_refs":
+      return buildRefLink(supabase, profiles, record, site);
+    case "project_update_refs":
+      return buildUpdateRefLink(supabase, profiles, record, site);
     default:
       return null;
   }
@@ -503,5 +517,95 @@ async function buildProjectUpdate(
     link: path,
     body: body ?? undefined,
     imageUrl: publicImageUrl(record.image_path as string),
+  };
+}
+
+async function buildRefLink(
+  supabase: SupabaseClient,
+  profiles: Profile[],
+  record: Record<string, unknown>,
+  site: string,
+): Promise<Built | null> {
+  const projectId = record.project_id as string | undefined;
+  const refId = record.ref_id as string | undefined;
+  if (!projectId || !refId) return null;
+  const [{ data: proj }, { data: ref }] = await Promise.all([
+    supabase.from("projects").select("id, title").eq("id", projectId).maybeSingle(),
+    supabase
+      .from("refs")
+      .select("id, title, image_path")
+      .eq("id", refId)
+      .maybeSingle(),
+  ]);
+  if (!proj || !ref) return null;
+  const p = proj as { id: string; title: string };
+  const r = ref as { id: string; title: string | null; image_path: string | null };
+  const path = `/wip/${p.id}`;
+  const url = appendDiscordTrust(`${site}${path}`);
+  const reason = snippet(record.reason as string);
+  const actorKey = String(record.added_by ?? "") || null;
+  const actorProfile = findProfile(profiles, actorKey);
+  const actorName = actorProfile?.display_name ?? actorKey ?? "누군가";
+  const refTitle = r.title ?? "untitled";
+  return {
+    kind: "ref_link",
+    actorKey,
+    description:
+      `**${actorName}**님이 [${p.title}](${url})에 ref **${refTitle}** 를 영감으로 추가했어요` +
+      (reason ? `\n> ${reason.replace(/\n/g, "\n> ")}` : ""),
+    link: path,
+    body: reason ?? refTitle,
+    thumbnailUrl: r.image_path ? publicImageUrl(r.image_path) : undefined,
+  };
+}
+
+async function buildUpdateRefLink(
+  supabase: SupabaseClient,
+  profiles: Profile[],
+  record: Record<string, unknown>,
+  site: string,
+): Promise<Built | null> {
+  const updateId = record.project_update_id as string | undefined;
+  const refId = record.ref_id as string | undefined;
+  if (!updateId || !refId) return null;
+  const [{ data: upd }, { data: ref }] = await Promise.all([
+    supabase
+      .from("project_updates")
+      .select("id, project_id, projects(title)")
+      .eq("id", updateId)
+      .maybeSingle(),
+    supabase
+      .from("refs")
+      .select("id, title, image_path")
+      .eq("id", refId)
+      .maybeSingle(),
+  ]);
+  if (!upd || !ref) return null;
+  type UpdRow = {
+    id: string;
+    project_id: string;
+    projects: { title: string } | { title: string }[] | null;
+  };
+  const u = upd as UpdRow;
+  const r = ref as { id: string; title: string | null; image_path: string | null };
+  const projTitle =
+    (Array.isArray(u.projects) ? u.projects[0]?.title : u.projects?.title) ??
+    "untitled";
+  const path = `/wip/${u.project_id}#update-${u.id}`;
+  const url = appendDiscordTrust(`${site}${path}`);
+  const reason = snippet(record.reason as string);
+  const actorKey = String(record.added_by ?? "") || null;
+  const actorProfile = findProfile(profiles, actorKey);
+  const actorName = actorProfile?.display_name ?? actorKey ?? "누군가";
+  const refTitle = r.title ?? "untitled";
+  return {
+    kind: "update_ref_link",
+    actorKey,
+    description:
+      `**${actorName}**님이 [${projTitle}](${url})의 업데이트에 ref **${refTitle}** 를 참고로 추가했어요` +
+      (reason ? `\n> ${reason.replace(/\n/g, "\n> ")}` : ""),
+    link: path,
+    body: reason ?? refTitle,
+    thumbnailUrl: r.image_path ? publicImageUrl(r.image_path) : undefined,
   };
 }
