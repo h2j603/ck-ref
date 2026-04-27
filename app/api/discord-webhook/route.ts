@@ -37,15 +37,17 @@ export async function POST(req: Request) {
     .trim()
     .replace(/^Bearer\s+/i, "");
   if (!provided || provided !== expected) {
-    console.error(
-      "discord webhook auth mismatch",
-      JSON.stringify({
-        hasHeader: req.headers.has("authorization"),
-        providedLen: provided.length,
-        expectedLen: expected.length,
-      }),
+    const diag = {
+      hasHeader: req.headers.has("authorization"),
+      providedLen: provided.length,
+      expectedLen: expected.length,
+      sameLen: provided.length === expected.length,
+    };
+    console.error("discord webhook auth mismatch", JSON.stringify(diag));
+    return NextResponse.json(
+      { error: "unauthorized", ...diag },
+      { status: 401 },
     );
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const discordUrl = process.env.DISCORD_WEBHOOK_URL;
   if (!discordUrl) {
