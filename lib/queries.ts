@@ -657,19 +657,29 @@ const REF_COLUMNS_FOR_BOARD = `
 // query error empties just that lane instead of taking the whole feed down.
 
 export type ActivityItem = {
-  // "note" / "reply" — comment on my ref or reply to my comment
+  // "note" / "reply" — comment on something I own, or reply to my comment
   // "annotation" — annotation on my ref
   // "rating" — rating on my ref
   kind: "note" | "reply" | "rating" | "annotation";
   at: string;
   actor: string;
-  ref: { id: string; title: string | null; image_path: string };
+  // Exactly one of these is set, picked from the underlying note's
+  // discriminated target columns:
+  refTarget?: { id: string; title: string | null; image_path: string };
+  projectTarget?: { id: string; title: string };
+  updateTarget?: {
+    id: string;
+    projectId: string;
+    projectTitle: string;
+    image_path: string;
+    image_width: number | null;
+    image_height: number | null;
+  };
   noteId?: string;
   annotationId?: string;
   stars?: number;
   bodySnippet?: string;
-  // Whether this lands in the inbox because of my ref or because of my note.
-  reason: "my_ref" | "reply_to_me";
+  reason: "my_ref" | "my_project" | "my_update" | "reply_to_me";
 };
 
 type EmbeddedRef = {
@@ -683,48 +693,129 @@ function pickRef(value: EmbeddedRef | EmbeddedRef[] | null | undefined): Embedde
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-// Inbox-style activity: only stuff that touches the current user. Four lanes:
-// notes/replies on my refs, replies to my notes, annotations on my refs,
-// ratings on my refs — all by other people.
+type EmbeddedProject = { id: string; title: string };
+type EmbeddedUpdate = {
+  id: string;
+  project_id: string;
+  image_path: string;
+  image_width: number | null;
+  image_height: number | null;
+  projects: EmbeddedProject | EmbeddedProject[] | null;
+};
+
+function pickProject(
+  value: EmbeddedProject | EmbeddedProject[] | null | undefined,
+): EmbeddedProject | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+function pickUpdate(
+  value: EmbeddedUpdate | EmbeddedUpdate[] | null | undefined,
+): EmbeddedUpdate | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+// Build ActivityItem target fields from a note row's three embedded targets.
+// Returns null if none resolve (shouldn't happen given the check constraint).
+function noteTargets(n: NoteRowRich): Pick<
+  ActivityItem,
+  "refTarget" | "projectTarget" | "updateTarget"
+> | null {
+  const ref = pickRef(n.refs);
+  if (ref) return { refTarget: ref };
+  const project = pickProject(n.projects);
+  if (project) return { projectTarget: project };
+  const update = pickUpdate(n.project_updates);
+  if (update) {
+    const proj = pickProject(update.projects);
+    if (!proj) return null;
+    return {
+      updateTarget: {
+        id: update.id,
+        projectId: update.project_id,
+        projectTitle: proj.title,
+        image_path: update.image_path,
+        image_width: update.image_width,
+        image_height: update.image_height,
+      },
+    };
+  }
+  return null;
+}
+
+type NoteRowRich = {
+  id: string;
+  ref_id: string | null;
+  project_id: string | null;
+  project_update_id: string | null;
+  parent_id: string | null;
+  body: string | null;
+  pros: string | null;
+  cons: string | null;
+  author: string;
+  created_at: string;
+  refs: EmbeddedRef | EmbeddedRef[] | null;
+  projects: EmbeddedProject | EmbeddedProject[] | null;
+  project_updates: EmbeddedUpdate | EmbeddedUpdate[] | null;
+};
+
+const NOTE_EMBED =
+  "id, ref_id, project_id, project_update_id, parent_id, body, pros, cons, author, created_at, " +
+  "refs(id, title, image_path), " +
+  "projects(id, title), " +
+  "project_updates(id, project_id, image_path, image_width, image_height, projects(id, title))";
+
+// Inbox-style activity: only stuff that touches the current user. Six lanes:
+// notes on my refs, notes on my projects, notes on my updates, replies to my
+// notes (on any target), annotations on my refs, ratings on my refs — all by
+// other people.
 export async function fetchActivityForMe(
   me: string,
   limit = 50,
 ): Promise<ActivityItem[]> {
   const supabase = await createClient();
+  // PostgREST's deeply-nested embeds defeat its type inference; we accept
+  // unknown here and assert the shape per-call.
   const fetchSafe = async <T>(
-    promise: PromiseLike<{ data: T[] | null; error: unknown }>,
+    promise: PromiseLike<{ data: unknown; error: unknown }>,
   ): Promise<T[]> => {
     try {
       const { data } = await promise;
-      return data ?? [];
+      return (data ?? []) as T[];
     } catch {
       return [];
     }
   };
 
-  const [myRefIdsRows, myNoteIdsRows] = await Promise.all([
-    fetchSafe<{ id: string }>(
-      supabase.from("refs").select("id").eq("created_by", me),
-    ),
-    fetchSafe<{ id: string }>(
-      supabase.from("notes").select("id").eq("author", me),
-    ),
-  ]);
+  const [myRefIdsRows, myNoteIdsRows, myProjectIdsRows, myUpdateIdsRows] =
+    await Promise.all([
+      fetchSafe<{ id: string }>(
+        supabase.from("refs").select("id").eq("created_by", me),
+      ),
+      fetchSafe<{ id: string }>(
+        supabase.from("notes").select("id").eq("author", me),
+      ),
+      fetchSafe<{ id: string }>(
+        supabase.from("projects").select("id").eq("created_by", me),
+      ),
+      fetchSafe<{ id: string }>(
+        supabase.from("project_updates").select("id").eq("created_by", me),
+      ),
+    ]);
   const myRefIds = myRefIdsRows.map((r) => r.id);
   const myNoteIds = myNoteIdsRows.map((n) => n.id);
-  if (myRefIds.length === 0 && myNoteIds.length === 0) return [];
+  const myProjectIds = myProjectIdsRows.map((p) => p.id);
+  const myUpdateIds = myUpdateIdsRows.map((u) => u.id);
+  if (
+    myRefIds.length === 0 &&
+    myNoteIds.length === 0 &&
+    myProjectIds.length === 0 &&
+    myUpdateIds.length === 0
+  ) {
+    return [];
+  }
 
-  type NoteRow = {
-    id: string;
-    ref_id: string;
-    parent_id: string | null;
-    body: string | null;
-    pros: string | null;
-    cons: string | null;
-    author: string;
-    created_at: string;
-    refs: EmbeddedRef | EmbeddedRef[] | null;
-  };
   type AnnotationRow = {
     id: string;
     ref_id: string;
@@ -741,97 +832,111 @@ export async function fetchActivityForMe(
     refs: EmbeddedRef | EmbeddedRef[] | null;
   };
 
-  const [notesOnMyRefs, repliesToMyNotes, annotationRows, ratingRows] =
-    await Promise.all([
-      myRefIds.length > 0
-        ? fetchSafe<NoteRow>(
-            supabase
-              .from("notes")
-              .select(
-                "id, ref_id, parent_id, body, pros, cons, author, created_at, refs(id, title, image_path)",
-              )
-              .in("ref_id", myRefIds)
-              .neq("author", me)
-              .order("created_at", { ascending: false })
-              .limit(limit),
-          )
-        : Promise.resolve([] as NoteRow[]),
-      myNoteIds.length > 0
-        ? fetchSafe<NoteRow>(
-            supabase
-              .from("notes")
-              .select(
-                "id, ref_id, parent_id, body, pros, cons, author, created_at, refs(id, title, image_path)",
-              )
-              .in("parent_id", myNoteIds)
-              .neq("author", me)
-              .order("created_at", { ascending: false })
-              .limit(limit),
-          )
-        : Promise.resolve([] as NoteRow[]),
-      myRefIds.length > 0
-        ? fetchSafe<AnnotationRow>(
-            supabase
-              .from("ref_annotations")
-              .select(
-                "id, ref_id, body, author, created_at, refs(id, title, image_path)",
-              )
-              .in("ref_id", myRefIds)
-              .neq("author", me)
-              .order("created_at", { ascending: false })
-              .limit(limit),
-          )
-        : Promise.resolve([] as AnnotationRow[]),
-      myRefIds.length > 0
-        ? fetchSafe<RatingRow>(
-            supabase
-              .from("ref_ratings")
-              .select(
-                "ref_id, user_key, stars, rated_at, refs(id, title, image_path)",
-              )
-              .in("ref_id", myRefIds)
-              .neq("user_key", me)
-              .order("rated_at", { ascending: false })
-              .limit(limit),
-          )
-        : Promise.resolve([] as RatingRow[]),
-    ]);
+  const [
+    notesOnMyRefs,
+    notesOnMyProjects,
+    notesOnMyUpdates,
+    repliesToMyNotes,
+    annotationRows,
+    ratingRows,
+  ] = await Promise.all([
+    myRefIds.length > 0
+      ? fetchSafe<NoteRowRich>(
+          supabase
+            .from("notes")
+            .select(NOTE_EMBED)
+            .in("ref_id", myRefIds)
+            .neq("author", me)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+        )
+      : Promise.resolve([] as NoteRowRich[]),
+    myProjectIds.length > 0
+      ? fetchSafe<NoteRowRich>(
+          supabase
+            .from("notes")
+            .select(NOTE_EMBED)
+            .in("project_id", myProjectIds)
+            .neq("author", me)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+        )
+      : Promise.resolve([] as NoteRowRich[]),
+    myUpdateIds.length > 0
+      ? fetchSafe<NoteRowRich>(
+          supabase
+            .from("notes")
+            .select(NOTE_EMBED)
+            .in("project_update_id", myUpdateIds)
+            .neq("author", me)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+        )
+      : Promise.resolve([] as NoteRowRich[]),
+    myNoteIds.length > 0
+      ? fetchSafe<NoteRowRich>(
+          supabase
+            .from("notes")
+            .select(NOTE_EMBED)
+            .in("parent_id", myNoteIds)
+            .neq("author", me)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+        )
+      : Promise.resolve([] as NoteRowRich[]),
+    myRefIds.length > 0
+      ? fetchSafe<AnnotationRow>(
+          supabase
+            .from("ref_annotations")
+            .select(
+              "id, ref_id, body, author, created_at, refs(id, title, image_path)",
+            )
+            .in("ref_id", myRefIds)
+            .neq("author", me)
+            .order("created_at", { ascending: false })
+            .limit(limit),
+        )
+      : Promise.resolve([] as AnnotationRow[]),
+    myRefIds.length > 0
+      ? fetchSafe<RatingRow>(
+          supabase
+            .from("ref_ratings")
+            .select(
+              "ref_id, user_key, stars, rated_at, refs(id, title, image_path)",
+            )
+            .in("ref_id", myRefIds)
+            .neq("user_key", me)
+            .order("rated_at", { ascending: false })
+            .limit(limit),
+        )
+      : Promise.resolve([] as RatingRow[]),
+  ]);
 
   const items: ActivityItem[] = [];
   const seenNoteIds = new Set<string>();
 
-  // A note can match both lanes (a reply to my note, on my ref); prefer the
-  // "reply_to_me" framing because it's more specific.
-  for (const n of repliesToMyNotes) {
-    if (seenNoteIds.has(n.id)) continue;
+  function pushNote(n: NoteRowRich, reason: ActivityItem["reason"]) {
+    if (seenNoteIds.has(n.id)) return;
+    const targets = noteTargets(n);
+    if (!targets) return;
     seenNoteIds.add(n.id);
-    const ref = pickRef(n.refs);
-    if (!ref) continue;
-    items.push({
-      kind: "reply",
-      at: n.created_at,
-      actor: n.author,
-      ref,
-      noteId: n.id,
-      bodySnippet: (n.body ?? n.pros ?? n.cons ?? "").slice(0, 80),
-      reason: "reply_to_me",
-    });
-  }
-  for (const n of notesOnMyRefs) {
-    if (seenNoteIds.has(n.id)) continue;
-    seenNoteIds.add(n.id);
-    const ref = pickRef(n.refs);
-    if (!ref) continue;
     items.push({
       kind: n.parent_id ? "reply" : "note",
       at: n.created_at,
       actor: n.author,
-      ref,
+      ...targets,
       noteId: n.id,
       bodySnippet: (n.body ?? n.pros ?? n.cons ?? "").slice(0, 80),
-      reason: "my_ref",
+      reason,
     });
   }
+
+  // Replies to my notes are the most specific reason; prefer that framing
+  // over "comment on my X" if a row matches both.
+  for (const n of repliesToMyNotes) pushNote(n, "reply_to_me");
+  for (const n of notesOnMyRefs) pushNote(n, "my_ref");
+  for (const n of notesOnMyProjects) pushNote(n, "my_project");
+  for (const n of notesOnMyUpdates) pushNote(n, "my_update");
 
   for (const a of annotationRows) {
     const ref = pickRef(a.refs);
@@ -840,7 +945,7 @@ export async function fetchActivityForMe(
       kind: "annotation",
       at: a.created_at,
       actor: a.author,
-      ref,
+      refTarget: ref,
       annotationId: a.id,
       bodySnippet: (a.body ?? "").slice(0, 80),
       reason: "my_ref",
@@ -854,7 +959,7 @@ export async function fetchActivityForMe(
       kind: "rating",
       at: r.rated_at,
       actor: r.user_key,
-      ref,
+      refTarget: ref,
       stars: r.stars,
       reason: "my_ref",
     });

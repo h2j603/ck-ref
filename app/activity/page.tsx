@@ -31,7 +31,7 @@ export default async function ActivityPage() {
           내 활동 — {items.length}
         </p>
         <h1 className="text-sm text-muted-foreground">
-          내 ref에 달린 노트·주석·별점, 그리고 내 노트에 달린 답글만 모아 봅니다.
+          내 ref·작업·업데이트에 달린 코멘트와 내 노트에 달린 답글만 모입니다.
         </h1>
       </header>
 
@@ -67,62 +67,93 @@ export default async function ActivityPage() {
 }
 
 function targetHref(item: ActivityItem): string {
-  const base = `/ref/${item.ref.id}`;
-  if (item.annotationId) return `${base}#ann-${item.annotationId}`;
-  if (item.noteId) return `${base}#note-${item.noteId}`;
-  return base;
+  if (item.refTarget) {
+    const base = `/ref/${item.refTarget.id}`;
+    if (item.annotationId) return `${base}#ann-${item.annotationId}`;
+    if (item.noteId) return `${base}#note-${item.noteId}`;
+    return base;
+  }
+  if (item.projectTarget) {
+    const base = `/wip/${item.projectTarget.id}`;
+    if (item.noteId) return `${base}#note-${item.noteId}`;
+    return base;
+  }
+  if (item.updateTarget) {
+    const base = `/wip/${item.updateTarget.projectId}`;
+    if (item.noteId) return `${base}#note-${item.noteId}`;
+    return base;
+  }
+  return "/activity";
+}
+
+function targetTitle(item: ActivityItem): string {
+  if (item.refTarget) return item.refTarget.title ?? "untitled";
+  if (item.projectTarget) return item.projectTarget.title;
+  if (item.updateTarget) return item.updateTarget.projectTitle;
+  return "untitled";
 }
 
 function Thumbnail({ item }: { item: ActivityItem }) {
-  return (
-    <Link
-      href={targetHref(item)}
-      className="relative size-12 shrink-0 overflow-hidden rounded-sm bg-muted"
-    >
-      <Image
-        src={publicImageUrl(item.ref.image_path)}
-        alt={item.ref.title ?? "ref"}
-        fill
-        sizes="48px"
-        className="object-cover"
-      />
-    </Link>
-  );
+  const href = targetHref(item);
+  if (item.refTarget) {
+    return (
+      <Link
+        href={href}
+        className="relative size-12 shrink-0 overflow-hidden rounded-sm bg-muted"
+      >
+        <Image
+          src={publicImageUrl(item.refTarget.image_path)}
+          alt={item.refTarget.title ?? "ref"}
+          fill
+          sizes="48px"
+          className="object-cover"
+        />
+      </Link>
+    );
+  }
+  if (item.updateTarget) {
+    return (
+      <Link
+        href={href}
+        className="relative size-12 shrink-0 overflow-hidden rounded-sm bg-muted"
+      >
+        <Image
+          src={publicImageUrl(item.updateTarget.image_path)}
+          alt={item.updateTarget.projectTitle}
+          fill
+          sizes="48px"
+          className="object-cover"
+        />
+      </Link>
+    );
+  }
+  if (item.projectTarget) {
+    return (
+      <Link
+        href={href}
+        aria-label={item.projectTarget.title}
+        className="flex size-12 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+      >
+        WIP
+      </Link>
+    );
+  }
+  return <div aria-hidden className="size-12 shrink-0 rounded-sm bg-muted" />;
 }
 
 function Headline({ item }: { item: ActivityItem }) {
-  const refLink = (
+  const link = (
     <Link
       href={targetHref(item)}
       className="text-foreground underline-offset-2 hover:underline"
     >
-      {item.ref.title ?? "untitled"}
+      {targetTitle(item)}
     </Link>
   );
 
   return (
     <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
       <NicknamePill nickname={item.actor} />
-      {item.kind === "note" ? (
-        <>
-          <span>내 ref에 노트 —</span>
-          {refLink}
-        </>
-      ) : null}
-      {item.kind === "reply" ? (
-        <>
-          <span>
-            {item.reason === "reply_to_me" ? "내 노트에 답글" : "내 ref에 답글"} —
-          </span>
-          {refLink}
-        </>
-      ) : null}
-      {item.kind === "annotation" ? (
-        <>
-          <span>내 ref에 주석 —</span>
-          {refLink}
-        </>
-      ) : null}
       {item.kind === "rating" ? (
         <>
           <span className="inline-flex items-center gap-0.5">
@@ -130,9 +161,31 @@ function Headline({ item }: { item: ActivityItem }) {
             <span className="tabular-nums text-foreground">{item.stars}</span>
           </span>
           <span>— 내 ref</span>
-          {refLink}
+          {link}
         </>
-      ) : null}
+      ) : item.kind === "annotation" ? (
+        <>
+          <span>내 ref에 주석 —</span>
+          {link}
+        </>
+      ) : (
+        <>
+          <span>{verbFor(item)} —</span>
+          {link}
+        </>
+      )}
     </p>
   );
+}
+
+function verbFor(item: ActivityItem): string {
+  // note vs reply × where the target lives × whether it's because of my own note
+  const isReply = item.kind === "reply";
+  if (item.reason === "reply_to_me") {
+    return isReply ? "내 노트에 답글" : "내 노트에 노트";
+  }
+  if (item.refTarget) return isReply ? "내 ref에 답글" : "내 ref에 노트";
+  if (item.projectTarget) return isReply ? "내 작업에 답글" : "내 작업에 노트";
+  if (item.updateTarget) return isReply ? "내 업데이트에 답글" : "내 업데이트에 노트";
+  return isReply ? "답글" : "노트";
 }
