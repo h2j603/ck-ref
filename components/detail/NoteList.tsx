@@ -4,11 +4,13 @@ import { CornerDownRight, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
+import { MentionInput } from "@/components/mention-input";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
+import { FALLBACK_PROFILES, type Profile } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/client";
 import type { Note, NoteTarget } from "@/lib/types";
 
@@ -58,9 +60,11 @@ function noteToDraft(note: Note): Draft {
 export function NoteList({
   target,
   initialNotes,
+  profiles = FALLBACK_PROFILES,
 }: {
   target: NoteTarget;
   initialNotes: Note[];
+  profiles?: Profile[];
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
@@ -284,6 +288,7 @@ export function NoteList({
                   draft={editingDraft}
                   onChange={setEditingDraft}
                   disabled={busy}
+                  profiles={profiles}
                 />
               ) : (
                 <NoteContent note={note} />
@@ -328,16 +333,17 @@ export function NoteList({
                         />
                         {replyEditing ? (
                           <>
-                            <Textarea
+                            <MentionInput
                               value={editingDraft.body}
-                              onChange={(e) =>
+                              onChange={(v) =>
                                 setEditingDraft({
                                   ...editingDraft,
-                                  body: e.target.value,
+                                  body: v,
                                 })
                               }
                               rows={3}
                               disabled={busy}
+                              profiles={profiles}
                             />
                             <EditActions
                               busy={busy}
@@ -362,12 +368,13 @@ export function NoteList({
               {hydrated && nickname && !editing ? (
                 replying ? (
                   <div className="flex flex-col gap-2 border-l-2 border-border/40 pl-3">
-                    <Textarea
+                    <MentionInput
                       value={replyDraft}
-                      onChange={(e) => setReplyDraft(e.target.value)}
+                      onChange={setReplyDraft}
                       rows={3}
-                      placeholder="답글 — @미주 같은 멘션 가능"
+                      placeholder="답글 — @ 입력하면 멘션 자동완성"
                       autoFocus
+                      profiles={profiles}
                     />
                     <div className="flex justify-end gap-2">
                       <Button
@@ -421,6 +428,7 @@ export function NoteList({
           draft={draft}
           onChange={setDraft}
           disabled={hydrated && !nickname}
+          profiles={profiles}
         />
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <div className="flex justify-end">
@@ -520,10 +528,12 @@ function NoteFields({
   draft,
   onChange,
   disabled,
+  profiles,
 }: {
   draft: Draft;
   onChange: (d: Draft) => void;
   disabled?: boolean;
+  profiles: Profile[];
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -546,12 +556,13 @@ function NoteFields({
         />
       </FieldGroup>
       <FieldGroup label="메모">
-        <Textarea
+        <MentionInput
           value={draft.body}
-          onChange={(e) => onChange({ ...draft, body: e.target.value })}
+          onChange={(v) => onChange({ ...draft, body: v })}
           rows={3}
           disabled={disabled}
-          placeholder="마크다운, @미주 같은 멘션 가능"
+          placeholder="마크다운, @ 입력하면 멘션 자동완성"
+          profiles={profiles}
         />
       </FieldGroup>
     </div>
