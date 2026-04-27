@@ -7,6 +7,7 @@ import { MasonryGrid } from "@/components/gallery/MasonryGrid";
 import { WeeklyNudge } from "@/components/weekly-nudge";
 import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
 import { HUE_BUCKETS, type HueBucket } from "@/lib/color";
+import { pickNudge } from "@/lib/nudges";
 import { findProfile, isProfileKey } from "@/lib/profiles";
 import {
   countRefsByUserSince,
@@ -66,7 +67,12 @@ export default async function HomePage({
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-      {showNudge ? <WeeklyNudge displayName={myProfile.display_name} /> : null}
+      {showNudge ? (
+        <WeeklyNudge
+          displayName={myProfile.display_name}
+          message={pickNudge()}
+        />
+      ) : null}
       <header className="flex items-center justify-between gap-4 pt-2">
         <h1 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           Index — {refs.length} item{refs.length === 1 ? "" : "s"}

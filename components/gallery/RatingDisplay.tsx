@@ -1,5 +1,4 @@
-import { Star } from "lucide-react";
-
+import { KiwiIcon } from "@/components/icons/kiwi";
 import { cn } from "@/lib/utils";
 
 export function RatingDisplay({
@@ -18,14 +17,7 @@ export function RatingDisplay({
         className,
       )}
     >
-      <Star
-        className={cn(
-          "size-3",
-          avg !== null
-            ? "fill-amber-400 stroke-amber-500"
-            : "stroke-muted-foreground",
-        )}
-      />
+      <KiwiIcon filled={avg !== null} className="size-3" />
       {avg !== null ? (
         <>
           <span className="text-foreground">{avg.toFixed(1)}</span>
