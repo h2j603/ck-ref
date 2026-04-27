@@ -106,6 +106,9 @@ export function AnnotationLayer({
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!addKind || !nickname || draft) return;
     if ((e.target as HTMLElement).closest("[data-annotation]")) return;
+    // Only react to primary button on mouse / pen; touch always goes through.
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     const { x, y } = pctFromEvent(e);
     if (addKind === "point") {
@@ -118,27 +121,48 @@ export function AnnotationLayer({
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!dragging) return;
+    e.preventDefault();
     const { x, y } = pctFromEvent(e);
     setDragging({ ...dragging, endX: x, endY: y });
   }
 
-  function handlePointerUp() {
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
     if (!dragging) return;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     const x = Math.min(dragging.startX, dragging.endX);
     const y = Math.min(dragging.startY, dragging.endY);
     const w = Math.abs(dragging.endX - dragging.startX);
     const h = Math.abs(dragging.endY - dragging.startY);
     setDragging(null);
-    if (w < 1 || h < 1) return; // ignore tiny drags
+    // Treat a near-stationary drag as a point so a tap doesn't fizzle.
+    if (w < 0.5 && h < 0.5) {
+      setDraft({
+        kind: "new-point",
+        x_pct: dragging.startX,
+        y_pct: dragging.startY,
+        body: "",
+      });
+      setOpenId(null);
+      return;
+    }
     setDraft({
       kind: "new-area",
       x_pct: x,
       y_pct: y,
-      w_pct: w,
-      h_pct: h,
+      w_pct: Math.max(w, 1),
+      h_pct: Math.max(h, 1),
       body: "",
     });
     setOpenId(null);
+  }
+
+  function handlePointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setDragging(null);
   }
 
   async function saveDraft() {
@@ -238,20 +262,27 @@ export function AnnotationLayer({
         ref={containerRef}
         className={cn(
           "relative w-full select-none bg-muted",
-          addKind === "point" && "cursor-crosshair",
-          addKind === "area" && "cursor-crosshair",
+          addKind && "cursor-crosshair touch-none",
         )}
         style={{ aspectRatio: `${width} / ${height}` }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
       >
         <Image
           src={imageUrl}
           alt={alt}
           fill
           sizes="(max-width: 1024px) 100vw, 70vw"
-          className="object-contain"
+          className={cn(
+            "object-contain",
+            // Let pointer events pass through to the container while drawing
+            // so the browser doesn't try to drag-save the image and so the
+            // image surface doesn't swallow touchmove on mobile.
+            addKind && "pointer-events-none",
+          )}
+          draggable={false}
           priority
         />
 
