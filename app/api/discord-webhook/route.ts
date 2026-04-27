@@ -39,6 +39,7 @@ const EVENT_COLOR = {
   project_update: 0xf97316,
   ref_link: 0x14b8a6,
   update_ref_link: 0x0d9488,
+  event_create: 0x6366f1,
 } as const;
 
 const EVENT_EMOJI = {
@@ -50,6 +51,7 @@ const EVENT_EMOJI = {
   project_update: "🛠️",
   ref_link: "🔗",
   update_ref_link: "🪡",
+  event_create: "📅",
 } as const;
 
 type EventKind = keyof typeof EVENT_COLOR;
@@ -284,6 +286,8 @@ async function buildEvent(
       return buildRefLink(supabase, profiles, record, site);
     case "project_update_refs":
       return buildUpdateRefLink(supabase, profiles, record, site);
+    case "events":
+      return buildEventCreate(supabase, profiles, record, site);
     default:
       return null;
   }
@@ -628,5 +632,59 @@ async function buildUpdateRefLink(
     link: path,
     body: reason ?? refTitle,
     thumbnailUrl: r.image_path ? publicImageUrl(r.image_path) : undefined,
+  };
+}
+
+async function buildEventCreate(
+  supabase: SupabaseClient,
+  profiles: Profile[],
+  record: Record<string, unknown>,
+  site: string,
+): Promise<Built | null> {
+  const title = String(record.title ?? "untitled");
+  const startsAt = record.starts_at as string | undefined;
+  if (!startsAt) return null;
+  const allDay = Boolean(record.all_day);
+  const projectId = (record.project_id as string | null) ?? null;
+
+  let projectTitle: string | null = null;
+  if (projectId) {
+    const { data } = await supabase
+      .from("projects")
+      .select("title")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (data) projectTitle = (data as { title: string }).title;
+  }
+
+  // Format the start in Asia/Seoul so the message reads naturally for the
+  // team. All-day events show the date only.
+  const startDate = new Date(startsAt);
+  const fmt = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    ...(allDay
+      ? {}
+      : { hour: "2-digit", minute: "2-digit", hour12: false }),
+  });
+  const when = fmt.format(startDate) + (allDay ? " · 종일" : "");
+
+  const path = "/calendar";
+  const url = appendDiscordTrust(`${site}${path}`);
+  const actorKey = String(record.created_by ?? "") || null;
+  const actorProfile = findProfile(profiles, actorKey);
+  const actorName = actorProfile?.display_name ?? actorKey ?? "누군가";
+
+  return {
+    kind: "event_create",
+    actorKey,
+    description:
+      `**${actorName}**님이 일정을 등록했어요 — [${title}](${url})\n` +
+      `> ${when}${projectTitle ? ` · ${projectTitle}` : ""}` +
+      (record.body ? `\n> ${snippet(record.body as string) ?? ""}` : ""),
+    link: path,
+    body: title,
   };
 }

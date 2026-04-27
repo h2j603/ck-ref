@@ -24,6 +24,7 @@ const KIND_LABEL: Record<NotificationKind, string> = {
   project_update: "업데이트",
   ref_link: "ref 연결",
   update_ref_link: "ref 첨부",
+  event_create: "새 일정",
 };
 
 const POLL_INTERVAL_MS = 60_000;

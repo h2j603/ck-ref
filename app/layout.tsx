@@ -1,3 +1,4 @@
+import { CalendarDays } from "lucide-react";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
@@ -85,10 +86,10 @@ export default async function RootLayout({
             </Link>
             <Link
               href="/calendar"
-              className="transition-colors hover:text-foreground"
+              aria-label="Calendar"
+              className="inline-flex items-center transition-colors hover:text-foreground"
             >
-              <span className="sm:hidden">CAL</span>
-              <span className="hidden sm:inline">Calendar</span>
+              <CalendarDays className="size-4" />
             </Link>
             <NotificationBell />
             <HeaderProfile profiles={profiles} />
