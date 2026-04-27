@@ -75,13 +75,6 @@ export default async function RootLayout({
               <span className="sm:hidden">BRD</span>
               <span className="hidden sm:inline">Board</span>
             </Link>
-            <Link
-              href="/activity"
-              className="transition-colors hover:text-foreground"
-            >
-              <span className="sm:hidden">ACT</span>
-              <span className="hidden sm:inline">Activity</span>
-            </Link>
             <HeaderProfile profiles={profiles} />
           </nav>
         </header>

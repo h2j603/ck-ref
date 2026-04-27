@@ -525,13 +525,19 @@ const REF_COLUMNS_FOR_BOARD = `
 // query error empties just that lane instead of taking the whole feed down.
 
 export type ActivityItem = {
-  kind: "ref" | "note" | "reply" | "rating" | "board" | "annotation";
+  // "note" / "reply" — comment on my ref or reply to my comment
+  // "annotation" — annotation on my ref
+  // "rating" — rating on my ref
+  kind: "note" | "reply" | "rating" | "annotation";
   at: string;
   actor: string;
-  ref?: { id: string; title: string | null; image_path: string };
-  board?: { id: string; title: string };
+  ref: { id: string; title: string | null; image_path: string };
+  noteId?: string;
+  annotationId?: string;
   stars?: number;
   bodySnippet?: string;
+  // Whether this lands in the inbox because of my ref or because of my note.
+  reason: "my_ref" | "reply_to_me";
 };
 
 type EmbeddedRef = {
@@ -545,7 +551,13 @@ function pickRef(value: EmbeddedRef | EmbeddedRef[] | null | undefined): Embedde
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-export async function fetchActivity(limit = 50): Promise<ActivityItem[]> {
+// Inbox-style activity: only stuff that touches the current user. Four lanes:
+// notes/replies on my refs, replies to my notes, annotations on my refs,
+// ratings on my refs — all by other people.
+export async function fetchActivityForMe(
+  me: string,
+  limit = 50,
+): Promise<ActivityItem[]> {
   const supabase = await createClient();
   const fetchSafe = async <T>(
     promise: PromiseLike<{ data: T[] | null; error: unknown }>,
@@ -558,102 +570,148 @@ export async function fetchActivity(limit = 50): Promise<ActivityItem[]> {
     }
   };
 
-  const [refRows, noteRows, ratingRows, boardRows, annotationRows] =
+  const [myRefIdsRows, myNoteIdsRows] = await Promise.all([
+    fetchSafe<{ id: string }>(
+      supabase.from("refs").select("id").eq("created_by", me),
+    ),
+    fetchSafe<{ id: string }>(
+      supabase.from("notes").select("id").eq("author", me),
+    ),
+  ]);
+  const myRefIds = myRefIdsRows.map((r) => r.id);
+  const myNoteIds = myNoteIdsRows.map((n) => n.id);
+  if (myRefIds.length === 0 && myNoteIds.length === 0) return [];
+
+  type NoteRow = {
+    id: string;
+    ref_id: string;
+    parent_id: string | null;
+    body: string | null;
+    pros: string | null;
+    cons: string | null;
+    author: string;
+    created_at: string;
+    refs: EmbeddedRef | EmbeddedRef[] | null;
+  };
+  type AnnotationRow = {
+    id: string;
+    ref_id: string;
+    body: string;
+    author: string;
+    created_at: string;
+    refs: EmbeddedRef | EmbeddedRef[] | null;
+  };
+  type RatingRow = {
+    ref_id: string;
+    user_key: string;
+    stars: number;
+    rated_at: string;
+    refs: EmbeddedRef | EmbeddedRef[] | null;
+  };
+
+  const [notesOnMyRefs, repliesToMyNotes, annotationRows, ratingRows] =
     await Promise.all([
-      fetchSafe<{
-        id: string;
-        title: string | null;
-        image_path: string;
-        created_by: string | null;
-        created_at: string;
-      }>(
-        supabase
-          .from("refs")
-          .select("id, title, image_path, created_by, created_at")
-          .order("created_at", { ascending: false })
-          .limit(limit),
-      ),
-      fetchSafe<{
-        id: string;
-        ref_id: string;
-        parent_id: string | null;
-        body: string | null;
-        pros: string | null;
-        cons: string | null;
-        author: string;
-        created_at: string;
-        refs: EmbeddedRef | EmbeddedRef[] | null;
-      }>(
-        supabase
-          .from("notes")
-          .select(
-            "id, ref_id, parent_id, body, pros, cons, author, created_at, refs(id, title, image_path)",
+      myRefIds.length > 0
+        ? fetchSafe<NoteRow>(
+            supabase
+              .from("notes")
+              .select(
+                "id, ref_id, parent_id, body, pros, cons, author, created_at, refs(id, title, image_path)",
+              )
+              .in("ref_id", myRefIds)
+              .neq("author", me)
+              .order("created_at", { ascending: false })
+              .limit(limit),
           )
-          .order("created_at", { ascending: false })
-          .limit(limit),
-      ),
-      fetchSafe<{
-        ref_id: string;
-        user_key: string;
-        stars: number;
-        rated_at: string;
-        refs: EmbeddedRef | EmbeddedRef[] | null;
-      }>(
-        supabase
-          .from("ref_ratings")
-          .select("ref_id, user_key, stars, rated_at, refs(id, title, image_path)")
-          .order("rated_at", { ascending: false })
-          .limit(limit),
-      ),
-      fetchSafe<{
-        id: string;
-        title: string;
-        created_by: string | null;
-        created_at: string;
-      }>(
-        supabase
-          .from("boards")
-          .select("id, title, created_by, created_at")
-          .order("created_at", { ascending: false })
-          .limit(limit),
-      ),
-      fetchSafe<{
-        ref_id: string;
-        body: string;
-        author: string;
-        created_at: string;
-        refs: EmbeddedRef | EmbeddedRef[] | null;
-      }>(
-        supabase
-          .from("ref_annotations")
-          .select("ref_id, body, author, created_at, refs(id, title, image_path)")
-          .order("created_at", { ascending: false })
-          .limit(limit),
-      ),
+        : Promise.resolve([] as NoteRow[]),
+      myNoteIds.length > 0
+        ? fetchSafe<NoteRow>(
+            supabase
+              .from("notes")
+              .select(
+                "id, ref_id, parent_id, body, pros, cons, author, created_at, refs(id, title, image_path)",
+              )
+              .in("parent_id", myNoteIds)
+              .neq("author", me)
+              .order("created_at", { ascending: false })
+              .limit(limit),
+          )
+        : Promise.resolve([] as NoteRow[]),
+      myRefIds.length > 0
+        ? fetchSafe<AnnotationRow>(
+            supabase
+              .from("ref_annotations")
+              .select(
+                "id, ref_id, body, author, created_at, refs(id, title, image_path)",
+              )
+              .in("ref_id", myRefIds)
+              .neq("author", me)
+              .order("created_at", { ascending: false })
+              .limit(limit),
+          )
+        : Promise.resolve([] as AnnotationRow[]),
+      myRefIds.length > 0
+        ? fetchSafe<RatingRow>(
+            supabase
+              .from("ref_ratings")
+              .select(
+                "ref_id, user_key, stars, rated_at, refs(id, title, image_path)",
+              )
+              .in("ref_id", myRefIds)
+              .neq("user_key", me)
+              .order("rated_at", { ascending: false })
+              .limit(limit),
+          )
+        : Promise.resolve([] as RatingRow[]),
     ]);
 
   const items: ActivityItem[] = [];
+  const seenNoteIds = new Set<string>();
 
-  for (const r of refRows) {
-    if (!r.created_by) continue;
-    items.push({
-      kind: "ref",
-      at: r.created_at,
-      actor: r.created_by,
-      ref: { id: r.id, title: r.title, image_path: r.image_path },
-    });
-  }
-
-  for (const n of noteRows) {
+  // A note can match both lanes (a reply to my note, on my ref); prefer the
+  // "reply_to_me" framing because it's more specific.
+  for (const n of repliesToMyNotes) {
+    if (seenNoteIds.has(n.id)) continue;
+    seenNoteIds.add(n.id);
     const ref = pickRef(n.refs);
     if (!ref) continue;
-    const snippet = (n.body ?? n.pros ?? n.cons ?? "").slice(0, 80);
+    items.push({
+      kind: "reply",
+      at: n.created_at,
+      actor: n.author,
+      ref,
+      noteId: n.id,
+      bodySnippet: (n.body ?? n.pros ?? n.cons ?? "").slice(0, 80),
+      reason: "reply_to_me",
+    });
+  }
+  for (const n of notesOnMyRefs) {
+    if (seenNoteIds.has(n.id)) continue;
+    seenNoteIds.add(n.id);
+    const ref = pickRef(n.refs);
+    if (!ref) continue;
     items.push({
       kind: n.parent_id ? "reply" : "note",
       at: n.created_at,
       actor: n.author,
       ref,
-      bodySnippet: snippet,
+      noteId: n.id,
+      bodySnippet: (n.body ?? n.pros ?? n.cons ?? "").slice(0, 80),
+      reason: "my_ref",
+    });
+  }
+
+  for (const a of annotationRows) {
+    const ref = pickRef(a.refs);
+    if (!ref) continue;
+    items.push({
+      kind: "annotation",
+      at: a.created_at,
+      actor: a.author,
+      ref,
+      annotationId: a.id,
+      bodySnippet: (a.body ?? "").slice(0, 80),
+      reason: "my_ref",
     });
   }
 
@@ -666,28 +724,7 @@ export async function fetchActivity(limit = 50): Promise<ActivityItem[]> {
       actor: r.user_key,
       ref,
       stars: r.stars,
-    });
-  }
-
-  for (const b of boardRows) {
-    if (!b.created_by) continue;
-    items.push({
-      kind: "board",
-      at: b.created_at,
-      actor: b.created_by,
-      board: { id: b.id, title: b.title },
-    });
-  }
-
-  for (const a of annotationRows) {
-    const ref = pickRef(a.refs);
-    if (!ref) continue;
-    items.push({
-      kind: "annotation",
-      at: a.created_at,
-      actor: a.author,
-      ref,
-      bodySnippet: (a.body ?? "").slice(0, 80),
+      reason: "my_ref",
     });
   }
 

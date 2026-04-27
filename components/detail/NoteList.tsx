@@ -223,7 +223,8 @@ export function NoteList({
           return (
             <li
               key={note.id}
-              className="flex flex-col gap-2 border-b border-border/40 pb-4 last:border-b-0"
+              id={`note-${note.id}`}
+              className="flex flex-col gap-2 border-b border-border/40 pb-4 last:border-b-0 target:rounded-md target:ring-2 target:ring-foreground/40"
             >
               <NoteHead
                 note={note}
@@ -262,7 +263,11 @@ export function NoteList({
                       hydrated && nickname && nickname === reply.author;
                     const replyEditing = editingId === reply.id;
                     return (
-                      <li key={reply.id} className="flex flex-col gap-1.5">
+                      <li
+                        key={reply.id}
+                        id={`note-${reply.id}`}
+                        className="flex flex-col gap-1.5 target:rounded-md target:ring-2 target:ring-foreground/40"
+                      >
                         <NoteHead
                           note={reply}
                           mine={!!replyMine}
