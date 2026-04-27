@@ -61,6 +61,7 @@ export default async function RefDetailPage({
           height={h}
           initial={annotations}
           profiles={profiles}
+          sourceUrl={ref.source_url}
         />
         {extras.length > 0 ? (
           <div className="flex flex-col gap-4">
@@ -77,6 +78,7 @@ export default async function RefDetailPage({
                   height={eh}
                   initial={extraAnnotations[img.id] ?? []}
                   profiles={profiles}
+                  sourceUrl={ref.source_url}
                 />
               );
             })}
