@@ -5,9 +5,21 @@ import Link from "next/link";
 
 import { RatingDisplay } from "./RatingDisplay";
 import { publicImageUrl } from "@/lib/storage";
-import type { RefWithDesigners } from "@/lib/types";
+import type { RefSort, RefWithDesigners } from "@/lib/types";
 
-export function RefCard({ ref_ }: { ref_: RefWithDesigners }) {
+// What sits under each image is sort-dependent on the home grid:
+//   - latest → nothing (the image alone, like a Pinterest feed)
+//   - rating → rating stars
+//   - year_*  → 작업연도
+// Other gallery pages (tag, designer, user) don't pass `sort` so they
+// keep showing the rating row by default.
+export function RefCard({
+  ref_,
+  sort,
+}: {
+  ref_: RefWithDesigners;
+  sort?: RefSort;
+}) {
   const url = publicImageUrl(ref_.image_path);
   // Fall back to a sane aspect when image dimensions are missing.
   const w = ref_.image_width ?? 4;
@@ -47,11 +59,32 @@ export function RefCard({ ref_ }: { ref_: RefWithDesigners }) {
           </div>
         </div>
       </div>
-      <RatingDisplay
-        avg={ref_.rating_avg}
-        count={ref_.rating_count}
-        className="px-1 py-1.5"
-      />
+      <CardFooter ref_={ref_} sort={sort} />
     </Link>
+  );
+}
+
+function CardFooter({
+  ref_,
+  sort,
+}: {
+  ref_: RefWithDesigners;
+  sort?: RefSort;
+}) {
+  if (sort === "latest") return null;
+  if (sort === "year_desc" || sort === "year_asc") {
+    return (
+      <p className="px-1 py-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {ref_.year ?? "—"}
+      </p>
+    );
+  }
+  // rating, or no explicit sort (tag / designer / user pages)
+  return (
+    <RatingDisplay
+      avg={ref_.rating_avg}
+      count={ref_.rating_count}
+      className="px-1 py-1.5"
+    />
   );
 }

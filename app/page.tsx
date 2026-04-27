@@ -84,7 +84,7 @@ export default async function HomePage({
       <Suspense fallback={null}>
         <FilterBar allTags={tags} />
       </Suspense>
-      <MasonryGrid refs={refs} />
+      <MasonryGrid refs={refs} sort={sort ?? "latest"} />
     </div>
   );
 }
