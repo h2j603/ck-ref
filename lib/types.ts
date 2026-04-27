@@ -96,6 +96,7 @@ export type Note = {
   body: string | null;
   pros: string | null;
   cons: string | null;
+  image_paths: string[];
   author: string;
   created_at: string;
   updated_at: string;

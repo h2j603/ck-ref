@@ -1,7 +1,7 @@
 "use client";
 
-import { CornerDownRight, MessageCircle, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CornerDownRight, ImagePlus, MessageCircle, Pencil, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { MentionInput } from "@/components/mention-input";
@@ -9,10 +9,50 @@ import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { NoteImageStrip } from "@/components/detail/NoteImageStrip";
 import { useNickname } from "@/lib/nickname";
 import { FALLBACK_PROFILES, type Profile } from "@/lib/profiles";
+import { STORAGE_BUCKET } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
 import type { Note, NoteTarget } from "@/lib/types";
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+function fileExt(file: File): string {
+  const dot = file.name.lastIndexOf(".");
+  if (dot >= 0) return file.name.slice(dot + 1).toLowerCase();
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  if (file.type === "image/gif") return "gif";
+  return "bin";
+}
+
+function notePath(ext: string): string {
+  const stamp = Date.now();
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `notes/${stamp}-${rand}.${ext}`;
+}
+
+async function uploadAttachments(
+  supabase: SupabaseClient,
+  files: File[],
+): Promise<string[]> {
+  const paths: string[] = [];
+  for (const f of files) {
+    const path = notePath(fileExt(f));
+    const { error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, f, {
+        cacheControl: "31536000",
+        upsert: false,
+        contentType: f.type || undefined,
+      });
+    if (error) throw error;
+    paths.push(path);
+  }
+  return paths;
+}
 
 function targetColumn(target: NoteTarget): string {
   switch (target.kind) {
@@ -70,10 +110,12 @@ export function NoteList({
   const { nickname, hydrated } = useNickname();
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [draftImages, setDraftImages] = useState<File[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<Draft>(EMPTY);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
+  const [replyImages, setReplyImages] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,7 +180,8 @@ export function NoteList({
   const draftHasContent =
     draft.body.trim() !== "" ||
     draft.pros.trim() !== "" ||
-    draft.cons.trim() !== "";
+    draft.cons.trim() !== "" ||
+    draftImages.length > 0;
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -150,6 +193,14 @@ export function NoteList({
     if (!draftHasContent) return;
 
     setBusy(true);
+    let imagePaths: string[] = [];
+    try {
+      imagePaths = await uploadAttachments(supabase, draftImages);
+    } catch (err) {
+      setBusy(false);
+      setError(err instanceof Error ? err.message : "이미지 업로드 실패");
+      return;
+    }
     const { data, error } = await supabase
       .from("notes")
       .insert({
@@ -158,6 +209,7 @@ export function NoteList({
         body: trimToNull(draft.body),
         pros: trimToNull(draft.pros),
         cons: trimToNull(draft.cons),
+        image_paths: imagePaths,
         author: nickname,
       })
       .select("*")
@@ -169,6 +221,7 @@ export function NoteList({
     }
     setNotes((prev) => [...prev, data as Note]);
     setDraft(EMPTY);
+    setDraftImages([]);
   }
 
   async function addReply(parentId: string) {
@@ -178,17 +231,26 @@ export function NoteList({
       return;
     }
     const body = replyDraft.trim();
-    if (!body) return;
+    if (!body && replyImages.length === 0) return;
 
     setBusy(true);
+    let imagePaths: string[] = [];
+    try {
+      imagePaths = await uploadAttachments(supabase, replyImages);
+    } catch (err) {
+      setBusy(false);
+      setError(err instanceof Error ? err.message : "이미지 업로드 실패");
+      return;
+    }
     const { data, error } = await supabase
       .from("notes")
       .insert({
         ...targetPayload(target),
         parent_id: parentId,
-        body,
+        body: body || null,
         pros: null,
         cons: null,
+        image_paths: imagePaths,
         author: nickname,
       })
       .select("*")
@@ -201,6 +263,7 @@ export function NoteList({
     setNotes((prev) => [...prev, data as Note]);
     setReplyingTo(null);
     setReplyDraft("");
+    setReplyImages([]);
   }
 
   async function saveEdit(noteId: string, isReply: boolean) {
@@ -354,11 +417,19 @@ export function NoteList({
                               onSave={() => void saveEdit(reply.id, true)}
                             />
                           </>
-                        ) : reply.body ? (
-                          <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
-                            <MarkdownWithMentions text={reply.body} />
-                          </div>
-                        ) : null}
+                        ) : (
+                          <>
+                            {reply.body ? (
+                              <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
+                                <MarkdownWithMentions text={reply.body} />
+                              </div>
+                            ) : null}
+                            {reply.image_paths &&
+                            reply.image_paths.length > 0 ? (
+                              <NoteImageStrip paths={reply.image_paths} />
+                            ) : null}
+                          </>
+                        )}
                       </li>
                     );
                   })}
@@ -376,6 +447,11 @@ export function NoteList({
                       autoFocus
                       profiles={profiles}
                     />
+                    <ImageAttacher
+                      files={replyImages}
+                      onChange={setReplyImages}
+                      disabled={busy}
+                    />
                     <div className="flex justify-end gap-2">
                       <Button
                         type="button"
@@ -384,6 +460,7 @@ export function NoteList({
                         onClick={() => {
                           setReplyingTo(null);
                           setReplyDraft("");
+                          setReplyImages([]);
                         }}
                         disabled={busy}
                       >
@@ -393,7 +470,10 @@ export function NoteList({
                         type="button"
                         size="sm"
                         onClick={() => void addReply(note.id)}
-                        disabled={busy || !replyDraft.trim()}
+                        disabled={
+                          busy ||
+                          (!replyDraft.trim() && replyImages.length === 0)
+                        }
                       >
                         답글 등록
                       </Button>
@@ -429,6 +509,8 @@ export function NoteList({
           onChange={setDraft}
           disabled={hydrated && !nickname}
           profiles={profiles}
+          images={draftImages}
+          onImagesChange={setDraftImages}
         />
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <div className="flex justify-end">
@@ -529,11 +611,15 @@ function NoteFields({
   onChange,
   disabled,
   profiles,
+  images,
+  onImagesChange,
 }: {
   draft: Draft;
   onChange: (d: Draft) => void;
   disabled?: boolean;
   profiles: Profile[];
+  images?: File[];
+  onImagesChange?: (next: File[]) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -565,6 +651,15 @@ function NoteFields({
           profiles={profiles}
         />
       </FieldGroup>
+      {images && onImagesChange ? (
+        <FieldGroup label="이미지">
+          <ImageAttacher
+            files={images}
+            onChange={onImagesChange}
+            disabled={disabled}
+          />
+        </FieldGroup>
+      ) : null}
     </div>
   );
 }
@@ -603,6 +698,91 @@ function NoteContent({ note }: { note: Note }) {
         <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
           <MarkdownWithMentions text={note.body} />
         </div>
+      ) : null}
+      {note.image_paths && note.image_paths.length > 0 ? (
+        <NoteImageStrip paths={note.image_paths} />
+      ) : null}
+    </div>
+  );
+}
+
+function ImageAttacher({
+  files,
+  onChange,
+  disabled,
+}: {
+  files: File[];
+  onChange: (next: File[]) => void;
+  disabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const previews = useMemo(
+    () => files.map((f) => ({ file: f, url: URL.createObjectURL(f) })),
+    [files],
+  );
+  useEffect(() => {
+    return () => {
+      for (const p of previews) URL.revokeObjectURL(p.url);
+    };
+  }, [previews]);
+
+  function add(incoming: FileList | null) {
+    if (!incoming) return;
+    const next = [...files];
+    for (const f of Array.from(incoming)) {
+      if (f.type.startsWith("image/")) next.push(f);
+    }
+    onChange(next);
+  }
+  function remove(i: number) {
+    const next = files.slice();
+    next.splice(i, 1);
+    onChange(next);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled}
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input px-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+      >
+        <ImagePlus className="size-3" /> 이미지
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          add(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      {previews.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {previews.map((p, i) => (
+            <li key={p.url} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.url}
+                alt=""
+                className="size-12 rounded-sm object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                disabled={disabled}
+                aria-label="remove"
+                className="absolute -right-1 -top-1 rounded-full bg-background p-0.5 text-muted-foreground shadow hover:text-destructive disabled:opacity-50"
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );
