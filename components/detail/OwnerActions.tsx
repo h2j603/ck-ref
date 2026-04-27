@@ -39,9 +39,20 @@ export function OwnerActions({
       setBusy(false);
       return;
     }
-    const { error: dbErr } = await supabase.from("refs").delete().eq("id", refId);
+    const { data, error: dbErr } = await supabase
+      .from("refs")
+      .delete()
+      .eq("id", refId)
+      .select("id");
     if (dbErr) {
       setError(dbErr.message);
+      setBusy(false);
+      return;
+    }
+    if (!data || data.length === 0) {
+      setError(
+        "삭제되지 않았어요. RLS 정책이 anon에 DELETE를 허용하는지 확인해주세요.",
+      );
       setBusy(false);
       return;
     }
