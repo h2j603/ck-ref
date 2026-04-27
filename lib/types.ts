@@ -157,3 +157,26 @@ export type Board = {
   created_at: string;
   created_by: string | null;
 };
+
+export const NOTIFICATION_KINDS = [
+  "note",
+  "reply",
+  "annotation",
+  "rating",
+  "ref_upload",
+  "project_update",
+] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+export type Notification = {
+  id: string;
+  recipient: string;
+  actor: string | null;
+  kind: NotificationKind;
+  target_type: string;
+  target_id: string;
+  body: string | null;
+  link: string;
+  read_at: string | null;
+  created_at: string;
+};

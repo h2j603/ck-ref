@@ -58,6 +58,14 @@ type Built = {
   kind: EventKind;
   actorKey: string | null;
   description: string;
+  // The in-app permalink for this event. The Discord embed already encodes
+  // it inside `description`, but we keep it separately so the notifications
+  // fanout can use it as the click-through target. Must be a path starting
+  // with "/" (no host, no ?d= token — those are Discord-only).
+  link: string;
+  // Plaintext snippet of the body (note text, annotation text, etc) used
+  // for the notifications fanout. Discord uses the markdown description.
+  body?: string;
   // imageUrl renders full-width at the bottom of the embed (used when the
   // upload itself is the message). thumbnailUrl renders small at the top-
   // right (used to give context for notes/annotations/ratings).
@@ -176,7 +184,43 @@ export async function POST(req: Request) {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+
+  // Fan out to in-app notifications: one row per non-actor profile. Failures
+  // here don't block the Discord delivery — the channel feed is the source of
+  // truth, the bell is a convenience.
+  await fanoutNotifications(built, profiles, payload).catch((err) => {
+    console.error("notifications fanout failed", err);
+  });
+
   return NextResponse.json({ ok: true, sent: true, table: payload.table });
+}
+
+async function fanoutNotifications(
+  built: Built,
+  profiles: Profile[],
+  payload: SupabaseHookPayload,
+): Promise<void> {
+  if (profiles.length === 0) return;
+  const targetId = payload.record?.id;
+  if (typeof targetId !== "string") return;
+  const recipients = profiles
+    .map((p) => p.key)
+    .filter((k) => k !== built.actorKey);
+  if (recipients.length === 0) return;
+  const supabase = await createClient();
+  const rows = recipients.map((recipient) => ({
+    recipient,
+    actor: built.actorKey,
+    kind: built.kind,
+    target_type: payload.table,
+    target_id: targetId,
+    body: built.body ?? null,
+    link: built.link,
+  }));
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) {
+    console.error("notifications insert failed", error.message);
+  }
 }
 
 function siteUrl(): string {
@@ -250,6 +294,7 @@ async function buildNote(
   let targetLabel = "ref";
   let targetTitle = "untitled";
   let targetUrl = site;
+  let targetPath = "/";
   let thumbnailPath: string | null = null;
 
   if (record.ref_id) {
@@ -262,7 +307,8 @@ async function buildNote(
     const r = data as { id: string; title: string | null; image_path: string | null };
     targetLabel = "ref";
     targetTitle = r.title ?? "untitled";
-    targetUrl = appendDiscordTrust(`${site}/ref/${r.id}#note-${noteId}`);
+    targetPath = `/ref/${r.id}#note-${noteId}`;
+    targetUrl = appendDiscordTrust(`${site}${targetPath}`);
     thumbnailPath = r.image_path;
   } else if (record.project_id) {
     // Projects don't have their own image. Use the latest project_update's
@@ -283,7 +329,8 @@ async function buildNote(
     const p = data as Row;
     targetLabel = "작업";
     targetTitle = p.title;
-    targetUrl = appendDiscordTrust(`${site}/wip/${p.id}#note-${noteId}`);
+    targetPath = `/wip/${p.id}#note-${noteId}`;
+    targetUrl = appendDiscordTrust(`${site}${targetPath}`);
     thumbnailPath = p.project_updates?.[0]?.image_path ?? null;
   } else if (record.project_update_id) {
     const { data } = await supabase
@@ -301,9 +348,8 @@ async function buildNote(
     const proj = Array.isArray(r.projects) ? r.projects[0] : r.projects;
     targetLabel = "업데이트";
     targetTitle = proj?.title ?? "untitled";
-    targetUrl = appendDiscordTrust(
-      `${site}/wip/${r.project_id}#update-${record.project_update_id as string}`,
-    );
+    targetPath = `/wip/${r.project_id}#update-${record.project_update_id as string}`;
+    targetUrl = appendDiscordTrust(`${site}${targetPath}`);
     thumbnailPath = r.image_path;
   } else {
     return null;
@@ -318,6 +364,8 @@ async function buildNote(
     description:
       `**${authorName}**님이 ${targetLabel}에 ${verb} — [${targetTitle}](${targetUrl})` +
       (body ? `\n> ${body.replace(/\n/g, "\n> ")}` : ""),
+    link: targetPath,
+    body: body ?? undefined,
     thumbnailUrl: thumbnailPath ? publicImageUrl(thumbnailPath) : undefined,
   };
 }
@@ -333,6 +381,7 @@ async function buildAnnotation(
   let label = "ref";
   let title = "untitled";
   let url = site;
+  let path = "/";
   let thumbnailPath: string | null = null;
 
   if (record.ref_id) {
@@ -345,7 +394,8 @@ async function buildAnnotation(
     const r = data as { id: string; title: string | null; image_path: string | null };
     label = "ref";
     title = r.title ?? "untitled";
-    url = appendDiscordTrust(`${site}/ref/${r.id}#ann-${annId}`);
+    path = `/ref/${r.id}#ann-${annId}`;
+    url = appendDiscordTrust(`${site}${path}`);
     thumbnailPath = r.image_path;
   } else if (record.project_update_id) {
     const { data } = await supabase
@@ -364,7 +414,8 @@ async function buildAnnotation(
     const proj = Array.isArray(r.projects) ? r.projects[0] : r.projects;
     label = "업데이트";
     title = proj?.title ?? "untitled";
-    url = appendDiscordTrust(`${site}/wip/${r.project_id}#ann-${annId}`);
+    path = `/wip/${r.project_id}#ann-${annId}`;
+    url = appendDiscordTrust(`${site}${path}`);
     thumbnailPath = r.image_path;
   } else {
     return null;
@@ -375,6 +426,8 @@ async function buildAnnotation(
     actorKey: author,
     description:
       `**${label}에 주석** — [${title}](${url})` + (body ? `\n> ${body}` : ""),
+    link: path,
+    body: body ?? undefined,
     thumbnailUrl: thumbnailPath ? publicImageUrl(thumbnailPath) : undefined,
   };
 }
@@ -394,13 +447,16 @@ async function buildRating(
   if (!data) return null;
   const r = data as { id: string; title: string | null; image_path: string | null };
   const title = r.title ?? "untitled";
-  const url = appendDiscordTrust(`${site}/ref/${r.id}`);
+  const path = `/ref/${r.id}`;
+  const url = appendDiscordTrust(`${site}${path}`);
   const filled = "★".repeat(stars);
   const empty = "☆".repeat(Math.max(0, 5 - stars));
   return {
     kind: "rating",
     actorKey: userKey,
     description: `**별점 ${filled}${empty}** — [${title}](${url})`,
+    link: path,
+    body: `${filled}${empty}`,
     thumbnailUrl: r.image_path ? publicImageUrl(r.image_path) : undefined,
   };
 }
@@ -411,11 +467,14 @@ function buildRefUpload(
 ): Built {
   const id = String(record.id);
   const title = (record.title as string | null) ?? "untitled";
-  const url = appendDiscordTrust(`${site}/ref/${id}`);
+  const path = `/ref/${id}`;
+  const url = appendDiscordTrust(`${site}${path}`);
   return {
     kind: "ref_upload",
     actorKey: String(record.created_by ?? "") || null,
     description: `**새 ref 업로드** — [${title}](${url})`,
+    link: path,
+    body: title,
     imageUrl: publicImageUrl(record.image_path as string),
   };
 }
@@ -433,13 +492,16 @@ async function buildProjectUpdate(
   if (!data) return null;
   const p = data as { id: string; title: string };
   const updateId = String(record.id);
-  const url = appendDiscordTrust(`${site}/wip/${p.id}#update-${updateId}`);
+  const path = `/wip/${p.id}#update-${updateId}`;
+  const url = appendDiscordTrust(`${site}${path}`);
   const body = snippet(record.body as string);
   return {
     kind: "project_update",
     actorKey: String(record.created_by ?? "") || null,
     description:
       `**작업 업데이트** — [${p.title}](${url})` + (body ? `\n> ${body}` : ""),
+    link: path,
+    body: body ?? undefined,
     imageUrl: publicImageUrl(record.image_path as string),
   };
 }
