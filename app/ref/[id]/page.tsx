@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AddToBoardDialog } from "@/components/board/AddToBoardDialog";
+import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
 import { NoteList } from "@/components/detail/NoteList";
 import { OwnerActions } from "@/components/detail/OwnerActions";
 import { RatingControl } from "@/components/detail/RatingControl";
@@ -13,7 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   fetchLinkedRefs,
   fetchNotes,
+  fetchProfiles,
   fetchRef,
+  fetchRefAnnotations,
   fetchRefRatings,
   fetchSimilarRefs,
 } from "@/lib/queries";
@@ -28,12 +30,15 @@ export default async function RefDetailPage({
   const ref = await fetchRef(id).catch(() => null);
   if (!ref) notFound();
 
-  const [notes, linked, ratings, similar] = await Promise.all([
-    fetchNotes(id).catch(() => []),
-    fetchLinkedRefs(id).catch(() => []),
-    fetchRefRatings(id).catch(() => []),
-    fetchSimilarRefs(id).catch(() => []),
-  ]);
+  const [notes, linked, ratings, similar, annotations, profiles] =
+    await Promise.all([
+      fetchNotes(id).catch(() => []),
+      fetchLinkedRefs(id).catch(() => []),
+      fetchRefRatings(id).catch(() => []),
+      fetchSimilarRefs(id).catch(() => []),
+      fetchRefAnnotations(id).catch(() => []),
+      fetchProfiles().catch(() => []),
+    ]);
   const url = publicImageUrl(ref.image_path);
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
@@ -41,16 +46,16 @@ export default async function RefDetailPage({
   return (
     <div className="mx-auto grid max-w-[1400px] gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex flex-col gap-4">
-        <div className="relative w-full bg-muted" style={{ aspectRatio: `${w} / ${h}` }}>
-          <Image
-            src={url}
-            alt={ref.title ?? "untitled"}
-            fill
-            sizes="(max-width: 1024px) 100vw, 70vw"
-            className="object-contain"
-            priority
-          />
-        </div>
+        <AnnotationLayer
+          refId={ref.id}
+          imagePath={ref.image_path}
+          imageUrl={url}
+          alt={ref.title ?? "untitled"}
+          width={w}
+          height={h}
+          initial={annotations}
+          profiles={profiles}
+        />
       </div>
 
       <aside className="flex flex-col gap-8 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2">
