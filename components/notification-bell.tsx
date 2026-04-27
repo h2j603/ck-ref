@@ -189,6 +189,15 @@ export function NotificationBell() {
             ))
           )}
         </ul>
+        <div className="border-t border-border/60 px-3 py-2 text-center">
+          <Link
+            href="/activity"
+            onClick={() => setOpen(false)}
+            className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+          >
+            전체 알림 보기 →
+          </Link>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -18,9 +18,9 @@ export function HeaderProfile({ profiles }: { profiles: Profile[] }) {
     : null;
   return (
     <Link
-      href={profile ? "/activity" : "/gate"}
+      href={profile ? `/u/${encodeURIComponent(profile.key)}` : "/gate"}
       className="inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
-      aria-label={profile ? `@${profile.display_name} activity` : "sign in"}
+      aria-label={profile ? `@${profile.display_name}` : "sign in"}
     >
       <span
         aria-hidden

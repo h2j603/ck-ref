@@ -11,6 +11,7 @@ import {
   type Board,
   type Designer,
   type Note,
+  type Notification,
   type Project,
   type ProjectStatus,
   type ProjectUpdate,
@@ -1137,4 +1138,24 @@ export async function fetchAllTags(): Promise<string[]> {
     }
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+// Notifications archive — full feed of what the bell shows. Cursor-based
+// pagination on created_at descending; pass `before` to load older rows.
+export async function fetchNotificationsFor(
+  recipient: string,
+  opts: { limit?: number; before?: string } = {},
+): Promise<Notification[]> {
+  const supabase = await createClient();
+  const limit = opts.limit ?? 60;
+  let q = supabase
+    .from("notifications")
+    .select("*")
+    .eq("recipient", recipient)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (opts.before) q = q.lt("created_at", opts.before);
+  const { data, error } = await q;
+  if (error) return [];
+  return (data ?? []) as Notification[];
 }
