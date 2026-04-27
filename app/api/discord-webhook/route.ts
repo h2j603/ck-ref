@@ -22,15 +22,29 @@ type SupabaseHookPayload = {
 const SNIPPET_LIMIT = 280;
 
 export async function POST(req: Request) {
-  const secret = process.env.SUPABASE_WEBHOOK_SECRET;
-  if (!secret) {
+  const rawSecret = process.env.SUPABASE_WEBHOOK_SECRET;
+  if (!rawSecret) {
     return NextResponse.json(
       { error: "SUPABASE_WEBHOOK_SECRET is not configured." },
       { status: 500 },
     );
   }
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  // Be tolerant of common configuration mistakes on either side: stray
+  // whitespace, accidental "Bearer " prefix on the env var, or a Supabase
+  // header that omits the "Bearer " prefix entirely.
+  const expected = rawSecret.trim().replace(/^Bearer\s+/i, "");
+  const provided = (req.headers.get("authorization") ?? "")
+    .trim()
+    .replace(/^Bearer\s+/i, "");
+  if (!provided || provided !== expected) {
+    console.error(
+      "discord webhook auth mismatch",
+      JSON.stringify({
+        hasHeader: req.headers.has("authorization"),
+        providedLen: provided.length,
+        expectedLen: expected.length,
+      }),
+    );
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const discordUrl = process.env.DISCORD_WEBHOOK_URL;
