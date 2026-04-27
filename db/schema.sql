@@ -445,7 +445,7 @@ create table if not exists notifications (
   actor       text,
   kind        text not null check (kind in (
     'note', 'reply', 'annotation', 'rating', 'ref_upload', 'project_update',
-    'ref_link', 'update_ref_link'
+    'ref_link', 'update_ref_link', 'event_create'
   )),
   target_type text not null,
   target_id   uuid not null,
@@ -461,7 +461,7 @@ alter table notifications drop constraint if exists notifications_kind_check;
 alter table notifications add constraint notifications_kind_check
   check (kind in (
     'note', 'reply', 'annotation', 'rating', 'ref_upload', 'project_update',
-    'ref_link', 'update_ref_link'
+    'ref_link', 'update_ref_link', 'event_create'
   ));
 
 create index if not exists notifications_recipient_idx

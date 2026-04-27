@@ -187,6 +187,7 @@ export const NOTIFICATION_KINDS = [
   "project_update",
   "ref_link",
   "update_ref_link",
+  "event_create",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
