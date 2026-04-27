@@ -22,7 +22,8 @@ const ALL = "__all__";
 const SORT_LABELS: Record<RefSort, string> = {
   latest: "최신",
   rating: "별점",
-  year: "작업연도",
+  year_desc: "작업연도 ↓",
+  year_asc: "작업연도 ↑",
 };
 
 export function FilterBar({ allTags }: { allTags: string[] }) {
