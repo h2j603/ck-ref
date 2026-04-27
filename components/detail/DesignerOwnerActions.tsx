@@ -34,12 +34,20 @@ export function DesignerOwnerActions({
       return;
     setError(null);
     setBusy(true);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("designers")
       .delete()
-      .eq("id", designerId);
+      .eq("id", designerId)
+      .select("id");
     if (error) {
       setError(error.message);
+      setBusy(false);
+      return;
+    }
+    if (!data || data.length === 0) {
+      setError(
+        "삭제되지 않았어요. RLS 정책이 anon에 DELETE를 허용하는지 확인해주세요.",
+      );
       setBusy(false);
       return;
     }

@@ -27,9 +27,21 @@ export function BoardOwnerActions({
     if (!window.confirm("이 보드를 삭제할까요? ref들은 그대로 남고 묶음만 사라져요.")) return;
     setError(null);
     setBusy(true);
-    const { error } = await supabase.from("boards").delete().eq("id", boardId);
+    // .select() so we can tell zero-row deletes (RLS) apart from errors.
+    const { data, error } = await supabase
+      .from("boards")
+      .delete()
+      .eq("id", boardId)
+      .select("id");
     if (error) {
       setError(error.message);
+      setBusy(false);
+      return;
+    }
+    if (!data || data.length === 0) {
+      setError(
+        "삭제되지 않았어요. RLS 정책이 anon에 DELETE를 허용하는지 확인해주세요.",
+      );
       setBusy(false);
       return;
     }
