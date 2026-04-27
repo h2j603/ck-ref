@@ -205,11 +205,15 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
       }
       return b.created_at.localeCompare(a.created_at);
     });
-  } else if (filter.sort === "popular") {
+  } else if (filter.sort === "year") {
+    // Newest creation year first; refs without a year sink to the bottom
+    // and tie-break on created_at desc so the order is stable.
     rows.sort((a, b) => {
-      if (a.rating_count !== b.rating_count) {
-        return b.rating_count - a.rating_count;
-      }
+      const ay = a.year;
+      const by = b.year;
+      if (ay !== null && by === null) return -1;
+      if (ay === null && by !== null) return 1;
+      if (ay !== null && by !== null && ay !== by) return by - ay;
       return b.created_at.localeCompare(a.created_at);
     });
   }

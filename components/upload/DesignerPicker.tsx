@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  OriginPicker,
+  originToString,
+  type OriginValue,
+} from "@/components/origin-picker";
 import { createClient } from "@/lib/supabase/client";
 import { getStoredNickname } from "@/lib/nickname";
 import { slugify } from "@/lib/slug";
@@ -34,7 +39,10 @@ export function DesignerPicker({
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newOrigin, setNewOrigin] = useState("");
+  const [newOrigin, setNewOrigin] = useState<OriginValue>({
+    code: null,
+    freeText: "",
+  });
   const [newWebsite, setNewWebsite] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -90,7 +98,7 @@ export function DesignerPicker({
         .insert({
           slug,
           name,
-          origin: newOrigin.trim() || null,
+          origin: originToString(newOrigin),
           website: newWebsite.trim() || null,
           created_by: nickname,
         })
@@ -101,7 +109,7 @@ export function DesignerPicker({
       setAll((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       pick(created);
       setNewName("");
-      setNewOrigin("");
+      setNewOrigin({ code: null, freeText: "" });
       setNewWebsite("");
       setOpen(false);
     } catch (err) {
@@ -158,13 +166,8 @@ export function DesignerPicker({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="d-origin">출신/국가</Label>
-                <Input
-                  id="d-origin"
-                  value={newOrigin}
-                  onChange={(e) => setNewOrigin(e.target.value)}
-                  placeholder="예: 서울, KR"
-                />
+                <Label>출신/국가</Label>
+                <OriginPicker value={newOrigin} onChange={setNewOrigin} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="d-web">웹사이트</Label>
