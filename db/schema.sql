@@ -264,6 +264,22 @@ alter table ref_annotations add constraint ref_annotations_target_check check (
 create index if not exists ref_annotations_ref_idx    on ref_annotations (ref_id, created_at desc);
 create index if not exists ref_annotations_update_idx on ref_annotations (project_update_id, created_at desc);
 
+-- REF EXTRA IMAGES ----------------------------------------------------------
+-- A ref can be a series. The first image lives on `refs` itself (the cover);
+-- extra images live here in display order. Empty for single-image refs.
+
+create table if not exists ref_images (
+  id           uuid primary key default gen_random_uuid(),
+  ref_id       uuid not null references refs(id) on delete cascade,
+  image_path   text not null,
+  image_width  int,
+  image_height int,
+  position     int not null default 0,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists ref_images_ref_idx on ref_images (ref_id, position);
+
 -- REF RATINGS ---------------------------------------------------------------
 -- Each user (profile key) can rate a ref 1-5 once. Re-rating is an upsert
 -- on the composite key; un-rating is just a delete of that row. Average +
@@ -310,6 +326,7 @@ alter table board_items     enable row level security;
 alter table designers       enable row level security;
 alter table refs          enable row level security;
 alter table ref_designers   enable row level security;
+alter table ref_images      enable row level security;
 alter table ref_ratings     enable row level security;
 alter table ref_annotations enable row level security;
 alter table ref_links       enable row level security;
@@ -349,6 +366,10 @@ create policy "anon all" on refs
 
 drop policy if exists "anon all" on ref_designers;
 create policy "anon all" on ref_designers
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on ref_images;
+create policy "anon all" on ref_images
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on ref_ratings;

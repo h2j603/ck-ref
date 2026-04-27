@@ -10,12 +10,15 @@ import { RefLinks } from "@/components/detail/RefLinks";
 import { SimilarRefs } from "@/components/detail/SimilarRefs";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
+
 import {
   fetchLinkedRefs,
   fetchNotes,
   fetchProfiles,
   fetchRef,
   fetchRefAnnotations,
+  fetchRefExtraImages,
   fetchRefRatings,
   fetchSimilarRefs,
 } from "@/lib/queries";
@@ -30,7 +33,7 @@ export default async function RefDetailPage({
   const ref = await fetchRef(id).catch(() => null);
   if (!ref) notFound();
 
-  const [notes, linked, ratings, similar, annotations, profiles] =
+  const [notes, linked, ratings, similar, annotations, profiles, extras] =
     await Promise.all([
       fetchNotes(id).catch(() => []),
       fetchLinkedRefs(id).catch(() => []),
@@ -38,6 +41,7 @@ export default async function RefDetailPage({
       fetchSimilarRefs(id).catch(() => []),
       fetchRefAnnotations(id).catch(() => []),
       fetchProfiles().catch(() => []),
+      fetchRefExtraImages(id).catch(() => []),
     ]);
   const url = publicImageUrl(ref.image_path);
   const w = ref.image_width ?? 4;
@@ -55,6 +59,29 @@ export default async function RefDetailPage({
           initial={annotations}
           profiles={profiles}
         />
+        {extras.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {extras.map((img, i) => {
+              const ew = img.image_width ?? 4;
+              const eh = img.image_height ?? 5;
+              return (
+                <div
+                  key={img.id}
+                  className="relative w-full bg-muted"
+                  style={{ aspectRatio: `${ew} / ${eh}` }}
+                >
+                  <Image
+                    src={publicImageUrl(img.image_path)}
+                    alt={`${ref.title ?? "untitled"} ${i + 2}`}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 70vw"
+                    className="object-contain"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       <aside className="flex flex-col gap-8 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2">

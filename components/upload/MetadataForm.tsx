@@ -169,15 +169,23 @@ export function MetadataForm() {
 
     setSubmitting(true);
     const tags = parseTags(tagsText);
-    const baseTitle = title.trim() || null;
+    const refTitle = title.trim() || null;
     const yearNum = year.trim() ? Number(year.trim()) : null;
-    const numbered = files.length > 1;
 
     try {
+      // Upload all files first; only after they're all in storage do we
+      // insert one ref + extras so we don't half-create on a mid-stream
+      // failure.
+      const uploaded: {
+        path: string;
+        width: number | null;
+        height: number | null;
+        colorHex: string | null;
+        colorHue: number | null;
+      }[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setProgress(`업로드 중 ${i + 1}/${files.length} — ${f.file.name}`);
-
         const ext = fileExtension(f.file);
         const path = `${new Date().toISOString().slice(0, 10)}/${randomId()}.${ext}`;
         const { error: uploadErr } = await supabase.storage
@@ -188,42 +196,64 @@ export function MetadataForm() {
             contentType: f.file.type || undefined,
           });
         if (uploadErr) throw uploadErr;
+        uploaded.push({
+          path,
+          width: f.width ?? null,
+          height: f.height ?? null,
+          colorHex: f.colorHex ?? null,
+          colorHue: f.colorHue ?? null,
+        });
+      }
 
-        const insertTitle = numbered && baseTitle
-          ? `${baseTitle} (${i + 1})`
-          : baseTitle;
+      // Cover = first file. The ref carries its dimensions and dominant
+      // color so existing index/filter logic keeps working unchanged.
+      const cover = uploaded[0];
+      setProgress("ref 등록 중…");
+      const { data: refRow, error: insertErr } = await supabase
+        .from("refs")
+        .insert({
+          title: refTitle,
+          year: yearNum,
+          source_url: sourceUrl.trim() || null,
+          image_path: cover.path,
+          image_width: cover.width,
+          image_height: cover.height,
+          color_hex: cover.colorHex,
+          color_hue: cover.colorHue,
+          genre: genre === NONE ? null : genre,
+          medium: medium === NONE ? null : medium,
+          languages,
+          tags,
+          created_by: nickname,
+        })
+        .select("id")
+        .single();
+      if (insertErr) throw insertErr;
+      const refId = (refRow as { id: string }).id;
 
-        const { data: refRow, error: insertErr } = await supabase
-          .from("refs")
-          .insert({
-            title: insertTitle,
-            year: yearNum,
-            source_url: sourceUrl.trim() || null,
-            image_path: path,
-            image_width: f.width ?? null,
-            image_height: f.height ?? null,
-            color_hex: f.colorHex ?? null,
-            color_hue: f.colorHue ?? null,
-            genre: genre === NONE ? null : genre,
-            medium: medium === NONE ? null : medium,
-            languages,
-            tags,
-            created_by: nickname,
-          })
-          .select("id")
-          .single();
-        if (insertErr) throw insertErr;
+      if (uploaded.length > 1) {
+        const extras = uploaded.slice(1).map((u, i) => ({
+          ref_id: refId,
+          image_path: u.path,
+          image_width: u.width,
+          image_height: u.height,
+          position: i,
+        }));
+        const { error: extrasErr } = await supabase
+          .from("ref_images")
+          .insert(extras);
+        if (extrasErr) throw extrasErr;
+      }
 
-        if (designers.length > 0) {
-          const rows = designers.map((d) => ({
-            ref_id: (refRow as { id: string }).id,
-            designer_id: d.id,
-          }));
-          const { error: linkErr } = await supabase
-            .from("ref_designers")
-            .insert(rows);
-          if (linkErr) throw linkErr;
-        }
+      if (designers.length > 0) {
+        const rows = designers.map((d) => ({
+          ref_id: refId,
+          designer_id: d.id,
+        }));
+        const { error: linkErr } = await supabase
+          .from("ref_designers")
+          .insert(rows);
+        if (linkErr) throw linkErr;
       }
 
       setProgress("완료. 인덱스로 이동합니다.");
