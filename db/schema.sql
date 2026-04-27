@@ -413,16 +413,22 @@ create index if not exists ref_links_b_idx on ref_links (b_id);
 -- client treats starts_at as the local-midnight of the day.
 
 create table if not exists events (
-  id          uuid primary key default gen_random_uuid(),
-  project_id  uuid references projects(id) on delete cascade,
-  title       text not null,
-  body        text,
-  starts_at   timestamptz not null,
-  ends_at     timestamptz,
-  all_day     boolean not null default false,
-  created_at  timestamptz not null default now(),
-  created_by  text
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid references projects(id) on delete cascade,
+  title             text not null,
+  body              text,
+  starts_at         timestamptz not null,
+  ends_at           timestamptz,
+  all_day           boolean not null default false,
+  notified_morning  boolean not null default false,
+  notified_hour     boolean not null default false,
+  created_at        timestamptz not null default now(),
+  created_by        text
 );
+
+-- Existing deployments — idempotent column adds for the reminder flags.
+alter table events add column if not exists notified_morning boolean not null default false;
+alter table events add column if not exists notified_hour    boolean not null default false;
 
 create index if not exists events_starts_idx  on events (starts_at);
 create index if not exists events_project_idx on events (project_id);
