@@ -47,8 +47,7 @@ export default async function RefDetailPage({
     <div className="mx-auto grid max-w-[1400px] gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex flex-col gap-4">
         <AnnotationLayer
-          refId={ref.id}
-          imagePath={ref.image_path}
+          target={{ kind: "ref", id: ref.id }}
           imageUrl={url}
           alt={ref.title ?? "untitled"}
           width={w}

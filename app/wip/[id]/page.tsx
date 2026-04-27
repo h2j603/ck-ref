@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/wip/StatusBadge";
 import { UpdateCard } from "@/components/wip/UpdateCard";
 import {
   fetchNotesFor,
+  fetchProfiles,
   fetchProject,
   fetchProjectInspirationRefs,
   fetchProjectUpdates,
@@ -25,10 +26,11 @@ export default async function WipDetailPage({
   const project = await fetchProject(id).catch(() => null);
   if (!project) notFound();
 
-  const [updates, projectNotes, inspiration] = await Promise.all([
+  const [updates, projectNotes, inspiration, profiles] = await Promise.all([
     fetchProjectUpdates(id).catch(() => []),
     fetchNotesFor({ kind: "project", id }).catch(() => []),
     fetchProjectInspirationRefs(id).catch(() => []),
+    fetchProfiles().catch(() => []),
   ]);
 
   return (
@@ -103,7 +105,7 @@ export default async function WipDetailPage({
         ) : (
           <div className="flex flex-col gap-6">
             {updates.map((u) => (
-              <UpdateCard key={u.id} update={u} />
+              <UpdateCard key={u.id} update={u} profiles={profiles} />
             ))}
           </div>
         )}
