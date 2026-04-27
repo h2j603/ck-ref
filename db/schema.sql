@@ -405,6 +405,28 @@ create table if not exists ref_links (
 
 create index if not exists ref_links_b_idx on ref_links (b_id);
 
+-- CALENDAR EVENTS -----------------------------------------------------------
+-- Lightweight events for the team calendar. Each event optionally pins to a
+-- WIP project so the calendar can color-code by project. project_id is
+-- nullable for "personal" events; cascade on delete so removing a project
+-- clears its events. Times are stored as timestamptz; for all_day events the
+-- client treats starts_at as the local-midnight of the day.
+
+create table if not exists events (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid references projects(id) on delete cascade,
+  title       text not null,
+  body        text,
+  starts_at   timestamptz not null,
+  ends_at     timestamptz,
+  all_day     boolean not null default false,
+  created_at  timestamptz not null default now(),
+  created_by  text
+);
+
+create index if not exists events_starts_idx  on events (starts_at);
+create index if not exists events_project_idx on events (project_id);
+
 -- IN-APP NOTIFICATIONS ------------------------------------------------------
 -- One row per (recipient, event). The Discord webhook handler is the single
 -- source — when an event fires, it posts to Discord AND inserts a row here
@@ -463,6 +485,7 @@ alter table ref_annotations enable row level security;
 alter table ref_links       enable row level security;
 alter table notes         enable row level security;
 alter table notifications enable row level security;
+alter table events        enable row level security;
 
 drop policy if exists "anon all" on profiles;
 create policy "anon all" on profiles
@@ -526,6 +549,10 @@ create policy "anon all" on notes
 
 drop policy if exists "anon all" on notifications;
 create policy "anon all" on notifications
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on events;
+create policy "anon all" on events
   for all to anon, authenticated using (true) with check (true);
 
 -- STORAGE BUCKET ------------------------------------------------------------

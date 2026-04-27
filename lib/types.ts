@@ -125,6 +125,18 @@ export type ProjectUpdate = {
   created_by: string | null;
 };
 
+export type CalendarEvent = {
+  id: string;
+  project_id: string | null;
+  title: string;
+  body: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  all_day: boolean;
+  created_at: string;
+  created_by: string | null;
+};
+
 // What a Note is about. Replies use the same target as their parent.
 export type NoteTarget =
   | { kind: "ref"; id: string }
