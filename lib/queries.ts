@@ -519,6 +519,183 @@ const REF_COLUMNS_FOR_BOARD = `
   ref_designers ( designer:designers(id, slug, name) )
 `;
 
+// ACTIVITY FEED -------------------------------------------------------------
+// Pulls a window of recent activity from each source in parallel, merges by
+// timestamp, slices the top N. Each source is wrapped so a missing table /
+// query error empties just that lane instead of taking the whole feed down.
+
+export type ActivityItem = {
+  kind: "ref" | "note" | "reply" | "rating" | "board" | "annotation";
+  at: string;
+  actor: string;
+  ref?: { id: string; title: string | null; image_path: string };
+  board?: { id: string; title: string };
+  stars?: number;
+  bodySnippet?: string;
+};
+
+type EmbeddedRef = {
+  id: string;
+  title: string | null;
+  image_path: string;
+};
+
+function pickRef(value: EmbeddedRef | EmbeddedRef[] | null | undefined): EmbeddedRef | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+export async function fetchActivity(limit = 50): Promise<ActivityItem[]> {
+  const supabase = await createClient();
+  const fetchSafe = async <T>(
+    promise: PromiseLike<{ data: T[] | null; error: unknown }>,
+  ): Promise<T[]> => {
+    try {
+      const { data } = await promise;
+      return data ?? [];
+    } catch {
+      return [];
+    }
+  };
+
+  const [refRows, noteRows, ratingRows, boardRows, annotationRows] =
+    await Promise.all([
+      fetchSafe<{
+        id: string;
+        title: string | null;
+        image_path: string;
+        created_by: string | null;
+        created_at: string;
+      }>(
+        supabase
+          .from("refs")
+          .select("id, title, image_path, created_by, created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit),
+      ),
+      fetchSafe<{
+        id: string;
+        ref_id: string;
+        parent_id: string | null;
+        body: string | null;
+        pros: string | null;
+        cons: string | null;
+        author: string;
+        created_at: string;
+        refs: EmbeddedRef | EmbeddedRef[] | null;
+      }>(
+        supabase
+          .from("notes")
+          .select(
+            "id, ref_id, parent_id, body, pros, cons, author, created_at, refs(id, title, image_path)",
+          )
+          .order("created_at", { ascending: false })
+          .limit(limit),
+      ),
+      fetchSafe<{
+        ref_id: string;
+        user_key: string;
+        stars: number;
+        rated_at: string;
+        refs: EmbeddedRef | EmbeddedRef[] | null;
+      }>(
+        supabase
+          .from("ref_ratings")
+          .select("ref_id, user_key, stars, rated_at, refs(id, title, image_path)")
+          .order("rated_at", { ascending: false })
+          .limit(limit),
+      ),
+      fetchSafe<{
+        id: string;
+        title: string;
+        created_by: string | null;
+        created_at: string;
+      }>(
+        supabase
+          .from("boards")
+          .select("id, title, created_by, created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit),
+      ),
+      fetchSafe<{
+        ref_id: string;
+        body: string;
+        author: string;
+        created_at: string;
+        refs: EmbeddedRef | EmbeddedRef[] | null;
+      }>(
+        supabase
+          .from("ref_annotations")
+          .select("ref_id, body, author, created_at, refs(id, title, image_path)")
+          .order("created_at", { ascending: false })
+          .limit(limit),
+      ),
+    ]);
+
+  const items: ActivityItem[] = [];
+
+  for (const r of refRows) {
+    if (!r.created_by) continue;
+    items.push({
+      kind: "ref",
+      at: r.created_at,
+      actor: r.created_by,
+      ref: { id: r.id, title: r.title, image_path: r.image_path },
+    });
+  }
+
+  for (const n of noteRows) {
+    const ref = pickRef(n.refs);
+    if (!ref) continue;
+    const snippet = (n.body ?? n.pros ?? n.cons ?? "").slice(0, 80);
+    items.push({
+      kind: n.parent_id ? "reply" : "note",
+      at: n.created_at,
+      actor: n.author,
+      ref,
+      bodySnippet: snippet,
+    });
+  }
+
+  for (const r of ratingRows) {
+    const ref = pickRef(r.refs);
+    if (!ref) continue;
+    items.push({
+      kind: "rating",
+      at: r.rated_at,
+      actor: r.user_key,
+      ref,
+      stars: r.stars,
+    });
+  }
+
+  for (const b of boardRows) {
+    if (!b.created_by) continue;
+    items.push({
+      kind: "board",
+      at: b.created_at,
+      actor: b.created_by,
+      board: { id: b.id, title: b.title },
+    });
+  }
+
+  for (const a of annotationRows) {
+    const ref = pickRef(a.refs);
+    if (!ref) continue;
+    items.push({
+      kind: "annotation",
+      at: a.created_at,
+      actor: a.author,
+      ref,
+      bodySnippet: (a.body ?? "").slice(0, 80),
+    });
+  }
+
+  return items
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, limit);
+}
+
 export async function fetchAllTags(): Promise<string[]> {
   const supabase = await createClient();
   // Pull tags from refs and dedupe in memory. For larger archives, move this to a view/RPC.
