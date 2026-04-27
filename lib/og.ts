@@ -77,6 +77,21 @@ function resolveAbsolute(maybe: string | null, baseHref: string): string | null 
   }
 }
 
+// Pinterest serves an og:title that's always the boilerplate "Pinterest에서
+// 발견" / "Pin on Pinterest" / "<user> on Pinterest" — the actual content
+// title doesn't survive their JS rendering. Detect that and either fall
+// back to og:description (often the pin's text), or null to make the
+// upload form leave the title blank for the user to type.
+function isPinterestHost(host: string): boolean {
+  return /(?:^|\.)pinterest\.[a-z.]+$/i.test(host);
+}
+
+function looksLikePinterestBoilerplate(title: string): boolean {
+  if (/Pinterest/i.test(title)) return true;
+  if (/(에서\s*발견|핀\s*on\b)/i.test(title)) return true;
+  return false;
+}
+
 export function parseOg(html: string, baseHref: string): OgMeta {
   // Cap the slice we scan so a multi-MB page doesn't blow up regex backtracking.
   const head = html.slice(0, Math.min(html.length, 256 * 1024));
@@ -87,7 +102,7 @@ export function parseOg(html: string, baseHref: string): OgMeta {
       metaContent(head, "twitter:image:src"),
     baseHref,
   );
-  const title =
+  let title =
     metaContent(head, "og:title") ??
     metaContent(head, "twitter:title") ??
     titleTag(head);
@@ -96,6 +111,22 @@ export function parseOg(html: string, baseHref: string): OgMeta {
     metaContent(head, "twitter:description") ??
     metaContent(head, "description");
   const siteName = metaContent(head, "og:site_name");
+
+  let host: string | null = null;
+  try {
+    host = new URL(baseHref).host;
+  } catch {
+    /* baseHref might be malformed — treat as no special handling. */
+  }
+  if (host && isPinterestHost(host) && title && looksLikePinterestBoilerplate(title)) {
+    // Prefer the pin's description if it's substantial; otherwise drop the
+    // title so the user picks one themselves.
+    if (description && description.trim().length >= 4) {
+      title = description.trim();
+    } else {
+      title = null;
+    }
+  }
 
   return { image, title, description, siteName };
 }
