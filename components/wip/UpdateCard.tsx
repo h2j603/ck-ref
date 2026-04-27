@@ -102,6 +102,7 @@ export function UpdateCard({
         <NoteList
           target={{ kind: "project_update", id: update.id }}
           initialNotes={[]}
+          profiles={profiles}
         />
       </div>
     </article>

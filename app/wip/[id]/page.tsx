@@ -90,6 +90,7 @@ export default async function WipDetailPage({
         <NoteList
           target={{ kind: "project", id: project.id }}
           initialNotes={projectNotes}
+          profiles={profiles}
         />
       </section>
 
