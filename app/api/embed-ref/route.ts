@@ -58,20 +58,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, skipped: true, reason: "already_embedded" });
   }
 
-  const vec = await embedImage(publicImageUrl(row.image_path));
-  if (!vec) {
+  const result = await embedImage(publicImageUrl(row.image_path));
+  if (!result.ok) {
     return NextResponse.json({
       ok: true,
       skipped: true,
-      reason: "embed_failed_or_unsupported",
+      reason: result.reason,
     });
   }
   const { error: updErr } = await supabase
     .from("refs")
-    .update({ embedding: vectorLiteral(vec) })
+    .update({ embedding: vectorLiteral(result.embedding) })
     .eq("id", row.id);
   if (updErr) {
     return NextResponse.json({ error: updErr.message }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, dim: vec.length });
+  return NextResponse.json({ ok: true, dim: result.embedding.length });
 }
