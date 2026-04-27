@@ -64,12 +64,31 @@ create index if not exists project_updates_project_idx
 create table if not exists project_refs (
   project_id uuid not null references projects(id) on delete cascade,
   ref_id     uuid not null references refs(id) on delete cascade,
+  reason     text,
   added_at   timestamptz not null default now(),
   added_by   text,
   primary key (project_id, ref_id)
 );
 
+-- Existing deployments: column added later. Idempotent.
+alter table project_refs add column if not exists reason text;
+
 create index if not exists project_refs_ref_idx on project_refs (ref_id);
+
+-- Per-update inspiration. Same shape as project_refs but scoped to one
+-- specific update (image post) instead of the whole project. The two are
+-- independent — a ref can be on the project's overall pool, on a single
+-- update, or both.
+create table if not exists project_update_refs (
+  project_update_id uuid not null references project_updates(id) on delete cascade,
+  ref_id            uuid not null references refs(id) on delete cascade,
+  reason            text,
+  added_at          timestamptz not null default now(),
+  added_by          text,
+  primary key (project_update_id, ref_id)
+);
+
+create index if not exists project_update_refs_ref_idx on project_update_refs (ref_id);
 
 -- BOARDS (moodboards) -------------------------------------------------------
 -- A board is a curated collection of refs. Anyone with a nickname can add or
@@ -321,6 +340,7 @@ alter table profiles        enable row level security;
 alter table projects        enable row level security;
 alter table project_updates enable row level security;
 alter table project_refs    enable row level security;
+alter table project_update_refs enable row level security;
 alter table boards          enable row level security;
 alter table board_items     enable row level security;
 alter table designers       enable row level security;
@@ -346,6 +366,10 @@ create policy "anon all" on project_updates
 
 drop policy if exists "anon all" on project_refs;
 create policy "anon all" on project_refs
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_update_refs;
+create policy "anon all" on project_update_refs
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on boards;

@@ -76,6 +76,7 @@ export default async function WipDetailPage({
           image_path: r.image_path,
           image_width: r.image_width,
           image_height: r.image_height,
+          reason: r.reason,
         }))}
       />
 

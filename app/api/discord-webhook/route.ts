@@ -187,11 +187,11 @@ function siteUrl(): string {
 
 function senderFor(profile: Profile | null) {
   if (!profile) return { username: "CK Ref." };
-  // Suffix the bot label so the message header reads as a feed post, not as
-  // the actual user typing in Discord. 80 char cap is Discord's webhook
-  // username limit; the suffix is 10 chars so leave 70 for the name.
+  // The webhook posts as the actor's "shadow" — distinct from the actual
+  // user typing in Discord, but still attached to their identity. 80 char
+  // cap is Discord's webhook username limit.
   return {
-    username: `${profile.display_name.slice(0, 70)} — CK Ref.`,
+    username: `${profile.display_name.slice(0, 75)}의 그림자`,
     avatar_url: profile.avatar_path
       ? publicImageUrl(profile.avatar_path)
       : undefined,
