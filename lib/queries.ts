@@ -205,15 +205,17 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
       }
       return b.created_at.localeCompare(a.created_at);
     });
-  } else if (filter.sort === "year") {
-    // Newest creation year first; refs without a year sink to the bottom
-    // and tie-break on created_at desc so the order is stable.
+  } else if (filter.sort === "year_desc" || filter.sort === "year_asc") {
+    // Year-based browsing isn't useful for refs that don't have a year on
+    // them — they'd just clump at the bottom in a meaningless order — so
+    // drop them from the result set entirely instead of sinking them.
+    rows = rows.filter((r) => r.year !== null);
+    const dir = filter.sort === "year_asc" ? 1 : -1;
     rows.sort((a, b) => {
-      const ay = a.year;
-      const by = b.year;
-      if (ay !== null && by === null) return -1;
-      if (ay === null && by !== null) return 1;
-      if (ay !== null && by !== null && ay !== by) return by - ay;
+      // Both years are non-null after the filter above.
+      const ay = a.year as number;
+      const by = b.year as number;
+      if (ay !== by) return (by - ay) * dir;
       return b.created_at.localeCompare(a.created_at);
     });
   }

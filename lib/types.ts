@@ -25,7 +25,12 @@ export type Medium = (typeof MEDIUMS)[number];
 export const LANGUAGES = ["ko", "en", "ja", "zh", "etc"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
-export const REF_SORTS = ["latest", "rating", "year"] as const;
+export const REF_SORTS = [
+  "latest",
+  "rating",
+  "year_desc",
+  "year_asc",
+] as const;
 export type RefSort = (typeof REF_SORTS)[number];
 
 export type Designer = {
