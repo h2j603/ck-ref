@@ -13,6 +13,7 @@ type RunResult = {
   failed: number;
   moreLikely?: boolean;
   reason?: string;
+  lastError?: string | null;
 };
 
 export function EmbedAdminClient() {
@@ -56,14 +57,12 @@ export function EmbedAdminClient() {
   }, []);
 
   const appendLog = useCallback((r: RunResult) => {
-    setLog((prev) =>
-      [
-        r.reason
-          ? `skipped: ${r.reason}`
-          : `processed ${r.processed} (ok ${r.succeeded}, fail ${r.failed})${r.moreLikely ? " — more left" : " — done"}`,
-        ...prev,
-      ].slice(0, 12),
-    );
+    const head = r.reason
+      ? `skipped: ${r.reason}`
+      : `processed ${r.processed} (ok ${r.succeeded}, fail ${r.failed})${r.moreLikely ? " — more left" : " — done"}`;
+    const lines = [head];
+    if (r.lastError) lines.push(`  └ ${r.lastError}`);
+    setLog((prev) => [...lines, ...prev].slice(0, 12));
   }, []);
 
   // One round-trip click. Used by the "한 배치 처리" button.

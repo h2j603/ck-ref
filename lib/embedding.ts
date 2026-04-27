@@ -12,9 +12,13 @@ import "server-only";
 //   EMBEDDING_DIM        — expected output length (default: 512)
 
 const DEFAULT_URL =
-  "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/clip-ViT-B-32";
+  "https://api-inference.huggingface.co/models/sentence-transformers/clip-ViT-B-32";
 
 const DEFAULT_DIM = 512;
+
+export type EmbedResult =
+  | { ok: true; embedding: number[] }
+  | { ok: false; reason: string };
 
 function token(): string | null {
   return (
@@ -44,9 +48,9 @@ function flatten(raw: unknown): number[] | null {
   return raw as number[];
 }
 
-export async function embedImage(imageUrl: string): Promise<number[] | null> {
+export async function embedImage(imageUrl: string): Promise<EmbedResult> {
   const tk = token();
-  if (!tk) return null;
+  if (!tk) return { ok: false, reason: "no_token" };
   const url = process.env.EMBEDDING_API_URL || DEFAULT_URL;
 
   // Pull the image bytes ourselves rather than handing the provider a URL —
@@ -54,35 +58,59 @@ export async function embedImage(imageUrl: string): Promise<number[] | null> {
   // hot-link traffic, and this also lets us send the right Content-Type.
   const imgRes = await fetch(imageUrl);
   if (!imgRes.ok) {
-    console.error("embed: failed to fetch image", imgRes.status);
-    return null;
+    return { ok: false, reason: `fetch_image:${imgRes.status}` };
   }
   const buf = Buffer.from(await imgRes.arrayBuffer());
   const contentType = imgRes.headers.get("content-type") || "image/jpeg";
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${tk}`,
-      "Content-Type": contentType,
-    },
-    body: buf,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tk}`,
+        "Content-Type": contentType,
+        // Some HF deployments return 503 with an `estimated_time` while
+        // the model spins up. Asking the client to wait pushes that
+        // burden onto the provider rather than us retrying ourselves.
+        "x-wait-for-model": "true",
+      },
+      body: buf,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `network:${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.error("embed: provider rejected", res.status, body.slice(0, 200));
-    return null;
+    return {
+      ok: false,
+      reason: `provider:${res.status} ${body.slice(0, 200)}`,
+    };
   }
-  const json = (await res.json().catch(() => null)) as unknown;
+  const text = await res.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return { ok: false, reason: `parse:${text.slice(0, 100)}` };
+  }
   const flat = flatten(json);
-  if (!flat) return null;
-  if (flat.length !== expectedDim()) {
-    console.warn(
-      `embed: dimension mismatch — got ${flat.length}, expected ${expectedDim()}`,
-    );
-    return null;
+  if (!flat) {
+    return {
+      ok: false,
+      reason: `shape:${JSON.stringify(json).slice(0, 100)}`,
+    };
   }
-  return flat;
+  if (flat.length !== expectedDim()) {
+    return {
+      ok: false,
+      reason: `dim:got_${flat.length}_expected_${expectedDim()}`,
+    };
+  }
+  return { ok: true, embedding: flat };
 }
 
 // Postgres expects a vector literal like '[0.1,0.2,...]'. Supabase JS lets

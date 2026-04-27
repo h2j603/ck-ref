@@ -64,18 +64,25 @@ export async function POST(request: Request) {
   const rows = (data ?? []) as { id: string; image_path: string }[];
   let succeeded = 0;
   let failed = 0;
+  // Surface the most recent failure reason so the admin UI can show it.
+  // The whole batch usually fails for the same reason (e.g. provider
+  // unreachable, model not deployed) so a single sample is enough to
+  // diagnose; we don't need every row's error.
+  let lastError: string | null = null;
   for (const row of rows) {
-    const vec = await embedImage(publicImageUrl(row.image_path));
-    if (!vec) {
+    const result = await embedImage(publicImageUrl(row.image_path));
+    if (!result.ok) {
       failed += 1;
+      lastError = result.reason;
       continue;
     }
     const { error: updErr } = await supabase
       .from("refs")
-      .update({ embedding: vectorLiteral(vec) })
+      .update({ embedding: vectorLiteral(result.embedding) })
       .eq("id", row.id);
     if (updErr) {
       failed += 1;
+      lastError = `db:${updErr.message}`;
     } else {
       succeeded += 1;
     }
@@ -89,6 +96,7 @@ export async function POST(request: Request) {
     succeeded,
     failed,
     moreLikely: rows.length === BATCH,
+    lastError,
   });
 }
 
