@@ -258,8 +258,10 @@ export function MetadataForm() {
 
       setProgress("완료. 인덱스로 이동합니다.");
       // Full reload so the newly-inserted ref shows up in the index RSC and
-      // we don't fight the router cache.
-      window.location.assign("/");
+      // we don't fight the router cache. The unique query param defeats
+      // iOS Safari's disk cache, which was serving the pre-upload HTML
+      // back to us even though the route is fully dynamic.
+      window.location.replace(`/?u=${Date.now()}`);
     } catch (err) {
       console.error("upload failed", err);
       setError(extractErrorMessage(err));
