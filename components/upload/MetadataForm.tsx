@@ -283,7 +283,14 @@ export function MetadataForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-      <DropZone files={files} onChange={setFiles} />
+      <DropZone
+        files={files}
+        onChange={setFiles}
+        onUrlFetched={({ url, title: ogTitle }) => {
+          setSourceUrl(url);
+          if (ogTitle && !title.trim()) setTitle(ogTitle);
+        }}
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Field label="제목">

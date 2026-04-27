@@ -1,8 +1,10 @@
 "use client";
 
-import { ImageIcon, X } from "lucide-react";
+import { ImageIcon, Link2, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { probeImage } from "@/lib/imageProbe";
 import { cn } from "@/lib/utils";
 
@@ -20,15 +22,29 @@ function fileId(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`;
 }
 
+function extFromMime(mime: string): string {
+  if (mime.includes("jpeg")) return "jpg";
+  if (mime.includes("png")) return "png";
+  if (mime.includes("webp")) return "webp";
+  if (mime.includes("gif")) return "gif";
+  if (mime.includes("avif")) return "avif";
+  return "img";
+}
+
 export function DropZone({
   files,
   onChange,
+  onUrlFetched,
 }: {
   files: UploadFile[];
   onChange: (files: UploadFile[]) => void;
+  onUrlFetched?: (info: { url: string; title?: string }) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlBusy, setUrlBusy] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -65,6 +81,45 @@ export function DropZone({
     const target = files.find((f) => f.id === id);
     if (target) URL.revokeObjectURL(target.previewUrl);
     onChange(files.filter((f) => f.id !== id));
+  }
+
+  async function fetchFromUrl() {
+    setUrlError(null);
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      setUrlError("URL 형식이 올바르지 않아요.");
+      return;
+    }
+    setUrlBusy(true);
+    try {
+      const res = await fetch(`/api/og-thumb?url=${encodeURIComponent(parsed.href)}`);
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        setUrlError(data?.error ?? `썸네일을 가져오지 못했어요 (${res.status})`);
+        return;
+      }
+      const titleRaw = res.headers.get("x-og-title");
+      const title = titleRaw ? decodeURIComponent(titleRaw) : undefined;
+      const blob = await res.blob();
+      const ext = extFromMime(blob.type);
+      const filename = `${parsed.hostname.replace(/[^a-z0-9]+/gi, "-")}.${ext}`;
+      const file = new File([blob], filename, { type: blob.type });
+      await addFiles([file]);
+      onUrlFetched?.({ url: parsed.href, title });
+      setUrlInput("");
+    } catch (err) {
+      setUrlError(
+        err instanceof Error ? err.message : "썸네일을 가져오지 못했어요.",
+      );
+    } finally {
+      setUrlBusy(false);
+    }
   }
 
   return (
@@ -104,6 +159,52 @@ export function DropZone({
             e.target.value = "";
           }}
         />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          <Link2 aria-hidden className="size-3" />
+          URL에서 썸네일 가져오기
+        </label>
+        <div className="flex gap-2">
+          <Input
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void fetchFromUrl();
+              }
+            }}
+            placeholder="https://..."
+            disabled={urlBusy}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void fetchFromUrl()}
+            disabled={urlBusy || !urlInput.trim()}
+          >
+            {urlBusy ? (
+              <>
+                <Loader2 className="size-3 animate-spin" /> 가져오는 중
+              </>
+            ) : (
+              "가져오기"
+            )}
+          </Button>
+        </div>
+        {urlError ? (
+          <p className="text-xs text-destructive">{urlError}</p>
+        ) : (
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            웹페이지의 og:image를 받아 썸네일로 추가해요. 소스 URL도 자동 입력.
+          </p>
+        )}
       </div>
       {files.length > 0 ? (
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
