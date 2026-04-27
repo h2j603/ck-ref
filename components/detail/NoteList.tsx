@@ -2,8 +2,8 @@
 
 import { CornerDownRight, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
 
+import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -302,7 +302,7 @@ export function NoteList({
                           </>
                         ) : reply.body ? (
                           <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
-                            <ReactMarkdown>{reply.body}</ReactMarkdown>
+                            <MarkdownWithMentions text={reply.body} />
                           </div>
                         ) : null}
                       </li>
@@ -318,7 +318,7 @@ export function NoteList({
                       value={replyDraft}
                       onChange={(e) => setReplyDraft(e.target.value)}
                       rows={3}
-                      placeholder="답글을 적어주세요"
+                      placeholder="답글 — @미주 같은 멘션 가능"
                       autoFocus
                     />
                     <div className="flex justify-end gap-2">
@@ -503,7 +503,7 @@ function NoteFields({
           onChange={(e) => onChange({ ...draft, body: e.target.value })}
           rows={3}
           disabled={disabled}
-          placeholder="마크다운 가능"
+          placeholder="마크다운, @미주 같은 멘션 가능"
         />
       </FieldGroup>
     </div>
@@ -542,7 +542,7 @@ function NoteContent({ note }: { note: Note }) {
       ) : null}
       {note.body ? (
         <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
-          <ReactMarkdown>{note.body}</ReactMarkdown>
+          <MarkdownWithMentions text={note.body} />
         </div>
       ) : null}
     </div>
@@ -566,7 +566,7 @@ function Section({
         {label}
       </p>
       <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
-        <ReactMarkdown>{content}</ReactMarkdown>
+        <MarkdownWithMentions text={content} />
       </div>
     </div>
   );
