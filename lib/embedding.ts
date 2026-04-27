@@ -37,7 +37,19 @@ function genericToken(): string | null {
 }
 
 export function embeddingsConfigured(): boolean {
-  return jinaToken() !== null || genericToken() !== null;
+  // True only if a provider is fully usable. Having the legacy generic
+  // token without a URL doesn't count — that path returns a hard error
+  // on every call, which would mislead the admin status indicator.
+  if (jinaToken()) return true;
+  if (genericToken() && process.env.EMBEDDING_API_URL) return true;
+  return false;
+}
+
+// Which provider would the next call use? Helpful in admin UIs.
+export function embeddingsProvider(): "jina" | "generic" | "none" {
+  if (jinaToken()) return "jina";
+  if (genericToken() && process.env.EMBEDDING_API_URL) return "generic";
+  return "none";
 }
 
 function genericExpectedDim(): number {
