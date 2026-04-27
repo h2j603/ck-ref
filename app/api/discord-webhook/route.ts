@@ -54,12 +54,11 @@ const EVENT_EMOJI = {
 
 type EventKind = keyof typeof EVENT_COLOR;
 
-// Ref uploads, annotations, and WIP updates ping the channel.
-// Notes/replies/ratings/ref-attaches stay silent — they're frequent and
-// would be noisy.
+// Only new ref uploads and WIP updates ping the channel — those are the
+// rare, "everyone should look" events. Everything else (notes, replies,
+// annotations, ratings, ref-attaches) hits Discord and the bell silently.
 const PING_EVERYONE: ReadonlySet<EventKind> = new Set([
   "ref_upload",
-  "annotation",
   "project_update",
 ]);
 
