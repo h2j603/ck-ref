@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { EyeOff, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useSyncExternalStore } from "react";
 
@@ -93,6 +93,25 @@ export function AnnouncementBanner({
     }
   }
 
+  async function unannounceEvent(id: string) {
+    if (!nickname) return;
+    if (
+      !window.confirm(
+        "이 일정을 더 이상 인덱스에 안 띄울까요? (캘린더 일정 자체는 그대로 남습니다)",
+      )
+    )
+      return;
+    const res = await fetch(
+      `/api/events/${encodeURIComponent(id)}/unannounce`,
+      { method: "POST" },
+    );
+    if (res.ok) {
+      // Local-dismiss for instant feedback; the announce flag flip
+      // means it won't come back on next page render.
+      dismissEv(id);
+    }
+  }
+
   const visibleAnns = items.filter((a) => !dismissedAnn.has(a.id));
   const visibleEvs = todayEvents.filter((e) => !dismissedEv.has(e.id));
 
@@ -115,21 +134,30 @@ export function AnnouncementBanner({
               </p>
               <p className="whitespace-pre-wrap break-words">{a.body}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <p className="font-mono text-[10px] uppercase tracking-wider opacity-70">
+            <div className="flex shrink-0 items-center gap-1">
+              <p className="mr-1 font-mono text-[10px] uppercase tracking-wider opacity-70">
                 ~ {formatStamp(a.expires_at)}
               </p>
               <button
                 type="button"
-                onClick={() =>
-                  isAuthor ? void deleteAnnouncement(a.id) : dismissAnn(a.id)
-                }
-                aria-label={isAuthor ? "공지 내리기" : "공지 닫기"}
-                title={isAuthor ? "모두에게서 내리기" : "내 화면에서 닫기"}
-                className="rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                onClick={() => dismissAnn(a.id)}
+                aria-label="내 화면에서 숨기기"
+                title="내 화면에서 숨기기"
+                className="rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
               >
-                <X className="size-3.5" />
+                <EyeOff className="size-3.5" />
               </button>
+              {isAuthor ? (
+                <button
+                  type="button"
+                  onClick={() => void deleteAnnouncement(a.id)}
+                  aria-label="공지 내리기"
+                  title="모두에게서 내리기 (삭제)"
+                  className="rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
             </div>
           </div>
         );
@@ -142,8 +170,9 @@ export function AnnouncementBanner({
           <ul className="flex flex-col gap-1">
             {visibleEvs.map((ev) => {
               const proj = projects.find((p) => p.id === ev.project_id);
+              const isCreator = ev.created_by === nickname;
               return (
-                <li key={ev.id} className="flex items-center gap-2">
+                <li key={ev.id} className="flex items-center gap-1">
                   <Link
                     href="/calendar"
                     className="flex min-w-0 flex-1 items-center gap-2 rounded transition-colors hover:bg-sky-100 dark:hover:bg-sky-500/15"
@@ -170,12 +199,23 @@ export function AnnouncementBanner({
                   <button
                     type="button"
                     onClick={() => dismissEv(ev.id)}
-                    aria-label="일정 알림 닫기"
-                    title="내 화면에서 닫기"
-                    className="shrink-0 rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                    aria-label="내 화면에서 숨기기"
+                    title="내 화면에서 숨기기"
+                    className="shrink-0 rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
                   >
-                    <X className="size-3.5" />
+                    <EyeOff className="size-3.5" />
                   </button>
+                  {isCreator ? (
+                    <button
+                      type="button"
+                      onClick={() => void unannounceEvent(ev.id)}
+                      aria-label="일정 인덱스 노출 끄기"
+                      title="더 이상 인덱스에 안 띄우기"
+                      className="shrink-0 rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  ) : null}
                 </li>
               );
             })}
