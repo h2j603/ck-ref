@@ -87,20 +87,29 @@ export function EventDialog({
       return;
     }
     setBusy(true);
+    const startsAtIso = new Date(startsAt).toISOString();
     const payload = {
       title: title.trim(),
       body: body.trim() || null,
       project_id: projectId === NO_PROJECT ? null : projectId,
       all_day: allDay,
       announce,
-      starts_at: new Date(startsAt).toISOString(),
+      starts_at: startsAtIso,
       ends_at: endsAt ? new Date(endsAt).toISOString() : null,
     };
     let res;
     if (existing) {
+      // If the user pushed the time forward, the previous reminders are
+      // stale — reset both flags so the cron can fire again for the new
+      // window. Leaving these set would silently drop the morning / 1h
+      // pings on a rescheduled meeting.
+      const startsAtChanged = existing.starts_at !== startsAtIso;
+      const updatePayload = startsAtChanged
+        ? { ...payload, notified_morning: false, notified_hour: false }
+        : payload;
       res = await supabase
         .from("events")
-        .update(payload)
+        .update(updatePayload)
         .eq("id", existing.id)
         .select("*")
         .single();
