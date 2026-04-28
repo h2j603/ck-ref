@@ -433,6 +433,28 @@ alter table events add column if not exists notified_hour    boolean not null de
 create index if not exists events_starts_idx  on events (starts_at);
 create index if not exists events_project_idx on events (project_id);
 
+-- ANNOUNCEMENTS -------------------------------------------------------------
+-- Short broadcast messages from one team member to the whole index. Each
+-- has a hard expires_at (set at create time from a duration picker —
+-- 1h/6h/1d/1w); after that the index banner stops rendering it. Authors
+-- can also delete their own early.
+
+create table if not exists announcements (
+  id          uuid primary key default gen_random_uuid(),
+  body        text not null,
+  created_by  text not null,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz not null
+);
+
+create index if not exists announcements_expires_idx
+  on announcements (expires_at desc);
+
+alter table announcements enable row level security;
+drop policy if exists "anon all" on announcements;
+create policy "anon all" on announcements
+  for all to anon, authenticated using (true) with check (true);
+
 -- IN-APP NOTIFICATIONS ------------------------------------------------------
 -- One row per (recipient, event). The Discord webhook handler is the single
 -- source — when an event fires, it posts to Discord AND inserts a row here

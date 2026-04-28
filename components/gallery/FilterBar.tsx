@@ -2,7 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -43,8 +43,15 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     [params],
   );
   const qParam = params.get("q") ?? "";
+  // Mirror the URL ?q= into the controlled input draft. Tracking the
+  // previous param and reconciling during render is the React-recommended
+  // alternative to calling setState inside a useEffect for derived state.
   const [qDraft, setQDraft] = useState(qParam);
-  useEffect(() => setQDraft(qParam), [qParam]);
+  const [lastQParam, setLastQParam] = useState(qParam);
+  if (qParam !== lastQParam) {
+    setLastQParam(qParam);
+    setQDraft(qParam);
+  }
 
   function update(next: Record<string, string | string[] | null>) {
     const sp = new URLSearchParams(params.toString());

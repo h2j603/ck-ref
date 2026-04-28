@@ -8,6 +8,7 @@ import {
 } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/server";
 import {
+  type Announcement,
   type Board,
   type Designer,
   type CalendarEvent,
@@ -1167,9 +1168,23 @@ export async function fetchNotificationsFor(
   return (data ?? []) as Notification[];
 }
 
-// Calendar events in a (closed-open) date window. The view typically wants
-// a calendar month plus a few leading/trailing days from the adjacent
-// months to fill out the grid, so the window comes from the caller.
+// Active announcements (expires_at in the future), newest first. The
+// index banner renders all of them stacked.
+export async function fetchActiveAnnouncements(): Promise<Announcement[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("announcements")
+    .select("*")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as Announcement[];
+}
+
+// Calendar events overlapping a (closed-open) date window. Includes any
+// multi-day event whose ends_at extends into the window even if starts_at
+// is before it, so a project that began last month still draws across the
+// visible cells this month.
 export async function fetchEventsBetween(
   fromIso: string,
   toIso: string,
@@ -1178,8 +1193,8 @@ export async function fetchEventsBetween(
   const { data, error } = await supabase
     .from("events")
     .select("*")
-    .gte("starts_at", fromIso)
     .lt("starts_at", toIso)
+    .or(`ends_at.gte.${fromIso},and(ends_at.is.null,starts_at.gte.${fromIso})`)
     .order("starts_at", { ascending: true });
   if (error) return [];
   return (data ?? []) as CalendarEvent[];

@@ -40,9 +40,50 @@ function sameDay(a: Date, b: Date): boolean {
   );
 }
 
+function startOfDay(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  return out;
+}
+
 function eventOnDay(ev: CalendarEvent, day: Date): boolean {
-  const start = new Date(ev.starts_at);
-  return sameDay(start, day);
+  const dayStart = startOfDay(day);
+  const startDay = startOfDay(new Date(ev.starts_at));
+  if (!ev.ends_at) return startDay.getTime() === dayStart.getTime();
+  // ends_at is inclusive at the day level: an event ending at "2026-04-29
+  // 16:00" still belongs on Apr 29. An ends_at exactly at midnight is
+  // treated as the end of the previous day so a one-night event doesn't
+  // bleed into the next morning's cell.
+  const endRaw = new Date(ev.ends_at);
+  const endDay =
+    endRaw.getHours() === 0 &&
+    endRaw.getMinutes() === 0 &&
+    endRaw.getSeconds() === 0 &&
+    endRaw.getTime() > startDay.getTime()
+      ? startOfDay(new Date(endRaw.getTime() - 1))
+      : startOfDay(endRaw);
+  return (
+    dayStart.getTime() >= startDay.getTime() &&
+    dayStart.getTime() <= endDay.getTime()
+  );
+}
+
+function eventSpan(ev: CalendarEvent, day: Date): "single" | "start" | "mid" | "end" {
+  if (!ev.ends_at) return "single";
+  const dayStart = startOfDay(day);
+  const startDay = startOfDay(new Date(ev.starts_at));
+  const endRaw = new Date(ev.ends_at);
+  const endDay =
+    endRaw.getHours() === 0 &&
+    endRaw.getMinutes() === 0 &&
+    endRaw.getSeconds() === 0 &&
+    endRaw.getTime() > startDay.getTime()
+      ? startOfDay(new Date(endRaw.getTime() - 1))
+      : startOfDay(endRaw);
+  if (startDay.getTime() === endDay.getTime()) return "single";
+  if (dayStart.getTime() === startDay.getTime()) return "start";
+  if (dayStart.getTime() === endDay.getTime()) return "end";
+  return "mid";
 }
 
 function dayKey(d: Date): string {
@@ -71,6 +112,9 @@ export function CalendarClient({
 
   // Refetch when the user pages outside the initial 3-month buffer the
   // server prefetched. Keeps everything in-memory once we've fetched.
+  // Multi-day events: include rows whose ends_at is in the window even if
+  // starts_at is before it, so a project that began last month still shows
+  // on every visible day this month.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -79,8 +123,8 @@ export function CalendarClient({
       const { data } = await supabase
         .from("events")
         .select("*")
-        .gte("starts_at", from)
         .lt("starts_at", to)
+        .or(`ends_at.gte.${from},and(ends_at.is.null,starts_at.gte.${from})`)
         .order("starts_at", { ascending: true });
       if (cancelled) return;
       setEvents((data ?? []) as CalendarEvent[]);
@@ -230,18 +274,31 @@ export function CalendarClient({
                 {day.getDate()}
               </span>
               <ul className="flex flex-col gap-0.5">
-                {list.slice(0, 3).map((ev) => (
-                  <li
-                    key={ev.id}
-                    className="truncate rounded-sm px-1 py-0.5 text-[10px]"
-                    style={{
-                      backgroundColor: projectColorSoft(ev.project_id),
-                      color: projectColor(ev.project_id),
-                    }}
-                  >
-                    {ev.title}
-                  </li>
-                ))}
+                {list.slice(0, 3).map((ev) => {
+                  const span = eventSpan(ev, day);
+                  // Range chips bleed into adjacent cells via negative
+                  // margins so a multi-day event reads as one continuous
+                  // bar across the row. Only the first day in the run
+                  // shows the title to avoid repeating it in every cell.
+                  return (
+                    <li
+                      key={ev.id}
+                      className={cn(
+                        "truncate px-1 py-0.5 text-[10px]",
+                        span === "single" && "rounded-sm",
+                        span === "start" && "-mr-1 rounded-l-sm",
+                        span === "mid" && "-mx-1",
+                        span === "end" && "-ml-1 rounded-r-sm",
+                      )}
+                      style={{
+                        backgroundColor: projectColorSoft(ev.project_id),
+                        color: projectColor(ev.project_id),
+                      }}
+                    >
+                      {span === "mid" || span === "end" ? " " : ev.title}
+                    </li>
+                  );
+                })}
                 {list.length > 3 ? (
                   <li className="px-1 font-mono text-[9px] text-muted-foreground">
                     +{list.length - 3}
