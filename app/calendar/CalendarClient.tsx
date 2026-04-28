@@ -1,44 +1,22 @@
 "use client";
 
+import dayGridPlugin from "@fullcalendar/daygrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import FullCalendar from "@fullcalendar/react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EventDialog } from "./EventDialog";
 import { Button } from "@/components/ui/button";
 import { useNickname } from "@/lib/nickname";
 import { projectColor, projectColorSoft } from "@/lib/projectColor";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 import type { CalendarEvent } from "@/lib/types";
 
+import type { EventClickArg } from "@fullcalendar/core";
+import type { DateClickArg } from "@fullcalendar/interaction";
+
 type ProjectLite = { id: string; title: string; status: string };
-
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-
-function startOfMonth(year: number, month: number): Date {
-  return new Date(year, month, 1);
-}
-
-function startOfWeek(d: Date): Date {
-  const out = new Date(d);
-  out.setDate(out.getDate() - out.getDay());
-  out.setHours(0, 0, 0, 0);
-  return out;
-}
-
-function addDays(d: Date, n: number): Date {
-  const out = new Date(d);
-  out.setDate(out.getDate() + n);
-  return out;
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
 
 function startOfDay(d: Date): Date {
   const out = new Date(d);
@@ -50,10 +28,6 @@ function eventOnDay(ev: CalendarEvent, day: Date): boolean {
   const dayStart = startOfDay(day);
   const startDay = startOfDay(new Date(ev.starts_at));
   if (!ev.ends_at) return startDay.getTime() === dayStart.getTime();
-  // ends_at is inclusive at the day level: an event ending at "2026-04-29
-  // 16:00" still belongs on Apr 29. An ends_at exactly at midnight is
-  // treated as the end of the previous day so a one-night event doesn't
-  // bleed into the next morning's cell.
   const endRaw = new Date(ev.ends_at);
   const endDay =
     endRaw.getHours() === 0 &&
@@ -68,26 +42,36 @@ function eventOnDay(ev: CalendarEvent, day: Date): boolean {
   );
 }
 
-function eventSpan(ev: CalendarEvent, day: Date): "single" | "start" | "mid" | "end" {
-  if (!ev.ends_at) return "single";
-  const dayStart = startOfDay(day);
-  const startDay = startOfDay(new Date(ev.starts_at));
-  const endRaw = new Date(ev.ends_at);
-  const endDay =
-    endRaw.getHours() === 0 &&
-    endRaw.getMinutes() === 0 &&
-    endRaw.getSeconds() === 0 &&
-    endRaw.getTime() > startDay.getTime()
-      ? startOfDay(new Date(endRaw.getTime() - 1))
-      : startOfDay(endRaw);
-  if (startDay.getTime() === endDay.getTime()) return "single";
-  if (dayStart.getTime() === startDay.getTime()) return "start";
-  if (dayStart.getTime() === endDay.getTime()) return "end";
-  return "mid";
+// FullCalendar's `end` is exclusive on its day axis: a multi-day event
+// ending on Apr 29 (visually) needs end = Apr 30 00:00. For non-all-day
+// events the actual timestamp works as-is. For all-day, we add a day.
+function toFullCalendarEvent(ev: CalendarEvent) {
+  const color = projectColorSoft(ev.project_id);
+  const text = projectColor(ev.project_id);
+  return {
+    id: ev.id,
+    title: ev.title,
+    start: ev.starts_at,
+    end: computeEnd(ev),
+    allDay: ev.all_day,
+    backgroundColor: color,
+    borderColor: color,
+    textColor: text,
+    extendedProps: {
+      projectId: ev.project_id,
+      raw: ev,
+    },
+  };
 }
 
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+function computeEnd(ev: CalendarEvent): string | undefined {
+  if (!ev.ends_at) return undefined;
+  if (!ev.all_day) return ev.ends_at;
+  // All-day with ends_at — bump by one day so FullCalendar renders the
+  // last day inclusively.
+  const d = new Date(ev.ends_at);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
 }
 
 export function CalendarClient({
@@ -109,12 +93,10 @@ export function CalendarClient({
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [composing, setComposing] = useState(false);
+  const calendarRef = useRef<FullCalendar | null>(null);
 
-  // Refetch when the user pages outside the initial 3-month buffer the
-  // server prefetched. Keeps everything in-memory once we've fetched.
-  // Multi-day events: include rows whose ends_at is in the window even if
-  // starts_at is before it, so a project that began last month still shows
-  // on every visible day this month.
+  // Refetch when the user pages outside the prefetched buffer. Includes
+  // events whose ends_at is inside the window even if starts_at is before.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -134,22 +116,13 @@ export function CalendarClient({
     };
   }, [supabase, year, month]);
 
-  // 6 rows × 7 cols grid for any given month, so the layout doesn't
-  // shift between months that have 4 vs 6 visual weeks.
-  const grid = useMemo(() => {
-    const first = startOfMonth(year, month);
-    const start = startOfWeek(first);
-    return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+  // Keep FullCalendar's view in sync with the year/month state. Driven
+  // by our own header buttons rather than FC's headerToolbar.
+  useEffect(() => {
+    const api = calendarRef.current?.getApi?.();
+    if (!api) return;
+    api.gotoDate(new Date(year, month, 1));
   }, [year, month]);
-
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, CalendarEvent[]>();
-    for (const day of grid) {
-      const list = events.filter((ev) => eventOnDay(ev, day));
-      if (list.length > 0) map.set(dayKey(day), list);
-    }
-    return map;
-  }, [events, grid]);
 
   const today = new Date();
   const monthLabel = `${year}.${String(month + 1).padStart(2, "0")}`;
@@ -186,6 +159,29 @@ export function CalendarClient({
   function handleDeleted(id: string) {
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }
+
+  function handleDateClick(arg: DateClickArg) {
+    setSelectedDay(arg.date);
+    setComposing(false);
+    setEditing(null);
+  }
+
+  function handleEventClick(arg: EventClickArg) {
+    const id = arg.event.id;
+    const raw = events.find((e) => e.id === id);
+    if (!raw) return;
+    setSelectedDay(new Date(raw.starts_at));
+    setEditing(null);
+    setComposing(false);
+    // Open the day panel so the user can pick edit / delete from there.
+    setSelectedDay(new Date(raw.starts_at));
+  }
+
+  const fcEvents = useMemo(() => events.map(toFullCalendarEvent), [events]);
+
+  const dayPanelEvents = selectedDay
+    ? events.filter((ev) => eventOnDay(ev, selectedDay))
+    : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -231,109 +227,39 @@ export function CalendarClient({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-7 border-l border-t border-border/60 text-xs">
-        {WEEKDAYS.map((w, i) => (
-          <div
-            key={w}
-            className={cn(
-              "border-b border-r border-border/60 px-1.5 py-1.5 font-mono text-[10px] uppercase tracking-wider",
-              i === 0 && "text-rose-600",
-              i === 6 && "text-sky-600",
-              i !== 0 && i !== 6 && "text-muted-foreground",
-            )}
-          >
-            {w}
-          </div>
-        ))}
-        {grid.map((day, i) => {
-          const inMonth = day.getMonth() === month;
-          const isToday = sameDay(day, today);
-          const list = eventsByDay.get(dayKey(day)) ?? [];
-          return (
-            <button
-              type="button"
-              key={i}
-              onClick={() => {
-                setSelectedDay(day);
-                setComposing(false);
-                setEditing(null);
-              }}
-              className={cn(
-                // overflow-visible matters: <button> defaults to
-                // overflow:hidden on Safari/iOS, which would clip
-                // multi-day chips that bleed into adjacent cells via
-                // negative margin.
-                "flex min-h-[80px] flex-col items-stretch gap-0.5 overflow-visible border-b border-r border-border/60 p-1 text-left transition-colors",
-                inMonth ? "bg-background" : "bg-muted/40 text-muted-foreground",
-                "hover:bg-muted/60",
-              )}
-            >
-              <span
-                className={cn(
-                  "self-end font-mono text-[11px] tabular-nums leading-none",
-                  isToday &&
-                    "rounded-full bg-foreground px-1.5 py-0.5 text-background",
-                )}
-              >
-                {day.getDate()}
-              </span>
-              <ul className="flex flex-col gap-0.5">
-                {list.slice(0, 3).map((ev) => {
-                  const span = eventSpan(ev, day);
-                  // Multi-day chips bridge the cell's 4px padding + 1px
-                  // right border + 4px next-cell padding via inline
-                  // negative margins. Tailwind arbitrary values
-                  // (-mr-[5px]) weren't being applied in production —
-                  // likely a JIT edge case — so we sidestep with style.
-                  // 5px past each joining edge gives a 1px overlap
-                  // inside the cell border, making the bar read as one
-                  // continuous run. Title only on the first day.
-                  // position:relative + z-index lifts the chip above the
-                  // cell's border-r so the bg color visibly bridges
-                  // adjacent cells. Without this the cell border paints
-                  // on top and breaks the bar visually.
-                  const chipStyle: React.CSSProperties = {
-                    backgroundColor: projectColorSoft(ev.project_id),
-                    color: projectColor(ev.project_id),
-                    position: "relative",
-                    zIndex: 1,
-                  };
-                  if (span === "start" || span === "mid") {
-                    chipStyle.marginRight = "-5px";
-                  }
-                  if (span === "end" || span === "mid") {
-                    chipStyle.marginLeft = "-5px";
-                  }
-                  return (
-                    <li
-                      key={ev.id}
-                      className={cn(
-                        "truncate px-1.5 py-0.5 text-[10px]",
-                        span === "single" && "rounded-sm",
-                        span === "start" && "rounded-l-sm",
-                        span === "end" && "rounded-r-sm",
-                      )}
-                      style={chipStyle}
-                    >
-                      {span === "mid" || span === "end" ? " " : ev.title}
-                    </li>
-                  );
-                })}
-                {list.length > 3 ? (
-                  <li className="px-1 font-mono text-[9px] text-muted-foreground">
-                    +{list.length - 3}
-                  </li>
-                ) : null}
-              </ul>
-            </button>
-          );
-        })}
+      {/*
+        FullCalendar handles multi-day event rendering as continuous bars
+        natively — the custom-grid bridging headache goes away.
+        Tailwind v4 styles target FC's class names directly to match the
+        rest of the app's typography / borders.
+      */}
+      <div className="ck-calendar text-xs">
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          initialDate={new Date(year, month, 1)}
+          locale="ko"
+          firstDay={0}
+          headerToolbar={false}
+          height="auto"
+          fixedWeekCount
+          dayMaxEvents={3}
+          moreLinkText={(n) => `+${n}`}
+          dayHeaderFormat={{ weekday: "narrow" }}
+          dayHeaderClassNames="ck-cal-dayhead"
+          dayCellClassNames="ck-cal-daycell"
+          eventClassNames="ck-cal-event"
+          events={fcEvents}
+          dateClick={handleDateClick}
+          eventClick={handleEventClick}
+        />
       </div>
 
       {selectedDay ? (
         <DayPanel
           day={selectedDay}
-          events={(eventsByDay.get(dayKey(selectedDay)) ?? []).slice()}
+          events={dayPanelEvents}
           projects={projects}
           onClose={() => {
             setSelectedDay(null);
@@ -483,3 +409,4 @@ function DayPanel({
     </section>
   );
 }
+

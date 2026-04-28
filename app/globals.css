@@ -106,3 +106,103 @@
 .masonry-grid_column > * {
   margin-bottom: 16px;
 }
+
+/* FullCalendar look-and-feel overrides — match the rest of the app's
+   thin-border + mono-uppercase aesthetic. Library defaults are too
+   "heavy" (large fonts, blue accents, etc). */
+.ck-calendar .fc {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--background);
+  --fc-neutral-bg-color: color-mix(in oklab, var(--muted) 60%, transparent);
+  --fc-today-bg-color: transparent;
+  --fc-event-bg-color: var(--secondary);
+  --fc-event-border-color: var(--secondary);
+  --fc-event-text-color: var(--foreground);
+  --fc-more-link-bg-color: transparent;
+  --fc-more-link-text-color: var(--muted-foreground);
+  font-family: inherit;
+}
+
+.ck-calendar .fc-theme-standard td,
+.ck-calendar .fc-theme-standard th,
+.ck-calendar .fc-theme-standard .fc-scrollgrid {
+  border-color: color-mix(in oklab, var(--border) 60%, transparent);
+}
+
+.ck-calendar .ck-cal-dayhead {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  padding: 6px 8px !important;
+  font-weight: 400;
+}
+
+.ck-calendar .fc-day-sun .ck-cal-dayhead,
+.ck-calendar .fc-day-sun .fc-daygrid-day-number {
+  color: #e11d48;
+}
+.ck-calendar .fc-day-sat .ck-cal-dayhead,
+.ck-calendar .fc-day-sat .fc-daygrid-day-number {
+  color: #0284c7;
+}
+
+.ck-calendar .fc-daygrid-day-number {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 6px !important;
+  color: var(--foreground);
+}
+
+.ck-calendar .fc-day-today .fc-daygrid-day-number {
+  background-color: var(--foreground);
+  color: var(--background);
+  border-radius: 9999px;
+  padding: 2px 6px !important;
+  line-height: 1;
+}
+
+.ck-calendar .fc-day-other .fc-daygrid-day-number {
+  color: var(--muted-foreground);
+  opacity: 0.55;
+}
+
+.ck-calendar .ck-cal-event,
+.ck-calendar .fc-daygrid-event {
+  border: none !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  border-radius: 3px !important;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ck-calendar .fc-daygrid-block-event .fc-event-title {
+  font-weight: 500;
+}
+
+.ck-calendar .fc-daygrid-more-link {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted-foreground);
+  padding: 0 4px;
+}
+
+.ck-calendar .fc-popover {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+.ck-calendar .fc-popover-header {
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 6px 10px !important;
+}
+.ck-calendar .fc-popover-body {
+  padding: 6px !important;
+}
