@@ -217,7 +217,7 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, Props>(
           className={cn(
             // Match the Textarea's intrinsic styles so character positions
             // align: same font, padding, line-height, border, etc.
-            "pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words rounded-md border border-transparent px-3 py-2 text-base md:text-sm",
+            "pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words rounded-md border border-transparent px-3 py-2 text-sm",
             className,
           )}
         >
