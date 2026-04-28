@@ -125,6 +125,14 @@ export type ProjectUpdate = {
   created_by: string | null;
 };
 
+export type Announcement = {
+  id: string;
+  body: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+};
+
 export type CalendarEvent = {
   id: string;
   project_id: string | null;

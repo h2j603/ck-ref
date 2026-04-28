@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 
+import { AnnouncementBanner } from "@/components/announcement-banner";
 import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { FilterBar } from "@/components/gallery/FilterBar";
 import { MasonryGrid } from "@/components/gallery/MasonryGrid";
@@ -11,6 +12,7 @@ import { pickNudge } from "@/lib/nudges";
 import { findProfile, isProfileKey } from "@/lib/profiles";
 import {
   countRefsByUserSince,
+  fetchActiveAnnouncements,
   fetchAllTags,
   fetchProfiles,
   fetchRefs,
@@ -55,13 +57,14 @@ export default async function HomePage({
   const store = await cookies();
   const me = store.get(ARCHIVE_AUTH_COOKIE)?.value ?? null;
 
-  const [refs, tags, weeklyCount, profiles] = await Promise.all([
+  const [refs, tags, weeklyCount, profiles, announcements] = await Promise.all([
     fetchRefs(filter).catch(() => []),
     fetchAllTags().catch(() => []),
     me && isProfileKey(me)
       ? countRefsByUserSince(me, startOfThisWeekUtcIso()).catch(() => 1)
       : Promise.resolve(1),
     me && isProfileKey(me) ? fetchProfiles().catch(() => []) : Promise.resolve([]),
+    fetchActiveAnnouncements().catch(() => []),
   ]);
 
   const myProfile = me && isProfileKey(me) ? findProfile(profiles, me) : null;
@@ -69,6 +72,7 @@ export default async function HomePage({
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
+      <AnnouncementBanner items={announcements} profiles={profiles} />
       {showNudge ? (
         <WeeklyNudge
           displayName={myProfile.display_name}

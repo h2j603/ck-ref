@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 
+import { AnnouncementComposer } from "@/components/announcement-composer";
 import { HeaderProfile } from "@/components/header-profile";
 import { NotificationBell } from "@/components/notification-bell";
 import { fetchProfiles } from "@/lib/queries";
@@ -91,6 +92,7 @@ export default async function RootLayout({
             >
               <CalendarDays className="size-4" />
             </Link>
+            <AnnouncementComposer />
             <NotificationBell />
             <HeaderProfile profiles={profiles} />
           </nav>
