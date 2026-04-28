@@ -1,7 +1,13 @@
 "use client";
 
+import { SmilePlus } from "lucide-react";
 import { useState } from "react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useNickname } from "@/lib/nickname";
 import type { Profile } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +28,7 @@ export function EmojiReactions({
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [reactions, setReactions] = useState<UpdateReaction[]>(initial);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const displayName = (key: string) =>
     profiles.find((p) => p.key === key)?.display_name ?? key;
@@ -61,58 +68,92 @@ export function EmojiReactions({
     }
   }
 
-  // Group by emoji once; PALETTE drives display order so empty buckets keep
-  // their slot and the bar is visually stable as people react.
+  // Group existing reactions by emoji. Only emojis that actually have
+  // someone reacting render as chips; the picker is the entry point for
+  // adding a new emoji type.
   const byEmoji = new Map<string, UpdateReaction[]>();
   for (const r of reactions) {
     const list = byEmoji.get(r.emoji) ?? [];
     list.push(r);
     byEmoji.set(r.emoji, list);
   }
-  const extraEmojis = Array.from(byEmoji.keys()).filter(
-    (e) => !PALETTE.includes(e as (typeof PALETTE)[number]),
-  );
-  const ordered = [...PALETTE, ...extraEmojis];
+  const activeEmojis = Array.from(byEmoji.keys());
+  const canReact = hydrated && !!nickname;
+
+  // Hide the row entirely when there's nothing to show and the user can't
+  // react — keeps the card clean for visitors without a nickname set.
+  if (activeEmojis.length === 0 && !canReact) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {ordered.map((emoji) => {
+      {activeEmojis.map((emoji) => {
         const list = byEmoji.get(emoji) ?? [];
         const mine = nickname
           ? list.some((r) => r.user_key === nickname)
           : false;
-        const count = list.length;
         const reactors = list.map((r) => displayName(r.user_key)).join(", ");
-        const empty = count === 0;
         return (
           <button
             key={emoji}
             type="button"
-            disabled={!hydrated || !nickname}
+            disabled={!canReact}
             onClick={() => toggle(emoji)}
-            aria-label={
-              count > 0
-                ? `${emoji} ${reactors}`
-                : `${emoji} 리액션 추가`
-            }
+            aria-label={`${emoji} ${reactors}`}
             aria-pressed={mine}
-            title={count > 0 ? reactors : undefined}
+            title={reactors}
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] leading-none transition-colors",
-              "disabled:cursor-not-allowed disabled:opacity-40",
+              "disabled:cursor-not-allowed disabled:opacity-60",
               mine
                 ? "border-foreground/40 bg-foreground/10 text-foreground"
                 : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-              empty && !mine && "opacity-60",
             )}
           >
             <span className="text-sm leading-none">{emoji}</span>
-            {count > 0 ? (
-              <span className="font-mono tabular-nums">{count}</span>
-            ) : null}
+            <span className="font-mono tabular-nums">{list.length}</span>
           </button>
         );
       })}
+      {canReact ? (
+        <DropdownMenu open={pickerOpen} onOpenChange={setPickerOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="이모지 추가"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+            >
+              <SmilePlus className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="flex gap-1 p-1"
+          >
+            {PALETTE.map((emoji) => {
+              const list = byEmoji.get(emoji) ?? [];
+              const mine = list.some((r) => r.user_key === nickname);
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => {
+                    void toggle(emoji);
+                    setPickerOpen(false);
+                  }}
+                  aria-label={emoji}
+                  aria-pressed={mine}
+                  className={cn(
+                    "inline-flex h-8 w-8 items-center justify-center rounded text-lg leading-none transition-colors",
+                    mine ? "bg-foreground/10" : "hover:bg-muted",
+                  )}
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }
