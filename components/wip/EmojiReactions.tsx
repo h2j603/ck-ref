@@ -14,7 +14,20 @@ import { createClient } from "@/lib/supabase/client";
 import type { UpdateReaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const PALETTE = ["🔥", "❤️", "👀", "✨", "👏"] as const;
+const PALETTE = [
+  "🔥",
+  "❤️",
+  "👀",
+  "✨",
+  "👏",
+  "💯",
+  "🤔",
+  "💡",
+  "🥲",
+  "🎨",
+  "😭",
+  "🤩",
+] as const;
 
 export function EmojiReactions({
   updateId,
@@ -127,7 +140,7 @@ export function EmojiReactions({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="start"
-            className="flex gap-1 p-1"
+            className="grid grid-cols-6 gap-1 p-1"
           >
             {PALETTE.map((emoji) => {
               const list = byEmoji.get(emoji) ?? [];
