@@ -1,16 +1,26 @@
+"use client";
+
+import { X } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { findProfile, type Profile } from "@/lib/profiles";
+import { useNickname } from "@/lib/nickname";
 import { projectColor, projectColorSoft } from "@/lib/projectColor";
 import type { Announcement, CalendarEvent } from "@/lib/types";
 
 type ProjectLite = { id: string; title: string };
 
+const DISMISSED_KEY = "ck-ref:dismissed-announcements";
+const DISMISSED_EVENT = "ck-ref:dismissed-announcements-change";
+
 // Index banner. Stacks active announcements + today's calendar events
 // directly above the WeeklyNudge / filter bar so they're impossible to
-// miss when first landing on /. Server-rendered: the icon-composer in the
-// header is the thing that mutates announcement state; events come from
-// the calendar.
+// miss when first landing on /. Author's own announcements are hidden
+// from their banner (they already see them in the composer dropdown);
+// everyone else can locally dismiss a card with the X button — the
+// dismissal is per-device, persisted in localStorage, and re-appears
+// when a new announcement with the same id is somehow re-published.
 export function AnnouncementBanner({
   items,
   todayEvents,
@@ -22,26 +32,64 @@ export function AnnouncementBanner({
   projects: ProjectLite[];
   profiles: Profile[];
 }) {
-  if (items.length === 0 && todayEvents.length === 0) return null;
+  const { nickname } = useNickname();
+  const dismissedKey = useSyncExternalStore(
+    subscribeDismissed,
+    getDismissedSnapshot,
+    getDismissedServerSnapshot,
+  );
+  const dismissed = parseDismissed(dismissedKey);
+
+  // Drop any persisted ids that are no longer in the active set so the
+  // localStorage list doesn't grow forever.
+  useEffect(() => {
+    if (dismissed.size === 0) return;
+    const liveIds = new Set(items.map((a) => a.id));
+    const next = new Set([...dismissed].filter((id) => liveIds.has(id)));
+    if (next.size === dismissed.size) return;
+    writeDismissed(next);
+  }, [items, dismissed]);
+
+  function dismiss(id: string) {
+    const next = new Set(dismissed);
+    next.add(id);
+    writeDismissed(next);
+  }
+
+  const visible = items.filter(
+    (a) => a.created_by !== nickname && !dismissed.has(a.id),
+  );
+
+  if (visible.length === 0 && todayEvents.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      {items.map((a) => {
+      {visible.map((a) => {
         const author = findProfile(profiles, a.created_by);
         const authorName = author?.display_name ?? a.created_by;
         return (
           <div
             key={a.id}
-            className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
+            className="flex items-start gap-3 rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
           >
-            <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="font-mono text-[11px] uppercase tracking-wider">
                 공지 · @{authorName}
               </p>
               <p className="whitespace-pre-wrap break-words">{a.body}</p>
             </div>
-            <p className="shrink-0 font-mono text-[10px] uppercase tracking-wider opacity-70">
-              ~ {formatStamp(a.expires_at)}
-            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <p className="font-mono text-[10px] uppercase tracking-wider opacity-70">
+                ~ {formatStamp(a.expires_at)}
+              </p>
+              <button
+                type="button"
+                onClick={() => dismiss(a.id)}
+                aria-label="공지 닫기"
+                className="rounded-full p-0.5 opacity-60 transition-opacity hover:opacity-100"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
           </div>
         );
       })}
@@ -82,6 +130,51 @@ export function AnnouncementBanner({
       ) : null}
     </div>
   );
+}
+
+// useSyncExternalStore needs a stable snapshot string. We store the raw
+// JSON and parse on read; this keeps the snapshot referentially equal
+// across renders unless localStorage actually changed.
+function getDismissedSnapshot(): string {
+  if (typeof window === "undefined") return "[]";
+  try {
+    return window.localStorage.getItem(DISMISSED_KEY) ?? "[]";
+  } catch {
+    return "[]";
+  }
+}
+
+function getDismissedServerSnapshot(): string {
+  return "[]";
+}
+
+function subscribeDismissed(notify: () => void): () => void {
+  window.addEventListener(DISMISSED_EVENT, notify);
+  window.addEventListener("storage", notify);
+  return () => {
+    window.removeEventListener(DISMISSED_EVENT, notify);
+    window.removeEventListener("storage", notify);
+  };
+}
+
+function parseDismissed(raw: string): Set<string> {
+  try {
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter((x): x is string => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDismissed(set: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
+    window.dispatchEvent(new Event(DISMISSED_EVENT));
+  } catch {
+    /* noop */
+  }
 }
 
 function formatStamp(iso: string): string {

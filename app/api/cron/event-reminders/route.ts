@@ -133,9 +133,9 @@ async function handle(request: Request) {
     if (row.all_day) continue;
     const proj = projectTitle(row);
     const time = formatHHmmKst(row.starts_at);
+    const projTail = proj ? ` (${proj} 건)` : "";
     const desc =
-      `⏰ **1시간 후** — **${row.title}** · ${time}` +
-      (proj ? ` · ${proj}` : "");
+      `⏰ 잠깐, **${row.title}** ${time}이에요 — 한 시간 남았어요${projTail}. 슬슬 준비해볼까요?`;
     // Mark first to dodge double-send on overlapping cron runs.
     const { error: updErr } = await supabase
       .from("events")
@@ -160,10 +160,10 @@ async function handle(request: Request) {
       continue;
     }
     const proj = projectTitle(row);
-    const time = row.all_day ? "종일" : formatHHmmKst(row.starts_at);
-    const desc =
-      `🌅 **오늘 일정** — **${row.title}** · ${time}` +
-      (proj ? ` · ${proj}` : "");
+    const projTail = proj ? ` (${proj} 건이에요)` : "";
+    const desc = row.all_day
+      ? `🌅 좋은 아침이에요. 오늘은 **${row.title}** 종일 일정이 있어요${projTail}.`
+      : `🌅 좋은 아침이에요. 오늘 ${formatHHmmKst(row.starts_at)}에 **${row.title}** 일정 잡혀있어요${projTail}.`;
     const { error: updErr } = await supabase
       .from("events")
       .update({ notified_morning: true })
