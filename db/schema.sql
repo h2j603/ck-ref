@@ -389,6 +389,23 @@ create table if not exists ref_ratings (
 
 create index if not exists ref_ratings_ref_idx on ref_ratings (ref_id);
 
+-- UPDATE REACTIONS ----------------------------------------------------------
+-- Emoji reactions on WIP project_updates. Same trust model as everywhere
+-- else: nickname (profile key) in localStorage drives identity. PK is
+-- (update, user, emoji) so a user can react with multiple different emojis
+-- on the same update; clicking the same emoji again deletes the row.
+
+create table if not exists update_reactions (
+  project_update_id uuid not null references project_updates(id) on delete cascade,
+  user_key          text not null,
+  emoji             text not null,
+  reacted_at        timestamptz not null default now(),
+  primary key (project_update_id, user_key, emoji)
+);
+
+create index if not exists update_reactions_update_idx
+  on update_reactions (project_update_id);
+
 -- REF <-> REF LINKS ---------------------------------------------------------
 -- Undirected links between refs. Stored as a canonical pair (smaller uuid in
 -- a_id) so each link appears exactly once; the check constraint enforces it
@@ -513,6 +530,7 @@ alter table refs          enable row level security;
 alter table ref_designers   enable row level security;
 alter table ref_images      enable row level security;
 alter table ref_ratings     enable row level security;
+alter table update_reactions enable row level security;
 alter table ref_annotations enable row level security;
 alter table ref_links       enable row level security;
 alter table notes         enable row level security;
@@ -565,6 +583,10 @@ create policy "anon all" on ref_images
 
 drop policy if exists "anon all" on ref_ratings;
 create policy "anon all" on ref_ratings
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on update_reactions;
+create policy "anon all" on update_reactions
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on ref_annotations;

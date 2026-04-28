@@ -22,6 +22,7 @@ import {
   type RefImage,
   type RefSort,
   type RefWithDesigners,
+  type UpdateReaction,
 } from "@/lib/types";
 
 // Re-export so existing imports of REF_SORTS/RefSort from this module keep
@@ -430,6 +431,25 @@ export async function fetchProjectUpdates(
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as ProjectUpdate[];
+}
+
+export async function fetchUpdateReactions(
+  updateIds: string[],
+): Promise<Map<string, UpdateReaction[]>> {
+  const out = new Map<string, UpdateReaction[]>();
+  if (updateIds.length === 0) return out;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("update_reactions")
+    .select("project_update_id, user_key, emoji, reacted_at")
+    .in("project_update_id", updateIds);
+  if (error || !data) return out;
+  for (const row of data as UpdateReaction[]) {
+    const list = out.get(row.project_update_id) ?? [];
+    list.push(row);
+    out.set(row.project_update_id, list);
+  }
+  return out;
 }
 
 export type InspirationRef = RefWithDesigners & {

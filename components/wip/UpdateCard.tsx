@@ -7,20 +7,23 @@ import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
 import { NoteList } from "@/components/detail/NoteList";
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
+import { EmojiReactions } from "@/components/wip/EmojiReactions";
 import { UpdateRefs } from "@/components/wip/UpdateRefs";
 import { useNickname } from "@/lib/nickname";
 import { type Profile } from "@/lib/profiles";
 import { relativeTime } from "@/lib/relativeTime";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
-import type { ProjectUpdate } from "@/lib/types";
+import type { ProjectUpdate, UpdateReaction } from "@/lib/types";
 
 export function UpdateCard({
   update,
   profiles,
+  initialReactions,
 }: {
   update: ProjectUpdate;
   profiles: Profile[];
+  initialReactions: UpdateReaction[];
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
@@ -96,6 +99,11 @@ export function UpdateCard({
           <MarkdownWithMentions text={update.body} />
         </div>
       ) : null}
+      <EmojiReactions
+        updateId={update.id}
+        initial={initialReactions}
+        profiles={profiles}
+      />
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <UpdateRefs updateId={update.id} initial={[]} />
       <div className="rounded-md border border-border/40 bg-muted/30 p-3">
