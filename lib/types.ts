@@ -141,6 +141,7 @@ export type CalendarEvent = {
   starts_at: string;
   ends_at: string | null;
   all_day: boolean;
+  announce: boolean;
   created_at: string;
   created_by: string | null;
 };

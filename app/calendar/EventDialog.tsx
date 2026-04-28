@@ -64,6 +64,7 @@ export function EventDialog({
     existing?.project_id ?? NO_PROJECT,
   );
   const [allDay, setAllDay] = useState(existing?.all_day ?? false);
+  const [announce, setAnnounce] = useState(existing?.announce ?? false);
   const [startsAt, setStartsAt] = useState(
     existing
       ? toIsoLocal(new Date(existing.starts_at))
@@ -91,6 +92,7 @@ export function EventDialog({
       body: body.trim() || null,
       project_id: projectId === NO_PROJECT ? null : projectId,
       all_day: allDay,
+      announce,
       starts_at: new Date(startsAt).toISOString(),
       ends_at: endsAt ? new Date(endsAt).toISOString() : null,
     };
@@ -165,6 +167,20 @@ export function EventDialog({
               onChange={(e) => setAllDay(e.target.checked)}
             />
             <span>종일</span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={announce}
+              onChange={(e) => setAnnounce(e.target.checked)}
+              className="mt-1"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span>인덱스에 공지로 띄우기</span>
+              <span className="text-[11px] text-muted-foreground">
+                회의·중요 이벤트만 체크. 길게 가는 작업 계획은 꺼두세요.
+              </span>
+            </span>
           </label>
           {!allDay ? (
             <>

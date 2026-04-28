@@ -79,7 +79,9 @@ export default async function HomePage({
       : Promise.resolve(1),
     me && isProfileKey(me) ? fetchProfiles().catch(() => []) : Promise.resolve([]),
     fetchActiveAnnouncements().catch(() => []),
-    fetchEventsBetween(todayStartIso, tomorrowStartIso).catch(() => []),
+    fetchEventsBetween(todayStartIso, tomorrowStartIso)
+      .then((rows) => rows.filter((ev) => ev.announce))
+      .catch(() => []),
     fetchProjects().catch(() => []),
   ]);
 
