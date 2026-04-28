@@ -1,18 +1,28 @@
-import { findProfile, type Profile } from "@/lib/profiles";
-import type { Announcement } from "@/lib/types";
+import Link from "next/link";
 
-// Index banner. Stacks active announcements newest-first directly above
-// the WeeklyNudge / filter bar so they're impossible to miss when first
-// landing on /. Server-rendered: the icon-composer in the header is the
-// thing that mutates state.
+import { findProfile, type Profile } from "@/lib/profiles";
+import { projectColor, projectColorSoft } from "@/lib/projectColor";
+import type { Announcement, CalendarEvent } from "@/lib/types";
+
+type ProjectLite = { id: string; title: string };
+
+// Index banner. Stacks active announcements + today's calendar events
+// directly above the WeeklyNudge / filter bar so they're impossible to
+// miss when first landing on /. Server-rendered: the icon-composer in the
+// header is the thing that mutates announcement state; events come from
+// the calendar.
 export function AnnouncementBanner({
   items,
+  todayEvents,
+  projects,
   profiles,
 }: {
   items: Announcement[];
+  todayEvents: CalendarEvent[];
+  projects: ProjectLite[];
   profiles: Profile[];
 }) {
-  if (items.length === 0) return null;
+  if (items.length === 0 && todayEvents.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
       {items.map((a) => {
@@ -30,16 +40,51 @@ export function AnnouncementBanner({
               <p className="whitespace-pre-wrap break-words">{a.body}</p>
             </div>
             <p className="shrink-0 font-mono text-[10px] uppercase tracking-wider opacity-70">
-              ~ {formatExpiry(a.expires_at)}
+              ~ {formatStamp(a.expires_at)}
             </p>
           </div>
         );
       })}
+      {todayEvents.length > 0 ? (
+        <Link
+          href="/calendar"
+          className="flex flex-col gap-1.5 rounded-md border border-sky-300/60 bg-sky-50 px-4 py-3 text-sm text-sky-900 transition-colors hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-100 dark:hover:bg-sky-500/15"
+        >
+          <p className="font-mono text-[11px] uppercase tracking-wider">
+            오늘 일정 · {todayEvents.length}건
+          </p>
+          <ul className="flex flex-col gap-1">
+            {todayEvents.map((ev) => {
+              const proj = projects.find((p) => p.id === ev.project_id);
+              return (
+                <li key={ev.id} className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider"
+                    style={{
+                      backgroundColor: projectColorSoft(ev.project_id),
+                      color: projectColor(ev.project_id),
+                    }}
+                  >
+                    {eventStamp(ev)}
+                  </span>
+                  <span className="truncate">
+                    {ev.title}
+                    {proj ? (
+                      <span className="ml-1.5 text-xs opacity-70">· {proj.title}</span>
+                    ) : null}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Link>
+      ) : null}
     </div>
   );
 }
 
-function formatExpiry(iso: string): string {
+function formatStamp(iso: string): string {
   const fmt = new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
     month: "2-digit",
@@ -49,4 +94,34 @@ function formatExpiry(iso: string): string {
     hour12: false,
   });
   return fmt.format(new Date(iso));
+}
+
+function timeOnly(iso: string): string {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+// "종일", "10:00", or "~17:00" depending on whether the event has a time
+// today (could be ongoing from a previous day).
+function eventStamp(ev: CalendarEvent): string {
+  if (ev.all_day) return "종일";
+  const startsToday = isTodayInSeoul(ev.starts_at);
+  if (!startsToday && ev.ends_at) {
+    return `~${timeOnly(ev.ends_at)}`;
+  }
+  return timeOnly(ev.starts_at);
+}
+
+function isTodayInSeoul(iso: string): boolean {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(new Date(iso)) === fmt.format(new Date());
 }

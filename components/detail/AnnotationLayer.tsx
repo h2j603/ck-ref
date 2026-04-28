@@ -85,15 +85,19 @@ export function AnnotationLayer({
 
   // Open the annotation referenced by #ann-<id> in the URL — used by activity
   // feed deeplinks. We re-evaluate after items load so the matched one
-  // actually exists in state.
+  // actually exists in state. Deferred to a microtask so the setState
+  // doesn't fire synchronously inside the effect tick.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const m = window.location.hash.match(/^#ann-([0-9a-f-]+)$/i);
     if (!m) return;
     const target = m[1];
-    if (items.some((a) => a.id === target)) {
-      setOpenId(target);
-    }
+    const handle = window.setTimeout(() => {
+      if (items.some((a) => a.id === target)) {
+        setOpenId(target);
+      }
+    }, 0);
+    return () => window.clearTimeout(handle);
   }, [items]);
 
   function handleImageClick(e: React.MouseEvent<HTMLDivElement>) {
