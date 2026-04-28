@@ -422,13 +422,17 @@ create table if not exists events (
   all_day           boolean not null default false,
   notified_morning  boolean not null default false,
   notified_hour     boolean not null default false,
+  announce          boolean not null default false,
   created_at        timestamptz not null default now(),
   created_by        text
 );
 
--- Existing deployments — idempotent column adds for the reminder flags.
+-- Existing deployments — idempotent column adds for the reminder flags
+-- and the index-banner opt-in (default off so noisy long-running plans
+-- don't auto-pin themselves to the index).
 alter table events add column if not exists notified_morning boolean not null default false;
 alter table events add column if not exists notified_hour    boolean not null default false;
+alter table events add column if not exists announce         boolean not null default false;
 
 create index if not exists events_starts_idx  on events (starts_at);
 create index if not exists events_project_idx on events (project_id);
