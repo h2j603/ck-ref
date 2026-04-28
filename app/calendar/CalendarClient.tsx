@@ -277,27 +277,33 @@ export function CalendarClient({
                 {list.slice(0, 3).map((ev) => {
                   const span = eventSpan(ev, day);
                   // Multi-day chips bridge the cell's 4px padding + 1px
-                  // right border + 4px next-cell padding by extending
-                  // 5px past the natural chip edge on each joining side.
-                  // The two adjoining chips visually overlap in the
-                  // border region; identical background color hides the
-                  // overlap so the bar reads as one continuous run.
-                  // Title appears only on the first day so it isn't
-                  // repeated under every cell.
+                  // right border + 4px next-cell padding via inline
+                  // negative margins. Tailwind arbitrary values
+                  // (-mr-[5px]) weren't being applied in production —
+                  // likely a JIT edge case — so we sidestep with style.
+                  // 5px past each joining edge gives a 1px overlap
+                  // inside the cell border, making the bar read as one
+                  // continuous run. Title only on the first day.
+                  const chipStyle: React.CSSProperties = {
+                    backgroundColor: projectColorSoft(ev.project_id),
+                    color: projectColor(ev.project_id),
+                  };
+                  if (span === "start" || span === "mid") {
+                    chipStyle.marginRight = "-5px";
+                  }
+                  if (span === "end" || span === "mid") {
+                    chipStyle.marginLeft = "-5px";
+                  }
                   return (
                     <li
                       key={ev.id}
                       className={cn(
                         "truncate px-1.5 py-0.5 text-[10px]",
                         span === "single" && "rounded-sm",
-                        span === "start" && "-mr-[5px] rounded-l-sm",
-                        span === "mid" && "-mx-[5px]",
-                        span === "end" && "-ml-[5px] rounded-r-sm",
+                        span === "start" && "rounded-l-sm",
+                        span === "end" && "rounded-r-sm",
                       )}
-                      style={{
-                        backgroundColor: projectColorSoft(ev.project_id),
-                        color: projectColor(ev.project_id),
-                      }}
+                      style={chipStyle}
                     >
                       {span === "mid" || span === "end" ? " " : ev.title}
                     </li>
