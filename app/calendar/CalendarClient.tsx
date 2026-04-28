@@ -276,19 +276,23 @@ export function CalendarClient({
               <ul className="flex flex-col gap-0.5">
                 {list.slice(0, 3).map((ev) => {
                   const span = eventSpan(ev, day);
-                  // Range chips bleed into adjacent cells via negative
-                  // margins so a multi-day event reads as one continuous
-                  // bar across the row. Only the first day in the run
-                  // shows the title to avoid repeating it in every cell.
+                  // Multi-day chips bridge the cell's 4px padding + 1px
+                  // right border + 4px next-cell padding by extending
+                  // 5px past the natural chip edge on each joining side.
+                  // The two adjoining chips visually overlap in the
+                  // border region; identical background color hides the
+                  // overlap so the bar reads as one continuous run.
+                  // Title appears only on the first day so it isn't
+                  // repeated under every cell.
                   return (
                     <li
                       key={ev.id}
                       className={cn(
-                        "truncate px-1 py-0.5 text-[10px]",
+                        "truncate px-1.5 py-0.5 text-[10px]",
                         span === "single" && "rounded-sm",
-                        span === "start" && "-mr-1 rounded-l-sm",
-                        span === "mid" && "-mx-1",
-                        span === "end" && "-ml-1 rounded-r-sm",
+                        span === "start" && "-mr-[5px] rounded-l-sm",
+                        span === "mid" && "-mx-[5px]",
+                        span === "end" && "-ml-[5px] rounded-r-sm",
                       )}
                       style={{
                         backgroundColor: projectColorSoft(ev.project_id),
