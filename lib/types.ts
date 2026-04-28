@@ -125,6 +125,13 @@ export type ProjectUpdate = {
   created_by: string | null;
 };
 
+export type UpdateReaction = {
+  project_update_id: string;
+  user_key: string;
+  emoji: string;
+  reacted_at: string;
+};
+
 export type Announcement = {
   id: string;
   body: string;

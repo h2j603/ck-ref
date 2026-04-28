@@ -15,6 +15,7 @@ import {
   fetchProject,
   fetchProjectInspirationRefs,
   fetchProjectUpdates,
+  fetchUpdateReactions,
 } from "@/lib/queries";
 
 export default async function WipDetailPage({
@@ -32,6 +33,9 @@ export default async function WipDetailPage({
     fetchProjectInspirationRefs(id).catch(() => []),
     fetchProfiles().catch(() => []),
   ]);
+  const reactionsByUpdate = await fetchUpdateReactions(
+    updates.map((u) => u.id),
+  ).catch(() => new Map());
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-12">
@@ -108,7 +112,12 @@ export default async function WipDetailPage({
         ) : (
           <div className="flex flex-col gap-6">
             {updates.map((u) => (
-              <UpdateCard key={u.id} update={u} profiles={profiles} />
+              <UpdateCard
+                key={u.id}
+                update={u}
+                profiles={profiles}
+                initialReactions={reactionsByUpdate.get(u.id) ?? []}
+              />
             ))}
           </div>
         )}
