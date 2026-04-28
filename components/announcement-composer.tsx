@@ -66,9 +66,14 @@ export function AnnouncementComposer() {
     if (!hydrated || !nickname) return;
     const initial = window.setTimeout(() => void refresh(), 0);
     const id = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    // Refresh whenever the banner (or anyone else) reports a change so
+    // the dropdown count stays in sync without waiting for the poll.
+    const onChange = () => void refresh();
+    window.addEventListener("ck-ref:announcements-changed", onChange);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(id);
+      window.removeEventListener("ck-ref:announcements-changed", onChange);
       inflight.current?.abort();
     };
   }, [hydrated, nickname, refresh]);
