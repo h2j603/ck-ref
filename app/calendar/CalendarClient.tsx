@@ -259,7 +259,11 @@ export function CalendarClient({
                 setEditing(null);
               }}
               className={cn(
-                "flex min-h-[80px] flex-col items-stretch gap-0.5 border-b border-r border-border/60 p-1 text-left transition-colors",
+                // overflow-visible matters: <button> defaults to
+                // overflow:hidden on Safari/iOS, which would clip
+                // multi-day chips that bleed into adjacent cells via
+                // negative margin.
+                "flex min-h-[80px] flex-col items-stretch gap-0.5 overflow-visible border-b border-r border-border/60 p-1 text-left transition-colors",
                 inMonth ? "bg-background" : "bg-muted/40 text-muted-foreground",
                 "hover:bg-muted/60",
               )}
@@ -284,9 +288,15 @@ export function CalendarClient({
                   // 5px past each joining edge gives a 1px overlap
                   // inside the cell border, making the bar read as one
                   // continuous run. Title only on the first day.
+                  // position:relative + z-index lifts the chip above the
+                  // cell's border-r so the bg color visibly bridges
+                  // adjacent cells. Without this the cell border paints
+                  // on top and breaks the bar visually.
                   const chipStyle: React.CSSProperties = {
                     backgroundColor: projectColorSoft(ev.project_id),
                     color: projectColor(ev.project_id),
+                    position: "relative",
+                    zIndex: 1,
                   };
                   if (span === "start" || span === "mid") {
                     chipStyle.marginRight = "-5px";
