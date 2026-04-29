@@ -88,6 +88,7 @@ export default async function WipDetailPage({
         projectId={project.id}
         createdBy={project.created_by}
         initial={planning}
+        profiles={profiles}
       />
 
       <PositioningMaps

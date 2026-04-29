@@ -111,6 +111,7 @@ export type ProjectPlanning = {
   audience?: string;
   positive_keywords?: string[];
   negative_keywords?: string[];
+  roles?: string;
   constraints?: string;
   deliverables?: string;
   // Legacy: pre-split single tone keyword list. Read-migrated into
@@ -122,6 +123,7 @@ export const PLANNING_TEXT_SECTIONS = [
   "concept",
   "problem",
   "audience",
+  "roles",
   "constraints",
   "deliverables",
 ] as const;

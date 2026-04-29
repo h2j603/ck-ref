@@ -3,11 +3,13 @@
 import { Pencil, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { MentionInput } from "@/components/mention-input";
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
+import type { Profile } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/client";
 import {
   PLANNING_TEXT_SECTIONS,
@@ -20,6 +22,10 @@ type SectionMeta = {
   placeholder: string;
   rows: number;
   short?: boolean;
+  // Roles uses the @-mention textarea so the dropdown can pick from the
+  // canonical 3-person roster. Other text sections still render mentions
+  // on display via MarkdownWithMentions, but their editors stay plain.
+  mention?: boolean;
 };
 
 const SECTION_META: Record<PlanningTextSection, SectionMeta> = {
@@ -39,6 +45,12 @@ const SECTION_META: Record<PlanningTextSection, SectionMeta> = {
     placeholder: "누구를 위해. 데모/사이코그래픽, 컨텍스트",
     rows: 4,
   },
+  roles: {
+    label: "역할 분담",
+    placeholder: "@ 로 멘션. 예) 디자인 — @하진, 개발 — @미주",
+    rows: 3,
+    mention: true,
+  },
   constraints: {
     label: "제약 / 일정",
     placeholder: "마감, 매체, 포맷, 예산, 기술적 제약",
@@ -55,10 +67,12 @@ export function PlanningSections({
   projectId,
   createdBy,
   initial,
+  profiles,
 }: {
   projectId: string;
   createdBy: string | null;
   initial: ProjectPlanning;
+  profiles: Profile[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const { nickname, hydrated } = useNickname();
@@ -73,6 +87,7 @@ export function PlanningSections({
     Boolean(planning.concept) ||
     Boolean(planning.problem) ||
     Boolean(planning.audience) ||
+    Boolean(planning.roles) ||
     Boolean(planning.constraints) ||
     Boolean(planning.deliverables) ||
     (planning.positive_keywords && planning.positive_keywords.length > 0) ||
@@ -107,12 +122,17 @@ export function PlanningSections({
         ).map((key) => (
           <div
             key={key}
-            className={SECTION_META[key].short ? "md:col-span-2" : undefined}
+            className={
+              SECTION_META[key].short || SECTION_META[key].mention
+                ? "md:col-span-2"
+                : undefined
+            }
           >
             <TextSection
               meta={SECTION_META[key]}
               value={planning[key] ?? ""}
               canEdit={canEdit}
+              profiles={profiles}
               onSave={(v) => persist({ ...planning, [key]: v || undefined })}
             />
           </div>
@@ -160,11 +180,13 @@ function TextSection({
   meta,
   value,
   canEdit,
+  profiles,
   onSave,
 }: {
   meta: SectionMeta;
   value: string;
   canEdit: boolean;
+  profiles: Profile[];
   onSave: (next: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -210,6 +232,16 @@ function TextSection({
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              placeholder={meta.placeholder}
+              autoFocus
+              disabled={busy}
+            />
+          ) : meta.mention ? (
+            <MentionInput
+              value={draft}
+              onChange={setDraft}
+              profiles={profiles}
+              rows={meta.rows}
               placeholder={meta.placeholder}
               autoFocus
               disabled={busy}
