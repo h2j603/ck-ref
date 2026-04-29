@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, Flag, Pencil, Plus, Target, Trash2, X } from "lucide-react";
+import { Crown, Flag, Pencil, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
@@ -26,7 +26,6 @@ import {
   type PlanningTextSection,
   type ProjectPlanning,
   type ProjectRole,
-  type SuccessMetric,
 } from "@/lib/types";
 
 type SectionMeta = {
@@ -104,7 +103,6 @@ export function PlanningSections({
     (planning.positive_keywords && planning.positive_keywords.length > 0) ||
     (planning.negative_keywords && planning.negative_keywords.length > 0) ||
     (planning.roles && planning.roles.length > 0) ||
-    (planning.success_metrics && planning.success_metrics.length > 0) ||
     milestones.length > 0;
   if (!canEdit && !hasContent) return null;
 
@@ -174,21 +172,6 @@ export function PlanningSections({
                 persist({
                   ...planning,
                   roles: roles.length ? roles : undefined,
-                })
-              }
-            />
-          </div>
-        ) : null}
-        {canEdit ||
-        (planning.success_metrics && planning.success_metrics.length > 0) ? (
-          <div className="md:col-span-2">
-            <SuccessMetricsSection
-              value={planning.success_metrics ?? []}
-              canEdit={canEdit}
-              onSave={(next) =>
-                persist({
-                  ...planning,
-                  success_metrics: next.length ? next : undefined,
                 })
               }
             />
@@ -456,6 +439,17 @@ function KeywordSection({
   );
 }
 
+// Shared row dimensions used by every "row + form" planning section so
+// roles, milestones, etc. line up vertically — same horizontal padding,
+// same height, same right-anchored actions slot. Each section fills the
+// content area with its own grid/flex internally.
+const ROW_SHELL =
+  "flex items-center gap-2 rounded-md border px-3 py-1.5";
+// Fixed-width slot for trailing buttons. Forms' 등록 fills it, displayed
+// rows' icons (× / crown) right-align inside it. This is what makes the
+// 등록 button column line up across sections.
+const ROW_ACTIONS = "flex w-16 shrink-0 items-center justify-end gap-1.5";
+
 function RolesSection({
   value,
   canEdit,
@@ -502,12 +496,10 @@ function RolesSection({
     setBusy(false);
   }
 
-  // The five-column grid keeps the | separators and trailing buttons in
-  // the same x-position across rows regardless of nickname length.
-  // Person column is fixed width (pill) so the role text always starts
-  // at the same place.
-  const ROW_GRID =
-    "grid grid-cols-[5.5rem_auto_1fr_auto_auto] items-center gap-2";
+  // Three-column grid for the inner content: person pill (fixed) | sep | role.
+  // Keeps `|` aligned regardless of nickname length within the section.
+  const CONTENT_GRID =
+    "flex-1 min-w-0 grid grid-cols-[5.5rem_auto_1fr] items-center gap-2";
 
   return (
     <div className="flex flex-col gap-2">
@@ -520,67 +512,68 @@ function RolesSection({
             <li
               key={i}
               className={cn(
-                ROW_GRID,
-                "rounded-md border px-2 py-1",
+                ROW_SHELL,
                 r.is_leader
                   ? "border-lime-300 bg-lime-50 dark:border-lime-500/40 dark:bg-lime-500/10"
                   : "border-border/60 bg-muted/20",
               )}
             >
-              <div className="min-w-0 truncate">
-                <NicknamePill nickname={r.person} link={false} />
+              <div className={CONTENT_GRID}>
+                <div className="min-w-0 truncate">
+                  <NicknamePill nickname={r.person} link={false} />
+                </div>
+                <span className="text-muted-foreground">|</span>
+                <span className="min-w-0 truncate text-sm">{r.role}</span>
               </div>
-              <span className="text-muted-foreground">|</span>
-              <span className="min-w-0 truncate text-sm">{r.role}</span>
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => void toggleLeader(i)}
-                  disabled={busy}
-                  className={cn(
-                    "transition-colors",
-                    r.is_leader
-                      ? "text-lime-600 hover:text-lime-700 dark:text-lime-400"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-label={
-                    r.is_leader ? "프로젝트 리더 해제" : "프로젝트 리더로 설정"
-                  }
-                  title={
-                    r.is_leader
-                      ? "프로젝트 리더 (클릭으로 해제)"
-                      : "프로젝트 리더로 설정"
-                  }
-                >
-                  <Crown
-                    className="size-3.5"
-                    fill={r.is_leader ? "currentColor" : "none"}
-                  />
-                </button>
-              ) : r.is_leader ? (
-                <span
-                  className="text-lime-600 dark:text-lime-400"
-                  title="프로젝트 리더"
-                  aria-label="프로젝트 리더"
-                >
-                  <Crown className="size-3.5" fill="currentColor" />
-                </span>
-              ) : (
-                <span aria-hidden />
-              )}
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => void remove(i)}
-                  disabled={busy}
-                  className="text-muted-foreground hover:text-destructive"
-                  aria-label="remove"
-                >
-                  <X className="size-3" />
-                </button>
-              ) : (
-                <span aria-hidden />
-              )}
+              <div className={ROW_ACTIONS}>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => void toggleLeader(i)}
+                    disabled={busy}
+                    className={cn(
+                      "transition-colors",
+                      r.is_leader
+                        ? "text-lime-600 hover:text-lime-700 dark:text-lime-400"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    aria-label={
+                      r.is_leader
+                        ? "프로젝트 리더 해제"
+                        : "프로젝트 리더로 설정"
+                    }
+                    title={
+                      r.is_leader
+                        ? "프로젝트 리더 (클릭으로 해제)"
+                        : "프로젝트 리더로 설정"
+                    }
+                  >
+                    <Crown
+                      className="size-3.5"
+                      fill={r.is_leader ? "currentColor" : "none"}
+                    />
+                  </button>
+                ) : r.is_leader ? (
+                  <span
+                    className="text-lime-600 dark:text-lime-400"
+                    title="프로젝트 리더"
+                    aria-label="프로젝트 리더"
+                  >
+                    <Crown className="size-3.5" fill="currentColor" />
+                  </span>
+                ) : null}
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => void remove(i)}
+                    disabled={busy}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="remove"
+                  >
+                    <X className="size-3" />
+                  </button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -591,172 +584,44 @@ function RolesSection({
             e.preventDefault();
             void add();
           }}
-          className={cn(ROW_GRID, "px-2")}
+          className={cn(ROW_SHELL, "border-transparent bg-transparent")}
         >
-          <Select
-            value={draftPerson}
-            onValueChange={setDraftPerson}
-            disabled={busy}
-          >
-            <SelectTrigger className="h-8 w-full text-[12px]">
-              <SelectValue placeholder="인원" />
-            </SelectTrigger>
-            <SelectContent>
-              {profiles.map((p) => (
-                <SelectItem key={p.key} value={p.key}>
-                  @{p.display_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-muted-foreground">|</span>
-          <Input
-            value={draftRole}
-            onChange={(e) => setDraftRole(e.target.value)}
-            placeholder="역할"
-            className="h-8 w-full text-[12px]"
-            disabled={busy}
-          />
-          {/* Empty cell to keep the leader column aligned with above rows. */}
-          <span aria-hidden />
-          <Button
-            type="submit"
-            size="sm"
-            className="h-8 text-[11px]"
-            disabled={busy || !draftPerson || draftRole.trim().length === 0}
-          >
-            등록
-          </Button>
-        </form>
-      ) : null}
-    </div>
-  );
-}
-
-function SuccessMetricsSection({
-  value,
-  canEdit,
-  onSave,
-}: {
-  value: SuccessMetric[];
-  canEdit: boolean;
-  onSave: (next: SuccessMetric[]) => Promise<void> | void;
-}) {
-  const [draftMetric, setDraftMetric] = useState("");
-  const [draftTarget, setDraftTarget] = useState("");
-  const [draftBy, setDraftBy] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function add() {
-    const metric = draftMetric.trim();
-    if (!metric) return;
-    setBusy(true);
-    await onSave([
-      ...value,
-      {
-        metric,
-        target: draftTarget.trim() || undefined,
-        by_when: draftBy.trim() || undefined,
-      },
-    ]);
-    setBusy(false);
-    setDraftMetric("");
-    setDraftTarget("");
-    setDraftBy("");
-  }
-
-  async function remove(index: number) {
-    setBusy(true);
-    await onSave(value.filter((_, i) => i !== index));
-    setBusy(false);
-  }
-
-  // metric / target / by_when / × — text columns are auto, so the
-  // separators line up regardless of how long any one cell is.
-  const ROW_GRID =
-    "grid grid-cols-[1fr_auto_minmax(0,0.7fr)_auto_minmax(0,0.5fr)_auto] items-center gap-2";
-
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-        <Target className="size-3" />
-        성공 지표
-      </h3>
-      {value.length === 0 && !canEdit ? null : (
-        <ul className="flex flex-col gap-1.5">
-          {value.map((m, i) => (
-            <li
-              key={i}
-              className={cn(
-                ROW_GRID,
-                "rounded-md border border-border/60 bg-muted/20 px-2 py-1",
-              )}
+          <div className={CONTENT_GRID}>
+            <Select
+              value={draftPerson}
+              onValueChange={setDraftPerson}
+              disabled={busy}
             >
-              <span className="min-w-0 truncate text-sm">{m.metric}</span>
-              <span className="text-muted-foreground">|</span>
-              <span className="min-w-0 truncate text-sm text-muted-foreground">
-                {m.target || "—"}
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                {m.by_when || "—"}
-              </span>
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => void remove(i)}
-                  disabled={busy}
-                  className="text-muted-foreground hover:text-destructive"
-                  aria-label="remove"
-                >
-                  <X className="size-3" />
-                </button>
-              ) : (
-                <span aria-hidden />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {canEdit ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void add();
-          }}
-          className={cn(ROW_GRID, "px-2")}
-        >
-          <Input
-            value={draftMetric}
-            onChange={(e) => setDraftMetric(e.target.value)}
-            placeholder="지표 (예: 인스타 참여율)"
-            className="h-8 w-full text-[12px]"
-            disabled={busy}
-          />
-          <span className="text-muted-foreground">|</span>
-          <Input
-            value={draftTarget}
-            onChange={(e) => setDraftTarget(e.target.value)}
-            placeholder="목표 (5%)"
-            className="h-8 w-full text-[12px]"
-            disabled={busy}
-          />
-          <span className="text-muted-foreground">·</span>
-          <Input
-            value={draftBy}
-            onChange={(e) => setDraftBy(e.target.value)}
-            placeholder="언제까지"
-            className="h-8 w-full text-[12px]"
-            disabled={busy}
-          />
-          <Button
-            type="submit"
-            size="sm"
-            className="h-8 text-[11px]"
-            disabled={busy || !draftMetric.trim()}
-          >
-            등록
-          </Button>
+              <SelectTrigger className="h-8 w-full text-[12px]">
+                <SelectValue placeholder="인원" />
+              </SelectTrigger>
+              <SelectContent>
+                {profiles.map((p) => (
+                  <SelectItem key={p.key} value={p.key}>
+                    @{p.display_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground">|</span>
+            <Input
+              value={draftRole}
+              onChange={(e) => setDraftRole(e.target.value)}
+              placeholder="역할"
+              className="h-8 w-full text-[12px]"
+              disabled={busy}
+            />
+          </div>
+          <div className={ROW_ACTIONS}>
+            <Button
+              type="submit"
+              size="sm"
+              className="h-8 w-full text-[11px]"
+              disabled={busy || !draftPerson || draftRole.trim().length === 0}
+            >
+              등록
+            </Button>
+          </div>
         </form>
       ) : null}
     </div>
@@ -838,8 +703,11 @@ function MilestonesSection({
     });
   }
 
-  const ROW_GRID =
-    "grid grid-cols-[auto_1fr_minmax(0,7rem)_auto] items-center gap-2";
+  // Inner content: Flag glyph + title (flex-1) + fixed-width date column.
+  // Date stays on the right of the content area; the action button lives
+  // outside in ROW_ACTIONS so it lines up with roles' 등록 button.
+  const CONTENT_FLEX =
+    "flex-1 min-w-0 flex items-center gap-2";
 
   return (
     <div className="flex flex-col gap-2">
@@ -857,28 +725,32 @@ function MilestonesSection({
             <li
               key={m.id}
               className={cn(
-                ROW_GRID,
-                "rounded-md border border-border/60 bg-muted/20 px-2 py-1",
+                ROW_SHELL,
+                "border-border/60 bg-muted/20",
               )}
             >
-              <Flag className="size-3 text-muted-foreground" />
-              <span className="min-w-0 truncate text-sm">{m.title}</span>
-              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                {dateLabel(m.starts_at)}
-              </span>
-              {canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => void remove(m.id)}
-                  disabled={busy}
-                  className="text-muted-foreground hover:text-destructive"
-                  aria-label="remove"
-                >
-                  <Trash2 className="size-3" />
-                </button>
-              ) : (
-                <span aria-hidden />
-              )}
+              <div className={CONTENT_FLEX}>
+                <Flag className="size-3 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {m.title}
+                </span>
+                <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {dateLabel(m.starts_at)}
+                </span>
+              </div>
+              <div className={ROW_ACTIONS}>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => void remove(m.id)}
+                    disabled={busy}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="remove"
+                  >
+                    <X className="size-3" />
+                  </button>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -889,31 +761,34 @@ function MilestonesSection({
             e.preventDefault();
             void add();
           }}
-          className={cn(ROW_GRID, "px-2")}
+          className={cn(ROW_SHELL, "border-transparent bg-transparent")}
         >
-          <span aria-hidden className="size-3" />
-          <Input
-            value={draftTitle}
-            onChange={(e) => setDraftTitle(e.target.value)}
-            placeholder="마일스톤 (예: 시안 1차)"
-            className="h-8 w-full text-[12px]"
-            disabled={busy}
-          />
-          <Input
-            type="date"
-            value={draftDate}
-            onChange={(e) => setDraftDate(e.target.value)}
-            className="h-8 w-full text-[12px]"
-            disabled={busy}
-          />
-          <Button
-            type="submit"
-            size="sm"
-            className="h-8 text-[11px]"
-            disabled={busy || !draftTitle.trim() || !draftDate}
-          >
-            등록
-          </Button>
+          <div className={CONTENT_FLEX}>
+            <Input
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.target.value)}
+              placeholder="마일스톤 (예: 시안 1차)"
+              className="h-8 flex-1 text-[12px]"
+              disabled={busy}
+            />
+            <Input
+              type="date"
+              value={draftDate}
+              onChange={(e) => setDraftDate(e.target.value)}
+              className="h-8 w-32 shrink-0 text-[12px]"
+              disabled={busy}
+            />
+          </div>
+          <div className={ROW_ACTIONS}>
+            <Button
+              type="submit"
+              size="sm"
+              className="h-8 w-full text-[11px]"
+              disabled={busy || !draftTitle.trim() || !draftDate}
+            >
+              등록
+            </Button>
+          </div>
         </form>
       ) : null}
     </div>
