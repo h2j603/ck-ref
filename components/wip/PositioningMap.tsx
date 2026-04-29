@@ -793,14 +793,31 @@ function AddPointDialog({
   // Default candidates: project's inspiration refs (familiar, contextual).
   // When the user types, we live-query refs across the whole library.
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RefLite[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // Debounce the query so we don't fan out 7 supabase requests on every
+  // keystroke. 250ms feels live without saturating the connection on
+  // mobile.
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedQuery(query), 250);
+    return () => window.clearTimeout(id);
+  }, [query]);
 
   useEffect(() => {
     if (tab !== "ref") return;
-    const q = query.trim();
-    if (!q) return;
     let cancelled = false;
     void (async () => {
+      const q = debouncedQuery.trim();
+      if (!q) {
+        if (!cancelled) {
+          setSearchResults([]);
+          setSearching(false);
+        }
+        return;
+      }
+      if (!cancelled) setSearching(true);
       // Mirror the main /ref search: match across title, tags, OCR text,
       // designer name, and note bodies. searchRefIdsClient returns the
       // matching ids; we then hydrate the columns the dialog renders.
@@ -808,6 +825,7 @@ function AddPointDialog({
       if (cancelled) return;
       if (ids.size === 0) {
         setSearchResults([]);
+        setSearching(false);
         return;
       }
       const { data, error } = await supabase
@@ -818,11 +836,12 @@ function AddPointDialog({
         .limit(18);
       if (cancelled) return;
       if (!error && data) setSearchResults(data as RefLite[]);
+      setSearching(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [supabase, tab, query]);
+  }, [supabase, tab, debouncedQuery]);
 
   // Showing inspiration refs by default makes the project's mood pool the
   // first thing the eye lands on; typing anything switches to library-wide
@@ -899,20 +918,27 @@ function AddPointDialog({
           </div>
           {tab === "ref" ? (
             <>
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={
-                  inspirationRefs.length > 0
-                    ? "영감 ref 또는 전체 ref에서 검색…"
-                    : "ref 제목으로 검색…"
-                }
-              />
+              <div className="relative">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={
+                    inspirationRefs.length > 0
+                      ? "영감 ref 또는 전체 ref에서 검색…"
+                      : "ref 제목·태그·OCR로 검색…"
+                  }
+                />
+                {searching || (query.trim() && query !== debouncedQuery) ? (
+                  <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
+                    <div className="size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+                  </div>
+                ) : null}
+              </div>
               {!query.trim() && inspirationRefs.length === 0 ? (
                 <p className="font-mono text-[11px] text-muted-foreground">
                   검색어를 입력하거나 라벨로 추가해주세요.
                 </p>
-              ) : candidates.length === 0 ? (
+              ) : candidates.length === 0 && !searching ? (
                 <p className="font-mono text-[11px] text-muted-foreground">
                   결과 없음
                 </p>
