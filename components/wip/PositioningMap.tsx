@@ -45,6 +45,66 @@ export type PositioningAxes = {
   y_high_label: string | null;
 };
 
+// Starter axis pairs so the map isn't a blank slate. Picked to cover the
+// dimensions we usually argue about for our own work — price, tone, audience,
+// era, texture, intent. The preset row only shows when nothing has been set.
+const AXIS_PRESETS: { name: string; axes: PositioningAxes }[] = [
+  {
+    name: "가격 × 혁신",
+    axes: {
+      x_low_label: "저렴",
+      x_high_label: "프리미엄",
+      y_low_label: "전통적",
+      y_high_label: "혁신적",
+    },
+  },
+  {
+    name: "톤 × 밀도",
+    axes: {
+      x_low_label: "진지함",
+      x_high_label: "유희적",
+      y_low_label: "미니멀",
+      y_high_label: "장식적",
+    },
+  },
+  {
+    name: "관객 × 목소리",
+    axes: {
+      x_low_label: "대중적",
+      x_high_label: "전문적",
+      y_low_label: "친근함",
+      y_high_label: "권위적",
+    },
+  },
+  {
+    name: "시대 × 에너지",
+    axes: {
+      x_low_label: "클래식",
+      x_high_label: "트렌디",
+      y_low_label: "차분함",
+      y_high_label: "화려함",
+    },
+  },
+  {
+    name: "질감 × 온도",
+    axes: {
+      x_low_label: "디지털",
+      x_high_label: "아날로그",
+      y_low_label: "차가움",
+      y_high_label: "따뜻함",
+    },
+  },
+  {
+    name: "기능 × 감정",
+    axes: {
+      x_low_label: "기능적",
+      x_high_label: "감성적",
+      y_low_label: "정적",
+      y_high_label: "동적",
+    },
+  },
+];
+
 export function PositioningMap({
   projectId,
   createdBy,
@@ -258,6 +318,29 @@ export function PositioningMap({
         ) : null}
       </header>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      {canEdit &&
+      !axes.x_low_label &&
+      !axes.x_high_label &&
+      !axes.y_low_label &&
+      !axes.y_high_label ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            추천 축
+          </span>
+          {AXIS_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              onClick={() => void persistAxes(preset.axes)}
+              className="rounded-full border border-input px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+              title={`${preset.axes.x_low_label} ↔ ${preset.axes.x_high_label} / ${preset.axes.y_low_label} ↔ ${preset.axes.y_high_label}`}
+            >
+              {preset.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <AxisLabel
