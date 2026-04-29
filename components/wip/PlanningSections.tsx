@@ -511,12 +511,11 @@ function RolesSection({
           {value.map((r, i) => (
             <li
               key={i}
-              className={cn(
-                ROW_SHELL,
-                r.is_leader
-                  ? "border-lime-300 bg-lime-50 dark:border-lime-500/40 dark:bg-lime-500/10"
-                  : "border-border/60 bg-muted/20",
-              )}
+              className={cn(ROW_SHELL, "border-border/60 bg-muted/20")}
+              onDoubleClick={() => {
+                if (canEdit) void toggleLeader(i);
+              }}
+              title={canEdit ? "더블클릭으로 리더 설정/해제" : undefined}
             >
               <div className={CONTENT_GRID}>
                 <div className="min-w-0 truncate">
@@ -526,34 +525,7 @@ function RolesSection({
                 <span className="min-w-0 truncate text-sm">{r.role}</span>
               </div>
               <div className={ROW_ACTIONS}>
-                {canEdit ? (
-                  <button
-                    type="button"
-                    onClick={() => void toggleLeader(i)}
-                    disabled={busy}
-                    className={cn(
-                      "transition-colors",
-                      r.is_leader
-                        ? "text-lime-600 hover:text-lime-700 dark:text-lime-400"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                    aria-label={
-                      r.is_leader
-                        ? "프로젝트 리더 해제"
-                        : "프로젝트 리더로 설정"
-                    }
-                    title={
-                      r.is_leader
-                        ? "프로젝트 리더 (클릭으로 해제)"
-                        : "프로젝트 리더로 설정"
-                    }
-                  >
-                    <Crown
-                      className="size-3.5"
-                      fill={r.is_leader ? "currentColor" : "none"}
-                    />
-                  </button>
-                ) : r.is_leader ? (
+                {r.is_leader ? (
                   <span
                     className="text-lime-600 dark:text-lime-400"
                     title="프로젝트 리더"
@@ -616,8 +588,8 @@ function RolesSection({
             <Button
               type="submit"
               size="sm"
-              className="h-8 w-full text-[11px]"
-              disabled={busy || !draftPerson || draftRole.trim().length === 0}
+              className="h-8 w-full text-xs"
+              disabled={busy}
             >
               등록
             </Button>
@@ -783,8 +755,8 @@ function MilestonesSection({
             <Button
               type="submit"
               size="sm"
-              className="h-8 w-full text-[11px]"
-              disabled={busy || !draftTitle.trim() || !draftDate}
+              className="h-8 w-full text-xs"
+              disabled={busy}
             >
               등록
             </Button>
