@@ -786,16 +786,16 @@ function MilestonesSection({
             e.preventDefault();
             void add();
           }}
-          className={cn(ROW_SHELL, "border-transparent bg-transparent pl-0")}
+          className="flex flex-col gap-2 sm:flex-row sm:items-center"
         >
-          <div className={CONTENT_FLEX}>
-            <Input
-              value={draftTitle}
-              onChange={(e) => setDraftTitle(e.target.value)}
-              placeholder="마일스톤 (예: 시안 1차)"
-              className="h-8 flex-1 text-[12px]"
-              disabled={busy}
-            />
+          <Input
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="마일스톤 (예: 시안 1차)"
+            className="h-8 w-full flex-1 text-[12px]"
+            disabled={busy}
+          />
+          <div className="flex items-center gap-2">
             <Select
               value={draftAssignee}
               onValueChange={setDraftAssignee}
@@ -817,15 +817,13 @@ function MilestonesSection({
               type="date"
               value={draftDate}
               onChange={(e) => setDraftDate(e.target.value)}
-              className="h-8 w-32 shrink-0 text-[12px]"
+              className="h-8 flex-1 shrink-0 text-[12px] sm:w-32 sm:flex-none"
               disabled={busy}
             />
-          </div>
-          <div className={ROW_ACTIONS}>
             <Button
               type="submit"
               size="sm"
-              className="h-8 w-full text-xs"
+              className="h-8 shrink-0 text-xs"
               disabled={busy}
             >
               등록
