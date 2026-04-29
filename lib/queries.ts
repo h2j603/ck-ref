@@ -540,9 +540,20 @@ export async function fetchProjectPositioning(
 
 // Convenience: planning is stored as jsonb so the column reads back as a
 // generic object. We don't validate shape here — sections are all optional.
+// Old rows written before keywords were split kept everything in `tone`;
+// surface those as positive_keywords on read so users don't lose them.
 export function readPlanning(value: unknown): ProjectPlanning {
   if (!value || typeof value !== "object") return {};
-  return value as ProjectPlanning;
+  const planning = { ...(value as ProjectPlanning) };
+  if (
+    !planning.positive_keywords &&
+    Array.isArray(planning.tone) &&
+    planning.tone.length > 0
+  ) {
+    planning.positive_keywords = planning.tone;
+  }
+  delete planning.tone;
+  return planning;
 }
 
 export async function fetchUpdateRefs(

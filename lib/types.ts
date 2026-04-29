@@ -109,20 +109,30 @@ export type ProjectPlanning = {
   concept?: string;
   problem?: string;
   audience?: string;
-  tone?: string[];
+  positive_keywords?: string[];
+  negative_keywords?: string[];
   constraints?: string;
   deliverables?: string;
+  // Legacy: pre-split single tone keyword list. Read-migrated into
+  // positive_keywords by readPlanning(); never written back.
+  tone?: string[];
 };
 
-export const PLANNING_SECTIONS = [
+export const PLANNING_TEXT_SECTIONS = [
   "concept",
   "problem",
   "audience",
-  "tone",
   "constraints",
   "deliverables",
 ] as const;
-export type PlanningSection = (typeof PLANNING_SECTIONS)[number];
+export type PlanningTextSection = (typeof PLANNING_TEXT_SECTIONS)[number];
+
+export const PLANNING_KEYWORD_SECTIONS = [
+  "positive_keywords",
+  "negative_keywords",
+] as const;
+export type PlanningKeywordSection =
+  (typeof PLANNING_KEYWORD_SECTIONS)[number];
 
 export type Project = {
   id: string;
