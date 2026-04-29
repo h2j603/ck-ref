@@ -497,9 +497,11 @@ function RolesSection({
   }
 
   // Three-column grid for the inner content: person pill (fixed) | sep | role.
-  // Keeps `|` aligned regardless of nickname length within the section.
+  // 4rem fits @<2-char nickname> snugly, so the gap between the pill and
+  // the | separator stays small while still aligning vertically across
+  // rows with different nickname widths.
   const CONTENT_GRID =
-    "flex-1 min-w-0 grid grid-cols-[5.5rem_auto_1fr] items-center gap-2";
+    "flex-1 min-w-0 grid grid-cols-[4rem_auto_1fr] items-center gap-2";
 
   return (
     <div className="flex flex-col gap-2">
