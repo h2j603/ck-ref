@@ -121,35 +121,32 @@ export type RefFilter = {
 async function searchRefIds(q: string): Promise<Set<string>> {
   const supabase = await createClient();
   const like = `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
-  const [titleRes, tagRes, ocrRes, designerRes, bodyRes, prosRes, consRes] =
-    await Promise.all([
-      supabase.from("refs").select("id").ilike("title", like).limit(500),
-      supabase.from("refs").select("id").contains("tags", [q]).limit(500),
-      // Tesseract-extracted text — lets users find a poster by typing a
-      // phrase visible on it.
-      supabase.from("refs").select("id").ilike("ocr_text", like).limit(500),
-      supabase
-        .from("designers")
-        .select("ref_designers(ref_id)")
-        .ilike("name", like)
-        .limit(50),
-      supabase.from("notes").select("ref_id").ilike("body", like).limit(500),
-      supabase.from("notes").select("ref_id").ilike("pros", like).limit(500),
-      supabase.from("notes").select("ref_id").ilike("cons", like).limit(500),
-    ]);
+  // Same coalescing as lib/refSearch.ts:searchRefIdsClient — same-table
+  // ilike predicates go through one .or() so we issue 3 round-trips
+  // instead of 7. Tags stay separate to dodge contains() inside or().
+  const refsOr = `title.ilike.${like},ocr_text.ilike.${like}`;
+  const notesOr = `body.ilike.${like},pros.ilike.${like},cons.ilike.${like}`;
+
+  const [refsRes, tagsRes, designerRes, notesRes] = await Promise.all([
+    supabase.from("refs").select("id").or(refsOr).limit(200),
+    supabase.from("refs").select("id").contains("tags", [q]).limit(200),
+    supabase
+      .from("designers")
+      .select("ref_designers(ref_id)")
+      .ilike("name", like)
+      .limit(50),
+    supabase.from("notes").select("ref_id").or(notesOr).limit(200),
+  ]);
 
   const ids = new Set<string>();
-  for (const r of titleRes.data ?? []) ids.add((r as { id: string }).id);
-  for (const r of tagRes.data ?? []) ids.add((r as { id: string }).id);
-  for (const r of ocrRes.data ?? []) ids.add((r as { id: string }).id);
+  for (const r of refsRes.data ?? []) ids.add((r as { id: string }).id);
+  for (const r of tagsRes.data ?? []) ids.add((r as { id: string }).id);
   for (const d of (designerRes.data ?? []) as {
     ref_designers: { ref_id: string }[] | null;
   }[]) {
     for (const rd of d.ref_designers ?? []) ids.add(rd.ref_id);
   }
-  for (const n of bodyRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
-  for (const n of prosRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
-  for (const n of consRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
+  for (const n of notesRes.data ?? []) ids.add((n as { ref_id: string }).ref_id);
   return ids;
 }
 
