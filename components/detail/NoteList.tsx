@@ -97,28 +97,34 @@ const EMPTY: Draft = { body: "", pros: "", cons: "" };
 // Three "shapes" of note. Default `discussion` is the existing free-form
 // thread; the other two surface in the project header summary so threads
 // don't bury commitments and unanswered questions.
+//
+// Each kind has two looks:
+//   - active: the picker's "selected" state, and the displayed badge
+//   - inactive: the picker's unselected state (always the same outline)
+// `discussion`'s active style has to differ from the shared inactive
+// outline or the default chip looks dead — clicking it appears to do
+// nothing because the visual is unchanged.
+const INACTIVE_CHIP =
+  "border-input text-muted-foreground hover:text-foreground";
+
 const KIND_META: Record<
   NoteKind,
-  { label: string; tone: string; chip: string; Icon: typeof MessageCircle }
+  { label: string; activeChip: string; Icon: typeof MessageCircle }
 > = {
   discussion: {
     label: "논의",
-    tone: "text-muted-foreground",
-    chip:
-      "border-input text-muted-foreground hover:text-foreground",
+    activeChip: "border-foreground bg-foreground text-background",
     Icon: MessageCircle,
   },
   decision: {
     label: "결정",
-    tone: "text-emerald-700 dark:text-emerald-300",
-    chip:
+    activeChip:
       "border-emerald-300/60 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100",
     Icon: CheckCircle2,
   },
   open_question: {
     label: "열린 질문",
-    tone: "text-amber-700 dark:text-amber-300",
-    chip:
+    activeChip:
       "border-amber-300/60 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100",
     Icon: CircleHelp,
   },
@@ -892,7 +898,7 @@ function KindBadge({ kind, label }: { kind: NoteKind; label?: string }) {
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider leading-none",
-        meta.chip,
+        meta.activeChip,
       )}
     >
       <Icon className="size-3" />
@@ -925,9 +931,7 @@ function KindPicker({
             onClick={() => onChange(k)}
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-              active
-                ? meta.chip
-                : "border-input text-muted-foreground hover:text-foreground",
+              active ? meta.activeChip : INACTIVE_CHIP,
             )}
           >
             <Icon className="size-3" />
