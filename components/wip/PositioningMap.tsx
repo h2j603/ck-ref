@@ -75,6 +75,15 @@ export function PositioningMap({
   const [editing, setEditing] = useState<PositioningPoint | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  // Read-only viewers shouldn't see an empty grid; hide the whole map until
+  // the owner has plotted something or labelled an axis.
+  const hasContent =
+    points.length > 0 ||
+    Boolean(axes.x_low_label) ||
+    Boolean(axes.x_high_label) ||
+    Boolean(axes.y_low_label) ||
+    Boolean(axes.y_high_label);
+
   // Drag state. We track the dragged point id and the latest coords; on
   // pointer-up we persist. Using a ref so the move handler reads the latest
   // value without re-binding on each render.
@@ -233,6 +242,8 @@ export function PositioningMap({
     const { x, y } = clientToCoords(e.clientX, e.clientY);
     setAdding({ x, y });
   }
+
+  if (!canEdit && !hasContent) return null;
 
   return (
     <section className="flex flex-col gap-3">

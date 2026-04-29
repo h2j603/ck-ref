@@ -43,7 +43,6 @@ export default async function WipDetailPage({
     updates.map((u) => u.id),
   ).catch(() => new Map());
   const planning = readPlanning(project.planning);
-  const isPlanning = project.status === "planning";
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-12">
@@ -85,6 +84,45 @@ export default async function WipDetailPage({
         </div>
       </header>
 
+      <PlanningSections
+        projectId={project.id}
+        createdBy={project.created_by}
+        initial={planning}
+      />
+
+      <PositioningMap
+        projectId={project.id}
+        createdBy={project.created_by}
+        initialAxes={positioning.axes}
+        initialPoints={positioning.points.map((p) => ({
+          id: p.id,
+          ref_id: p.ref_id,
+          label: p.label,
+          x: p.x,
+          y: p.y,
+          is_self: p.is_self,
+          color: p.color,
+          ref: p.ref
+            ? {
+                id: p.ref.id,
+                title: p.ref.title,
+                image_path: p.ref.image_path,
+                image_width: p.ref.image_width,
+                image_height: p.ref.image_height,
+                color_hex: p.ref.color_hex,
+              }
+            : null,
+        }))}
+        inspirationRefs={inspiration.map((r) => ({
+          id: r.id,
+          title: r.title,
+          image_path: r.image_path,
+          image_width: r.image_width,
+          image_height: r.image_height,
+          color_hex: r.color_hex,
+        }))}
+      />
+
       <InspirationRefs
         projectId={project.id}
         initial={inspiration.map((r) => ({
@@ -97,48 +135,6 @@ export default async function WipDetailPage({
           added_by: r.added_by,
         }))}
       />
-
-      {isPlanning ? (
-        <>
-          <PlanningSections
-            projectId={project.id}
-            createdBy={project.created_by}
-            initial={planning}
-          />
-          <PositioningMap
-            projectId={project.id}
-            createdBy={project.created_by}
-            initialAxes={positioning.axes}
-            initialPoints={positioning.points.map((p) => ({
-              id: p.id,
-              ref_id: p.ref_id,
-              label: p.label,
-              x: p.x,
-              y: p.y,
-              is_self: p.is_self,
-              color: p.color,
-              ref: p.ref
-                ? {
-                    id: p.ref.id,
-                    title: p.ref.title,
-                    image_path: p.ref.image_path,
-                    image_width: p.ref.image_width,
-                    image_height: p.ref.image_height,
-                    color_hex: p.ref.color_hex,
-                  }
-                : null,
-            }))}
-            inspirationRefs={inspiration.map((r) => ({
-              id: r.id,
-              title: r.title,
-              image_path: r.image_path,
-              image_width: r.image_width,
-              image_height: r.image_height,
-              color_hex: r.color_hex,
-            }))}
-          />
-        </>
-      ) : null}
 
       <section className="flex flex-col gap-4">
         <header className="border-b border-border/60 pb-2">
@@ -153,32 +149,30 @@ export default async function WipDetailPage({
         />
       </section>
 
-      {!isPlanning ? (
-        <section className="flex flex-col gap-6">
-          <header className="flex items-center justify-between border-b border-border/60 pb-2">
-            <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-              업데이트 — {updates.length}
-            </h2>
-          </header>
-          <AddUpdateForm projectId={project.id} />
-          {updates.length === 0 ? (
-            <p className="py-8 text-center font-mono text-xs text-muted-foreground">
-              첫 업데이트를 올려보세요.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {updates.map((u) => (
-                <UpdateCard
-                  key={u.id}
-                  update={u}
-                  profiles={profiles}
-                  initialReactions={reactionsByUpdate.get(u.id) ?? []}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      ) : null}
+      <section className="flex flex-col gap-6">
+        <header className="flex items-center justify-between border-b border-border/60 pb-2">
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            업데이트 — {updates.length}
+          </h2>
+        </header>
+        <AddUpdateForm projectId={project.id} />
+        {updates.length === 0 ? (
+          <p className="py-8 text-center font-mono text-xs text-muted-foreground">
+            첫 업데이트를 올려보세요.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {updates.map((u) => (
+              <UpdateCard
+                key={u.id}
+                update={u}
+                profiles={profiles}
+                initialReactions={reactionsByUpdate.get(u.id) ?? []}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -74,6 +74,17 @@ export function PlanningSections({
 
   const canEdit = hydrated && nickname !== null && nickname === createdBy;
 
+  // For viewers without edit rights, hide the whole block when there's
+  // nothing to read — better than a row of dash placeholders.
+  const hasContent =
+    Boolean(planning.concept) ||
+    Boolean(planning.problem) ||
+    Boolean(planning.audience) ||
+    Boolean(planning.constraints) ||
+    Boolean(planning.deliverables) ||
+    (planning.tone && planning.tone.length > 0);
+  if (!canEdit && !hasContent) return null;
+
   async function persist(next: ProjectPlanning) {
     setError(null);
     const previous = planning;
@@ -97,7 +108,9 @@ export function PlanningSections({
       </header>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
-        {TEXT_SECTIONS.map((key) => (
+        {TEXT_SECTIONS.filter(
+          (key) => canEdit || (planning[key] ?? "").length > 0,
+        ).map((key) => (
           <div
             key={key}
             className={SECTION_META[key].short ? "md:col-span-2" : undefined}
@@ -110,13 +123,15 @@ export function PlanningSections({
             />
           </div>
         ))}
-        <div className="md:col-span-2">
-          <ToneSection
-            value={planning.tone ?? []}
-            canEdit={canEdit}
-            onSave={(tone) => persist({ ...planning, tone: tone.length ? tone : undefined })}
-          />
-        </div>
+        {canEdit || (planning.tone && planning.tone.length > 0) ? (
+          <div className="md:col-span-2">
+            <ToneSection
+              value={planning.tone ?? []}
+              canEdit={canEdit}
+              onSave={(tone) => persist({ ...planning, tone: tone.length ? tone : undefined })}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -148,6 +163,10 @@ function TextSection({
     setBusy(false);
     setEditing(false);
   }
+
+  // Read-only viewers don't need a label for an empty section — hide it
+  // entirely so the parent grid collapses cleanly.
+  if (!canEdit && !value) return null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -219,16 +238,15 @@ function TextSection({
         >
           <MarkdownWithMentions text={value} />
         </div>
-      ) : (
+      ) : canEdit ? (
         <button
           type="button"
           onClick={start}
-          disabled={!canEdit}
-          className="rounded-md border border-dashed border-border/60 p-3 text-left font-mono text-[11px] text-muted-foreground hover:border-border disabled:cursor-default"
+          className="rounded-md border border-dashed border-border/60 p-3 text-left font-mono text-[11px] text-muted-foreground hover:border-border"
         >
-          {canEdit ? meta.placeholder : "—"}
+          {meta.placeholder}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }
