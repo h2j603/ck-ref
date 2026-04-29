@@ -21,7 +21,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CK Ref.",
+  title: "KIWI Juice",
   description: "Mass-symmetry graphic design reference archive.",
 };
 
@@ -49,8 +49,8 @@ export default async function RootLayout({
             href="/"
             className="whitespace-nowrap font-mono text-sm font-medium tracking-tight text-foreground"
           >
-            <span className="sm:hidden">CK</span>
-            <span className="hidden sm:inline">CK Ref.</span>
+            <span className="sm:hidden">KIWI</span>
+            <span className="hidden sm:inline">KIWI Juice</span>
           </Link>
           {/*
             Two visually distinct groups: section links (text), then

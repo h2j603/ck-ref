@@ -5,7 +5,7 @@ import { fetchDesignerBySlug } from "@/lib/queries";
 
 import { EditDesignerForm } from "./EditDesignerForm";
 
-export const metadata = { title: "Edit designer — CK Ref." };
+export const metadata = { title: "Edit designer — KIWI Juice" };
 
 export default async function EditDesignerPage({
   params,
@@ -21,7 +21,7 @@ export default async function EditDesignerPage({
     <div className="mx-auto flex max-w-md flex-col gap-6 pt-2">
       <header className="flex flex-col gap-1">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / designer / edit
+          KIWI Juice / designer / edit
         </p>
         <h1 className="text-2xl font-medium tracking-tight">디자이너 수정</h1>
         <Link

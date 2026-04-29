@@ -241,7 +241,7 @@ function siteUrl(): string {
 }
 
 function senderFor(profile: Profile | null) {
-  if (!profile) return { username: "CK Ref." };
+  if (!profile) return { username: "KIWI Juice" };
   // The webhook posts as the actor's "shadow" — distinct from the actual
   // user typing in Discord, but still attached to their identity. 80 char
   // cap is Discord's webhook username limit.

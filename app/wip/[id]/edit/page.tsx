@@ -5,7 +5,7 @@ import { fetchProject } from "@/lib/queries";
 
 import { EditProjectForm } from "./EditProjectForm";
 
-export const metadata = { title: "Edit WIP — CK Ref." };
+export const metadata = { title: "Edit WIP — KIWI Juice" };
 
 export default async function EditProjectPage({
   params,
@@ -20,7 +20,7 @@ export default async function EditProjectPage({
     <div className="mx-auto flex max-w-md flex-col gap-6 pt-2">
       <header className="flex flex-col gap-1">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / wip / edit
+          KIWI Juice / wip / edit
         </p>
         <h1 className="text-2xl font-medium tracking-tight">작업 수정</h1>
         <Link

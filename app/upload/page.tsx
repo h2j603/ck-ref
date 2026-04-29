@@ -1,7 +1,7 @@
 import { MetadataForm } from "@/components/upload/MetadataForm";
 
 export const metadata = {
-  title: "Upload — CK Ref.",
+  title: "Upload — KIWI Juice",
 };
 
 export default function UploadPage() {
@@ -9,7 +9,7 @@ export default function UploadPage() {
     <div className="mx-auto flex max-w-3xl flex-col gap-8 pt-2">
       <header className="flex flex-col gap-1">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / upload
+          KIWI Juice / upload
         </p>
         <h1 className="text-2xl font-medium tracking-tight">새 레퍼런스 등록</h1>
         <p className="text-sm text-muted-foreground">

@@ -1,4 +1,4 @@
--- CK Ref. — Supabase schema
+-- KIWI Juice — Supabase schema
 -- Run this in the Supabase SQL editor.
 -- This is a v1 schema. RLS is left permissive because the app gates access
 -- via a single shared password at the proxy layer.

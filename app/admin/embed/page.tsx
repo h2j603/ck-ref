@@ -1,7 +1,7 @@
 import { EmbedAdminClient } from "./EmbedAdminClient";
 
 export const metadata = {
-  title: "CK Ref. — Embeddings",
+  title: "KIWI Juice — Embeddings",
 };
 
 export default function EmbedAdminPage() {
@@ -9,7 +9,7 @@ export default function EmbedAdminPage() {
     <div className="mx-auto flex max-w-md flex-col gap-6 pt-4">
       <header className="flex flex-col gap-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / Admin
+          KIWI Juice / Admin
         </p>
         <h1 className="text-2xl font-medium tracking-tight">시각 유사도 임베딩</h1>
         <p className="text-sm text-muted-foreground">

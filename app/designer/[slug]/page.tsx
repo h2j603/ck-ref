@@ -24,7 +24,7 @@ export default async function DesignerPage({
     <div className="mx-auto flex max-w-[1600px] flex-col gap-8">
       <header className="flex flex-col gap-2 pt-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / designer
+          KIWI Juice / designer
         </p>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-3xl font-medium tracking-tight">

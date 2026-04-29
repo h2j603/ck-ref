@@ -3,7 +3,7 @@ import Link from "next/link";
 import { fetchDesigners } from "@/lib/queries";
 
 export const metadata = {
-  title: "Designers — CK Ref.",
+  title: "Designers — KIWI Juice",
 };
 
 export default async function DesignerIndexPage() {

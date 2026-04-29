@@ -22,7 +22,7 @@ export default async function BoardDetailPage({
     <div className="mx-auto flex max-w-[1600px] flex-col gap-8">
       <header className="flex flex-col gap-3 pt-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / board
+          KIWI Juice / board
         </p>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-3xl font-medium tracking-tight">{board.title}</h1>
