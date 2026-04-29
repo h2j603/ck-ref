@@ -1,7 +1,7 @@
 "use client";
 
+import { ChipToggleRow } from "@/components/ui/chip-toggle-row";
 import { parseTags } from "@/lib/slug";
-import { cn } from "@/lib/utils";
 
 // Curated starter tags so the textarea isn't a blank prompt. Roughly
 // grouped by axis (style → typography → texture → color → mood) but
@@ -49,40 +49,22 @@ export function TagPresets({
   tagsText: string;
   onChange: (next: string) => void;
 }) {
-  const active = new Set(parseTags(tagsText).map((t) => t.toLowerCase()));
+  const active = parseTags(tagsText);
 
   function toggle(tag: string) {
-    const current = parseTags(tagsText);
     const lower = tag.toLowerCase();
-    const next = current.some((t) => t.toLowerCase() === lower)
-      ? current.filter((t) => t.toLowerCase() !== lower)
-      : [...current, tag];
+    const next = active.some((t) => t.toLowerCase() === lower)
+      ? active.filter((t) => t.toLowerCase() !== lower)
+      : [...active, tag];
     onChange(next.join(", "));
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        추천
-      </span>
-      {TAG_PRESETS.map((tag) => {
-        const on = active.has(tag);
-        return (
-          <button
-            key={tag}
-            type="button"
-            onClick={() => toggle(tag)}
-            className={cn(
-              "rounded-full border px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider transition-colors",
-              on
-                ? "border-foreground bg-foreground text-background"
-                : "border-input text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tag}
-          </button>
-        );
-      })}
-    </div>
+    <ChipToggleRow
+      label="추천"
+      items={TAG_PRESETS}
+      active={active}
+      onToggle={toggle}
+    />
   );
 }

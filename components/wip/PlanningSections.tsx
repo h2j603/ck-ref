@@ -7,6 +7,7 @@ import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
 import { TAG_PRESETS } from "@/components/upload/TagPresets";
 import { Button } from "@/components/ui/button";
+import { ChipToggleRow } from "@/components/ui/chip-toggle-row";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -184,6 +185,7 @@ export function PlanningSections({
               projectId={projectId}
               canEdit={canEdit}
               author={nickname}
+              profiles={profiles}
               value={milestones}
               onChange={setMilestones}
             />
@@ -398,8 +400,6 @@ function KeywordSection({
       ? "border-emerald-300/60 bg-emerald-50/60 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100"
       : "border-rose-300/60 bg-rose-50/60 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100";
 
-  const activeLower = new Set(value.map((v) => v.toLowerCase()));
-
   return (
     <div className="flex flex-col gap-2">
       <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -453,30 +453,14 @@ function KeywordSection({
         ) : null}
       </div>
       {canEdit ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            추천
-          </span>
-          {TAG_PRESETS.map((tag) => {
-            const on = activeLower.has(tag.toLowerCase());
-            return (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => void togglePreset(tag)}
-                disabled={busy}
-                className={cn(
-                  "rounded-full border px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider transition-colors",
-                  on
-                    ? chipClass
-                    : "border-input text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tag}
-              </button>
-            );
-          })}
-        </div>
+        <ChipToggleRow
+          label="추천"
+          items={TAG_PRESETS}
+          active={value}
+          onToggle={(tag) => void togglePreset(tag)}
+          tone={tone}
+          disabled={busy}
+        />
       ) : null}
     </div>
   );
@@ -654,22 +638,27 @@ function RolesSection({
   );
 }
 
+const ASSIGNEE_NONE = "__none__";
+
 function MilestonesSection({
   projectId,
   canEdit,
   author,
+  profiles,
   value,
   onChange,
 }: {
   projectId: string;
   canEdit: boolean;
   author: string | null;
+  profiles: Profile[];
   value: CalendarEvent[];
   onChange: (next: CalendarEvent[]) => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDate, setDraftDate] = useState("");
+  const [draftAssignee, setDraftAssignee] = useState<string>(ASSIGNEE_NONE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -691,6 +680,7 @@ function MilestonesSection({
         starts_at: startsAt,
         all_day: true,
         kind: "milestone",
+        assignee: draftAssignee === ASSIGNEE_NONE ? null : draftAssignee,
         created_by: author,
       })
       .select("*")
@@ -708,6 +698,7 @@ function MilestonesSection({
     );
     setDraftTitle("");
     setDraftDate("");
+    setDraftAssignee(ASSIGNEE_NONE);
   }
 
   async function remove(id: string) {
@@ -760,6 +751,14 @@ function MilestonesSection({
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {m.title}
                 </span>
+                {m.assignee ? (
+                  <span
+                    className="shrink-0"
+                    title={`담당: @${m.assignee}`}
+                  >
+                    <NicknamePill nickname={m.assignee} link={false} />
+                  </span>
+                ) : null}
                 <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                   {dateLabel(m.starts_at)}
                 </span>
@@ -797,6 +796,23 @@ function MilestonesSection({
               className="h-8 flex-1 text-[12px]"
               disabled={busy}
             />
+            <Select
+              value={draftAssignee}
+              onValueChange={setDraftAssignee}
+              disabled={busy}
+            >
+              <SelectTrigger className="h-8 w-24 shrink-0 text-[12px]">
+                <SelectValue placeholder="담당" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ASSIGNEE_NONE}>담당 없음</SelectItem>
+                {profiles.map((p) => (
+                  <SelectItem key={p.key} value={p.key}>
+                    @{p.display_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
               type="date"
               value={draftDate}

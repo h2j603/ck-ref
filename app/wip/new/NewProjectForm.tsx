@@ -14,7 +14,7 @@ export default function NewProjectForm() {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [concept, setConcept] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,11 +26,15 @@ export default function NewProjectForm() {
       return;
     }
     setBusy(true);
+    const trimmedConcept = concept.trim();
     const { data, error } = await supabase
       .from("projects")
       .insert({
         title: title.trim(),
-        description: description.trim() || null,
+        // Description column kept for legacy reads but we no longer write
+        // to it — concept is the canonical short summary now.
+        description: null,
+        planning: trimmedConcept ? { concept: trimmedConcept } : {},
         // New projects start in planning. They can move to in_progress as
         // soon as the first update is posted (or via the status select).
         status: "planning",
@@ -56,12 +60,12 @@ export default function NewProjectForm() {
           placeholder="예: 책 표지 시안"
         />
       </Field>
-      <Field label="설명">
+      <Field label="한 줄 컨셉">
         <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          placeholder="이 작업이 뭔지, 어디까지 왔는지"
+          value={concept}
+          onChange={(e) => setConcept(e.target.value)}
+          rows={2}
+          placeholder="이 프로젝트를 한 문장으로 — 기획 단계에서 이어 채울 수 있어요"
         />
       </Field>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

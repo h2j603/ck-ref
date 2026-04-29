@@ -1,3 +1,4 @@
+import { Crown } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -10,6 +11,9 @@ import { publicImageUrl } from "@/lib/storage";
 export function WipCard({ project }: { project: ProjectSummary }) {
   const planning = readPlanning(project.planning);
   const isPlanning = project.status === "planning";
+  // Surface the project leader on the index card so it's clear who's
+  // driving each project at a glance — not just who created it.
+  const leader = planning.roles?.find((r) => r.is_leader)?.person ?? null;
   return (
     <Link
       href={`/wip/${project.id}`}
@@ -51,7 +55,20 @@ export function WipCard({ project }: { project: ProjectSummary }) {
       </div>
       <div className="flex items-center justify-between gap-2">
         <StatusBadge status={project.status} />
-        <NicknamePill nickname={project.created_by} link={false} />
+        <div className="flex items-center gap-1.5">
+          {leader ? (
+            <span
+              className="inline-flex items-center gap-1 text-lime-500"
+              title={`프로젝트 리더: @${leader}`}
+              aria-label={`프로젝트 리더 @${leader}`}
+            >
+              <Crown className="size-3" fill="currentColor" />
+              <NicknamePill nickname={leader} link={false} />
+            </span>
+          ) : (
+            <NicknamePill nickname={project.created_by} link={false} />
+          )}
+        </div>
       </div>
     </Link>
   );

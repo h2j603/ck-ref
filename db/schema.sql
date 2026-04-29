@@ -569,6 +569,11 @@ alter table events add column if not exists announce         boolean not null de
 -- milestones inline while keeping the same row visible on the calendar.
 -- 'general' is the default; 'milestone' marks a planning checkpoint.
 alter table events add column if not exists kind text not null default 'general';
+-- Optional assignee — currently only milestones use it. Stores a
+-- profile.key (the same string we put in created_by) so the reminder
+-- can call out who's responsible. Free text rather than a FK so a typo
+-- never blocks a save.
+alter table events add column if not exists assignee text;
 do $$
 begin
   alter table events drop constraint if exists events_kind_check;

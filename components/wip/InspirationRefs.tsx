@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ReasonBadge } from "@/components/wip/ReasonBadge";
 import { useNickname } from "@/lib/nickname";
+import { searchRefIdsClient } from "@/lib/refSearch";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
 import type { Ref } from "@/lib/types";
@@ -39,7 +40,9 @@ export function InspirationRefs({
   const [linked, setLinked] = useState<RefLite[]>(initial);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [candidates, setCandidates] = useState<RefLite[]>([]);
+  const [searching, setSearching] = useState(false);
   const [pending, setPending] = useState<RefLite | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,29 +53,62 @@ export function InspirationRefs({
     [linked],
   );
 
+  // Debounce so we don't fan out 7 supabase requests per keystroke once
+  // the broad search picks up — same pattern as the positioning map dialog.
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedQuery(query), 250);
+    return () => window.clearTimeout(id);
+  }, [query]);
+
   useEffect(() => {
     if (!open || pending) return;
     let cancelled = false;
     void (async () => {
-      const q = query.trim();
-      let req = supabase
+      const q = debouncedQuery.trim();
+      // Empty query — show recent refs as baseline candidates.
+      if (!q) {
+        const { data, error } = await supabase
+          .from("refs")
+          .select("id, title, image_path, image_width, image_height")
+          .order("created_at", { ascending: false })
+          .limit(12);
+        if (cancelled) return;
+        if (error) setError(error.message);
+        else
+          setCandidates(
+            (data as RefLite[]).filter((r) => !linkedIds.has(r.id)),
+          );
+        setSearching(false);
+        return;
+      }
+      // Match the main /ref search across title / tags / OCR / designer /
+      // notes via the shared client helper.
+      setSearching(true);
+      const ids = await searchRefIdsClient(supabase, q);
+      if (cancelled) return;
+      if (ids.size === 0) {
+        setCandidates([]);
+        setSearching(false);
+        return;
+      }
+      const { data, error } = await supabase
         .from("refs")
         .select("id, title, image_path, image_width, image_height")
+        .in("id", [...ids])
         .order("created_at", { ascending: false })
-        .limit(12);
-      if (q) req = req.ilike("title", `%${q}%`);
-      const { data, error } = await req;
+        .limit(18);
       if (cancelled) return;
       if (error) setError(error.message);
       else
         setCandidates(
           (data as RefLite[]).filter((r) => !linkedIds.has(r.id)),
         );
+      setSearching(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [supabase, open, query, linkedIds, pending]);
+  }, [supabase, open, debouncedQuery, linkedIds, pending]);
 
   function startAdd(ref: RefLite) {
     setReason("");
@@ -198,11 +234,18 @@ export function InspirationRefs({
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  <Input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="제목으로 검색…"
-                  />
+                  <div className="relative">
+                    <Input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="제목·태그·OCR·디자이너로 검색…"
+                    />
+                    {searching || (query.trim() && query !== debouncedQuery) ? (
+                      <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
+                        <div className="size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
+                      </div>
+                    ) : null}
+                  </div>
                   {candidates.length > 0 ? (
                     <ul className="grid grid-cols-3 gap-2">
                       {candidates.map((r) => (

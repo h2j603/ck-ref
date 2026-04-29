@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { NoteList } from "@/components/detail/NoteList";
-import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
 import { AddUpdateForm } from "@/components/wip/AddUpdateForm";
 import { InspirationRefs } from "@/components/wip/InspirationRefs";
@@ -50,7 +49,14 @@ export default async function WipDetailPage({
   const reactionsByUpdate = await fetchUpdateReactions(
     updates.map((u) => u.id),
   ).catch(() => new Map());
+  // Concept replaced description as the canonical short summary. For
+  // legacy projects that only filled the old description field, surface
+  // it as the concept so nothing reads as missing — the next save in the
+  // planning section writes it to planning.concept properly.
   const planning = readPlanning(project.planning);
+  if (!planning.concept && project.description) {
+    planning.concept = project.description;
+  }
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-12">
@@ -68,11 +74,6 @@ export default async function WipDetailPage({
           <p className="text-base italic text-muted-foreground">
             {planning.concept}
           </p>
-        ) : null}
-        {project.description ? (
-          <div className="prose prose-sm prose-neutral max-w-none text-foreground">
-            <MarkdownWithMentions text={project.description} />
-          </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <NicknamePill nickname={project.created_by} />

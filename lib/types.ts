@@ -234,6 +234,7 @@ export type CalendarEvent = {
   all_day: boolean;
   announce: boolean;
   kind: EventKind;
+  assignee: string | null;
   created_at: string;
   created_by: string | null;
 };
