@@ -3,10 +3,17 @@
 import { Pencil, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { MentionInput } from "@/components/mention-input";
 import { MarkdownWithMentions } from "@/components/mentioned-text";
+import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import type { Profile } from "@/lib/profiles";
@@ -15,6 +22,7 @@ import {
   PLANNING_TEXT_SECTIONS,
   type PlanningTextSection,
   type ProjectPlanning,
+  type ProjectRole,
 } from "@/lib/types";
 
 type SectionMeta = {
@@ -22,10 +30,6 @@ type SectionMeta = {
   placeholder: string;
   rows: number;
   short?: boolean;
-  // Roles uses the @-mention textarea so the dropdown can pick from the
-  // canonical 3-person roster. Other text sections still render mentions
-  // on display via MarkdownWithMentions, but their editors stay plain.
-  mention?: boolean;
 };
 
 const SECTION_META: Record<PlanningTextSection, SectionMeta> = {
@@ -44,12 +48,6 @@ const SECTION_META: Record<PlanningTextSection, SectionMeta> = {
     label: "타겟 / 페르소나",
     placeholder: "누구를 위해. 데모/사이코그래픽, 컨텍스트",
     rows: 4,
-  },
-  roles: {
-    label: "역할 분담",
-    placeholder: "@ 로 멘션. 예) 디자인 — @하진, 개발 — @미주",
-    rows: 3,
-    mention: true,
   },
   constraints: {
     label: "제약 / 일정",
@@ -87,11 +85,11 @@ export function PlanningSections({
     Boolean(planning.concept) ||
     Boolean(planning.problem) ||
     Boolean(planning.audience) ||
-    Boolean(planning.roles) ||
     Boolean(planning.constraints) ||
     Boolean(planning.deliverables) ||
     (planning.positive_keywords && planning.positive_keywords.length > 0) ||
-    (planning.negative_keywords && planning.negative_keywords.length > 0);
+    (planning.negative_keywords && planning.negative_keywords.length > 0) ||
+    (planning.roles && planning.roles.length > 0);
   if (!canEdit && !hasContent) return null;
 
   async function persist(next: ProjectPlanning) {
@@ -122,21 +120,31 @@ export function PlanningSections({
         ).map((key) => (
           <div
             key={key}
-            className={
-              SECTION_META[key].short || SECTION_META[key].mention
-                ? "md:col-span-2"
-                : undefined
-            }
+            className={SECTION_META[key].short ? "md:col-span-2" : undefined}
           >
             <TextSection
               meta={SECTION_META[key]}
               value={planning[key] ?? ""}
               canEdit={canEdit}
-              profiles={profiles}
               onSave={(v) => persist({ ...planning, [key]: v || undefined })}
             />
           </div>
         ))}
+        {canEdit || (planning.roles && planning.roles.length > 0) ? (
+          <div className="md:col-span-2">
+            <RolesSection
+              value={planning.roles ?? []}
+              canEdit={canEdit}
+              profiles={profiles}
+              onSave={(roles) =>
+                persist({
+                  ...planning,
+                  roles: roles.length ? roles : undefined,
+                })
+              }
+            />
+          </div>
+        ) : null}
         {canEdit ||
         (planning.positive_keywords &&
           planning.positive_keywords.length > 0) ? (
@@ -180,13 +188,11 @@ function TextSection({
   meta,
   value,
   canEdit,
-  profiles,
   onSave,
 }: {
   meta: SectionMeta;
   value: string;
   canEdit: boolean;
-  profiles: Profile[];
   onSave: (next: string) => Promise<void> | void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -232,16 +238,6 @@ function TextSection({
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={meta.placeholder}
-              autoFocus
-              disabled={busy}
-            />
-          ) : meta.mention ? (
-            <MentionInput
-              value={draft}
-              onChange={setDraft}
-              profiles={profiles}
-              rows={meta.rows}
               placeholder={meta.placeholder}
               autoFocus
               disabled={busy}
@@ -399,3 +395,111 @@ function KeywordSection({
     </div>
   );
 }
+
+function RolesSection({
+  value,
+  canEdit,
+  profiles,
+  onSave,
+}: {
+  value: ProjectRole[];
+  canEdit: boolean;
+  profiles: Profile[];
+  onSave: (next: ProjectRole[]) => Promise<void> | void;
+}) {
+  const [draftPerson, setDraftPerson] = useState("");
+  const [draftRole, setDraftRole] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    const role = draftRole.trim();
+    if (!draftPerson || !role) return;
+    setBusy(true);
+    await onSave([...value, { person: draftPerson, role }]);
+    setBusy(false);
+    setDraftPerson("");
+    setDraftRole("");
+  }
+
+  async function remove(index: number) {
+    setBusy(true);
+    await onSave(value.filter((_, i) => i !== index));
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        역할 분담
+      </h3>
+      {value.length === 0 && !canEdit ? null : (
+        <ul className="flex flex-col gap-1.5">
+          {value.map((r, i) => (
+            <li
+              key={i}
+              className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1"
+            >
+              <NicknamePill nickname={r.person} link={false} />
+              <span className="text-muted-foreground">|</span>
+              <span className="flex-1 text-sm">{r.role}</span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => void remove(i)}
+                  disabled={busy}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label="remove"
+                >
+                  <X className="size-3" />
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+          className="flex items-center gap-2"
+        >
+          <Select
+            value={draftPerson}
+            onValueChange={setDraftPerson}
+            disabled={busy}
+          >
+            <SelectTrigger className="h-8 w-28 text-[12px]">
+              <SelectValue placeholder="인원" />
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((p) => (
+                <SelectItem key={p.key} value={p.key}>
+                  @{p.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-muted-foreground">|</span>
+          <Input
+            value={draftRole}
+            onChange={(e) => setDraftRole(e.target.value)}
+            placeholder="역할"
+            className="h-8 flex-1 text-[12px]"
+            disabled={busy}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            className="h-8 text-[11px]"
+            disabled={busy || !draftPerson || draftRole.trim().length === 0}
+          >
+            등록
+          </Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
