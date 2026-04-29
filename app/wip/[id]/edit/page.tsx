@@ -35,7 +35,6 @@ export default async function EditProjectPage({
         createdBy={project.created_by}
         initial={{
           title: project.title,
-          description: project.description,
           status: project.status,
         }}
       />

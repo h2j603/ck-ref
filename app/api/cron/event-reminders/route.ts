@@ -134,8 +134,12 @@ async function handle(request: Request) {
     const proj = projectTitle(row);
     const time = formatHHmmKst(row.starts_at);
     const projTail = proj ? ` (${proj} 건)` : "";
+    // Discord can't ping a profile by nickname text alone (no user ID
+    // mapping yet), so we just include the assignee in the description.
+    // The @everyone ping still goes out so nobody silently misses it.
+    const assigneeTail = row.assignee ? ` · @${row.assignee} 담당` : "";
     const desc =
-      `⏰ 잠깐, **${row.title}** ${time}이에요 — 한 시간 남았어요${projTail}. 슬슬 준비해볼까요?`;
+      `⏰ 잠깐, **${row.title}** ${time}이에요 — 한 시간 남았어요${projTail}${assigneeTail}. 슬슬 준비해볼까요?`;
     // Mark first to dodge double-send on overlapping cron runs.
     const { error: updErr } = await supabase
       .from("events")
@@ -161,9 +165,10 @@ async function handle(request: Request) {
     }
     const proj = projectTitle(row);
     const projTail = proj ? ` (${proj} 건이에요)` : "";
+    const assigneeTail = row.assignee ? ` · @${row.assignee} 담당` : "";
     const desc = row.all_day
-      ? `🌅 좋은 아침이에요. 오늘은 **${row.title}** 종일 일정이 있어요${projTail}.`
-      : `🌅 좋은 아침이에요. 오늘 ${formatHHmmKst(row.starts_at)}에 **${row.title}** 일정 잡혀있어요${projTail}.`;
+      ? `🌅 좋은 아침이에요. 오늘은 **${row.title}** 종일 일정이 있어요${projTail}${assigneeTail}.`
+      : `🌅 좋은 아침이에요. 오늘 ${formatHHmmKst(row.starts_at)}에 **${row.title}** 일정 잡혀있어요${projTail}${assigneeTail}.`;
     const { error: updErr } = await supabase
       .from("events")
       .update({ notified_morning: true })

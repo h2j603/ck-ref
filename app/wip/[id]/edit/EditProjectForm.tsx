@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
 import type { ProjectStatus } from "@/lib/types";
@@ -26,14 +25,12 @@ export function EditProjectForm({
   createdBy: string | null;
   initial: {
     title: string;
-    description: string | null;
     status: ProjectStatus;
   };
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [title, setTitle] = useState(initial.title);
-  const [description, setDescription] = useState(initial.description ?? "");
   const [status, setStatus] = useState<ProjectStatus>(initial.status);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +62,6 @@ export function EditProjectForm({
       .from("projects")
       .update({
         title: title.trim(),
-        description: description.trim() || null,
         status,
       })
       .eq("id", projectId);
@@ -85,16 +81,9 @@ export function EditProjectForm({
         </Label>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
       </div>
-      <div className="flex flex-col gap-2">
-        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          설명
-        </Label>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-        />
-      </div>
+      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        한 줄 컨셉은 기획 페이지에서 수정해주세요.
+      </p>
       <div className="flex flex-col gap-2">
         <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           상태
