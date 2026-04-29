@@ -1,4 +1,4 @@
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, CupSoda } from "lucide-react";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
@@ -47,10 +47,10 @@ export default async function RootLayout({
         <header className="flex items-center justify-between gap-4 border-b border-border/60 px-4 py-4 sm:items-baseline sm:gap-8 sm:px-10">
           <Link
             href="/"
-            className="whitespace-nowrap font-mono text-sm font-medium tracking-tight text-foreground"
+            aria-label="KIWI Juice 홈"
+            className="flex shrink-0 items-center text-foreground transition-colors hover:text-lime-500"
           >
-            <span className="sm:hidden">KIWI</span>
-            <span className="hidden sm:inline">KIWI Juice</span>
+            <CupSoda className="size-5" />
           </Link>
           {/*
             Two visually distinct groups: section links (text), then
