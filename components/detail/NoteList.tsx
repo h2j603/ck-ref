@@ -158,6 +158,9 @@ export function NoteList({
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [draftKind, setDraftKind] = useState<NoteKind>("discussion");
   const [draftImages, setDraftImages] = useState<File[]>([]);
+  // Kind chips (decision / open question) only make sense on project
+  // discussion threads. Ref + project-update notes stay simple.
+  const showKinds = target.kind === "project";
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<Draft>(EMPTY);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -382,7 +385,8 @@ export function NoteList({
         <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           Notes — {notes.length}
         </h2>
-        {kindCounts.decision > 0 || kindCounts.open_question > 0 ? (
+        {showKinds &&
+        (kindCounts.decision > 0 || kindCounts.open_question > 0) ? (
           <div className="flex items-center gap-1.5">
             {kindCounts.decision > 0 ? (
               <KindBadge
@@ -421,6 +425,7 @@ export function NoteList({
                   setEditingDraft(noteToDraft(note));
                 }}
                 onDelete={() => void deleteNote(note.id)}
+                showKind={showKinds}
               />
               {editing ? (
                 <NoteFields
@@ -580,7 +585,9 @@ export function NoteList({
       </ul>
 
       <form onSubmit={addNote} className="flex flex-col gap-3">
-        <KindPicker value={draftKind} onChange={setDraftKind} />
+        {showKinds ? (
+          <KindPicker value={draftKind} onChange={setDraftKind} />
+        ) : null}
         <NoteFields
           draft={draft}
           onChange={setDraft}
@@ -610,6 +617,7 @@ function NoteHead({
   onEdit,
   onDelete,
   compact = false,
+  showKind = false,
 }: {
   note: Note;
   mine: boolean;
@@ -617,6 +625,7 @@ function NoteHead({
   onEdit: () => void;
   onDelete: () => void;
   compact?: boolean;
+  showKind?: boolean;
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
@@ -629,7 +638,7 @@ function NoteHead({
           <MessageCircle aria-hidden className="size-3" />
         ) : null}
         <NicknamePill nickname={note.author} />
-        {note.kind && note.kind !== "discussion" ? (
+        {showKind && note.kind && note.kind !== "discussion" ? (
           <KindBadge kind={note.kind} />
         ) : null}
         <span>{formatDate(note.created_at)}</span>
