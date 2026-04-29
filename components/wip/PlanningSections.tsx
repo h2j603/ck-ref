@@ -522,12 +522,7 @@ function RolesSection({
           {value.map((r, i) => (
             <li
               key={i}
-              className={cn(
-                ROW_SHELL,
-                r.is_leader
-                  ? "border-lime-400 bg-lime-100/70 dark:border-lime-500/60 dark:bg-lime-500/10"
-                  : "border-border/60 bg-muted/20",
-              )}
+              className={cn(ROW_SHELL, "border-border/60 bg-muted/20")}
               onDoubleClick={() => {
                 if (canEdit) void toggleLeader(i);
               }}
