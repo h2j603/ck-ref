@@ -134,7 +134,7 @@ export type ProjectPlanning = {
   roles?: ProjectRole[];
   success_metrics?: SuccessMetric[];
   constraints?: string;
-  deliverables?: string;
+  deliverables?: string[];
   // Legacy: pre-split single tone keyword list. Read-migrated into
   // positive_keywords by readPlanning(); never written back.
   tone?: string[];
@@ -145,7 +145,6 @@ export const PLANNING_TEXT_SECTIONS = [
   "problem",
   "audience",
   "constraints",
-  "deliverables",
 ] as const;
 export type PlanningTextSection = (typeof PLANNING_TEXT_SECTIONS)[number];
 

@@ -573,6 +573,19 @@ export function readPlanning(value: unknown): ProjectPlanning {
   if (!Array.isArray(planning.success_metrics)) {
     delete planning.success_metrics;
   }
+  // Deliverables grew from a free-form string into a list of items, one
+  // per row. Migrate any legacy string by splitting on commas / newlines
+  // / "·" so older planning blocks light up as rows on first read.
+  const rawDeliverables = (planning as { deliverables?: unknown }).deliverables;
+  if (typeof rawDeliverables === "string") {
+    const items = rawDeliverables
+      .split(/[,\n·]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    planning.deliverables = items.length > 0 ? items : undefined;
+  } else if (!Array.isArray(rawDeliverables)) {
+    delete planning.deliverables;
+  }
   return planning;
 }
 
