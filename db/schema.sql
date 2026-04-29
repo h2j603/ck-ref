@@ -69,9 +69,11 @@ create index if not exists projects_status_idx     on projects (status);
 create index if not exists projects_created_at_idx on projects (created_at desc);
 create index if not exists projects_created_by_idx on projects (created_by);
 
--- Positioning map. One axis pair per project (project_positioning) plus a
--- list of plotted points. Points can be free-text labels ("us", "competitor
--- X") or linked to a ref so we render the ref thumbnail at that position.
+-- Positioning map. Originally one map per project (project_positioning);
+-- v2 adds project_positioning_maps so a project can carry several maps
+-- (e.g. brand vs. tone), each with its own axis pair and points. The old
+-- single-row table stays around for the migration block below; new code
+-- writes only to the maps table.
 create table if not exists project_positioning (
   project_id    uuid primary key references projects(id) on delete cascade,
   x_low_label   text,
@@ -79,6 +81,32 @@ create table if not exists project_positioning (
   y_low_label   text,
   y_high_label  text,
   updated_at    timestamptz not null default now()
+);
+
+create table if not exists project_positioning_maps (
+  id            uuid primary key default gen_random_uuid(),
+  project_id    uuid not null references projects(id) on delete cascade,
+  -- Free-form display name. NULL renders as "(이름 없음)" in the UI.
+  name          text,
+  x_low_label   text,
+  x_high_label  text,
+  y_low_label   text,
+  y_high_label  text,
+  position      int not null default 0,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists project_positioning_maps_project_idx
+  on project_positioning_maps (project_id, position);
+
+-- One-time migration: lift each project's single positioning row into the
+-- new maps table. Skipped on subsequent runs because the where-not-exists
+-- guard finds the migrated row.
+insert into project_positioning_maps (project_id, name, x_low_label, x_high_label, y_low_label, y_high_label, position)
+select project_id, null, x_low_label, x_high_label, y_low_label, y_high_label, 0
+from project_positioning op
+where not exists (
+  select 1 from project_positioning_maps m where m.project_id = op.project_id
 );
 
 create table if not exists project_positioning_points (
@@ -97,8 +125,25 @@ create table if not exists project_positioning_points (
   created_by  text
 );
 
+-- v2: points belong to a specific map. Existing rows get backfilled to
+-- the project's first/only map below; new inserts always set map_id.
+alter table project_positioning_points
+  add column if not exists map_id uuid references project_positioning_maps(id) on delete cascade;
+
+update project_positioning_points p
+set map_id = (
+  select m.id from project_positioning_maps m
+  where m.project_id = p.project_id
+  order by m.position, m.created_at
+  limit 1
+)
+where p.map_id is null
+  and exists (select 1 from project_positioning_maps m where m.project_id = p.project_id);
+
 create index if not exists project_positioning_points_project_idx
   on project_positioning_points (project_id);
+create index if not exists project_positioning_points_map_idx
+  on project_positioning_points (map_id);
 create index if not exists project_positioning_points_ref_idx
   on project_positioning_points (ref_id);
 
@@ -573,6 +618,7 @@ alter table project_updates enable row level security;
 alter table project_refs    enable row level security;
 alter table project_update_refs enable row level security;
 alter table project_positioning enable row level security;
+alter table project_positioning_maps enable row level security;
 alter table project_positioning_points enable row level security;
 alter table boards          enable row level security;
 alter table board_items     enable row level security;
@@ -610,6 +656,10 @@ create policy "anon all" on project_update_refs
 
 drop policy if exists "anon all" on project_positioning;
 create policy "anon all" on project_positioning
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_positioning_maps;
+create policy "anon all" on project_positioning_maps
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on project_positioning_points;

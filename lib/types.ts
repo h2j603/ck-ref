@@ -144,18 +144,23 @@ export type Project = {
   created_by: string | null;
 };
 
-export type ProjectPositioning = {
+export type ProjectPositioningMap = {
+  id: string;
   project_id: string;
+  name: string | null;
   x_low_label: string | null;
   x_high_label: string | null;
   y_low_label: string | null;
   y_high_label: string | null;
+  position: number;
+  created_at: string;
   updated_at: string;
 };
 
 export type ProjectPositioningPoint = {
   id: string;
   project_id: string;
+  map_id: string | null;
   ref_id: string | null;
   label: string | null;
   x: number;
