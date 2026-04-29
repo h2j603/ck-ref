@@ -497,11 +497,15 @@ function RolesSection({
   }
 
   // Three-column grid for the inner content: person pill (fixed) | sep | role.
-  // 4rem fits @<2-char nickname> snugly, so the gap between the pill and
-  // the | separator stays small while still aligning vertically across
-  // rows with different nickname widths.
-  const CONTENT_GRID =
+  // Displayed rows live inside ROW_SHELL's px-3, so their content starts
+  // 0.75rem in from the section's left edge. The form uses pl-0 so its
+  // input starts flush with the header — to keep the `|` separator at the
+  // same x across rows and form, the form's first column is widened by
+  // exactly that 0.75rem to absorb the missing left padding.
+  const ROW_CONTENT_GRID =
     "flex-1 min-w-0 grid grid-cols-[4rem_auto_1fr] items-center gap-2";
+  const FORM_CONTENT_GRID =
+    "flex-1 min-w-0 grid grid-cols-[4.75rem_auto_1fr] items-center gap-2";
 
   return (
     <div className="flex flex-col gap-2">
@@ -519,7 +523,7 @@ function RolesSection({
               }}
               title={canEdit ? "더블클릭으로 리더 설정/해제" : undefined}
             >
-              <div className={CONTENT_GRID}>
+              <div className={ROW_CONTENT_GRID}>
                 <div className="min-w-0 truncate">
                   <NicknamePill nickname={r.person} link={false} />
                 </div>
@@ -560,7 +564,7 @@ function RolesSection({
           }}
           className={cn(ROW_SHELL, "border-transparent bg-transparent pl-0")}
         >
-          <div className={CONTENT_GRID}>
+          <div className={FORM_CONTENT_GRID}>
             <Select
               value={draftPerson}
               onValueChange={setDraftPerson}
