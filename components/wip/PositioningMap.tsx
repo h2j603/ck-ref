@@ -45,62 +45,78 @@ export type PositioningAxes = {
   y_high_label: string | null;
 };
 
-// Starter axis pairs so the map isn't a blank slate. Picked to cover the
-// dimensions we usually argue about for our own work — price, tone, audience,
-// era, texture, intent. The preset row only shows when nothing has been set.
+// Starter axis pairs grounded in patterns that actually show up in brand
+// strategy decks. The first four (price × quality, tone × era, motivation,
+// audience) are the dimensions clients argue about most; the last two are
+// visual-styling decisions designers make once positioning is set. Order
+// reflects rough usage frequency.
 const AXIS_PRESETS: { name: string; axes: PositioningAxes }[] = [
   {
-    name: "가격 × 혁신",
+    // The canonical perceptual map — every brand positioning template uses
+    // some flavour of this. Y-axis is product / craft level, not just
+    // sticker price, which is what makes price+quality interesting.
+    name: "가격 × 품질",
     axes: {
       x_low_label: "저렴",
       x_high_label: "프리미엄",
-      y_low_label: "전통적",
-      y_high_label: "혁신적",
+      y_low_label: "보급형",
+      y_high_label: "고품질",
     },
   },
   {
-    name: "톤 × 밀도",
+    // Brand-personality matrix: how serious does the brand take itself,
+    // and where does it sit on the era spectrum.
+    name: "톤 × 시대감",
     axes: {
-      x_low_label: "진지함",
-      x_high_label: "유희적",
-      y_low_label: "미니멀",
-      y_high_label: "장식적",
+      x_low_label: "진지",
+      x_high_label: "유쾌",
+      y_low_label: "클래식",
+      y_high_label: "모던",
     },
   },
   {
-    name: "관객 × 목소리",
+    // Purchase motivation. Common in B2B vs lifestyle audits to check if a
+    // brand's voice matches the actual reason people buy.
+    name: "구매 동기",
+    axes: {
+      x_low_label: "기능적",
+      x_high_label: "감성적",
+      y_low_label: "합리적",
+      y_high_label: "충동적",
+    },
+  },
+  {
+    // Audience framing. "대중적 vs 전문가용" is the most concrete way to
+    // describe accessibility, paired with the relationship axis.
+    name: "타겟",
     axes: {
       x_low_label: "대중적",
-      x_high_label: "전문적",
+      x_high_label: "전문가용",
       y_low_label: "친근함",
       y_high_label: "권위적",
     },
   },
   {
-    name: "시대 × 에너지",
+    // Visual density × energy — the two sliders designers reach for first
+    // when comping a system.
+    name: "비주얼",
     axes: {
-      x_low_label: "클래식",
-      x_high_label: "트렌디",
-      y_low_label: "차분함",
-      y_high_label: "화려함",
+      x_low_label: "미니멀",
+      x_high_label: "장식적",
+      y_low_label: "차분",
+      y_high_label: "강렬",
     },
   },
   {
-    name: "질감 × 온도",
+    // Material / texture audit. Useful when refs span print + digital and
+    // you want to see whether the mood pool leans warm-natural or cool-
+    // engineered.
+    name: "질감",
     axes: {
-      x_low_label: "디지털",
-      x_high_label: "아날로그",
-      y_low_label: "차가움",
-      y_high_label: "따뜻함",
-    },
-  },
-  {
-    name: "기능 × 감정",
-    axes: {
-      x_low_label: "기능적",
-      x_high_label: "감성적",
-      y_low_label: "정적",
-      y_high_label: "동적",
+      x_low_label: "자연",
+      x_high_label: "인공",
+      y_low_label: "따뜻함",
+      y_high_label: "차가움",
     },
   },
 ];
