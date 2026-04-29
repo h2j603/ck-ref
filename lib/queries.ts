@@ -549,6 +549,9 @@ export async function fetchProjectPositioningMaps(
 // generic object. We don't validate shape here — sections are all optional.
 // Old rows written before keywords were split kept everything in `tone`;
 // surface those as positive_keywords on read so users don't lose them.
+// Roles started life as a free-form mention string, then moved to a
+// structured array; drop any legacy string so callers never see a value
+// they don't expect.
 export function readPlanning(value: unknown): ProjectPlanning {
   if (!value || typeof value !== "object") return {};
   const planning = { ...(value as ProjectPlanning) };
@@ -560,6 +563,9 @@ export function readPlanning(value: unknown): ProjectPlanning {
     planning.positive_keywords = planning.tone;
   }
   delete planning.tone;
+  if (!Array.isArray(planning.roles)) {
+    delete planning.roles;
+  }
   return planning;
 }
 

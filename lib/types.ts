@@ -105,13 +105,15 @@ export type Note = {
 export const PROJECT_STATUSES = ["planning", "in_progress", "done"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
+export type ProjectRole = { person: string; role: string };
+
 export type ProjectPlanning = {
   concept?: string;
   problem?: string;
   audience?: string;
   positive_keywords?: string[];
   negative_keywords?: string[];
-  roles?: string;
+  roles?: ProjectRole[];
   constraints?: string;
   deliverables?: string;
   // Legacy: pre-split single tone keyword list. Read-migrated into
@@ -123,7 +125,6 @@ export const PLANNING_TEXT_SECTIONS = [
   "concept",
   "problem",
   "audience",
-  "roles",
   "constraints",
   "deliverables",
 ] as const;
