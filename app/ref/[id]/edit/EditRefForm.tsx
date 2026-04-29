@@ -158,19 +158,6 @@ export function EditRefForm({
     setOcrText(initial.ocr_text ?? "");
   }
 
-  async function rerunOCRFromCurrent() {
-    setOcrBusy(true);
-    try {
-      const res = await fetch(publicImageUrl(initial.image_path));
-      const blob = await res.blob();
-      const text = await runOCR(blob);
-      setOcrText(text);
-    } catch (err) {
-      console.warn("rerun OCR failed", err);
-    } finally {
-      setOcrBusy(false);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -445,23 +432,11 @@ export function EditRefForm({
         </Field>
         <Field label="OCR 텍스트 (검색용)" full>
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                {ocrBusy
-                  ? "이미지에서 텍스트 추출 중…"
-                  : "이미지의 텍스트를 추출해서 검색에 쓰는 메타. 직접 수정 가능."}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void rerunOCRFromCurrent()}
-                disabled={ocrBusy}
-                className="h-7 px-2 text-[11px]"
-              >
-                {ocrBusy ? "OCR 중…" : "OCR 재실행"}
-              </Button>
-            </div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {ocrBusy
+                ? "이미지에서 텍스트 추출 중…"
+                : "이미지의 텍스트를 추출해서 검색에 쓰는 메타. 직접 수정 가능. 이미지 교체 시 자동 갱신."}
+            </p>
             <Textarea
               value={ocrText}
               onChange={(e) => setOcrText(e.target.value)}
