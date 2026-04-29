@@ -44,14 +44,63 @@ create table if not exists projects (
   id          uuid primary key default gen_random_uuid(),
   title       text not null,
   description text,
-  status      text not null default 'in_progress' check (status in ('in_progress', 'done')),
+  status      text not null default 'planning' check (status in ('planning', 'in_progress', 'done')),
+  -- Free-form planning notes. Sections are { concept, problem, audience,
+  -- tone (string[]), constraints, deliverables }; we keep them in jsonb so
+  -- adding/removing sections is a code-only change. Empty `{}` means the
+  -- planning view shows just the prompts.
+  planning    jsonb not null default '{}'::jsonb,
   created_at  timestamptz not null default now(),
   created_by  text
 );
 
+-- Existing deployments: planning column added later, and the status check
+-- needs to accept the new value. Both idempotent.
+alter table projects add column if not exists planning jsonb not null default '{}'::jsonb;
+do $$
+begin
+  alter table projects drop constraint if exists projects_status_check;
+  alter table projects add constraint projects_status_check
+    check (status in ('planning', 'in_progress', 'done'));
+exception when others then null;
+end $$;
+
 create index if not exists projects_status_idx     on projects (status);
 create index if not exists projects_created_at_idx on projects (created_at desc);
 create index if not exists projects_created_by_idx on projects (created_by);
+
+-- Positioning map. One axis pair per project (project_positioning) plus a
+-- list of plotted points. Points can be free-text labels ("us", "competitor
+-- X") or linked to a ref so we render the ref thumbnail at that position.
+create table if not exists project_positioning (
+  project_id    uuid primary key references projects(id) on delete cascade,
+  x_low_label   text,
+  x_high_label  text,
+  y_low_label   text,
+  y_high_label  text,
+  updated_at    timestamptz not null default now()
+);
+
+create table if not exists project_positioning_points (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  -- Optional ref link. When set, the UI draws the ref thumbnail at (x, y);
+  -- label is used as the caption. Refs deleted while linked: drop to NULL.
+  ref_id      uuid references refs(id) on delete set null,
+  label       text,
+  -- Normalised coordinates in [-1, 1]; (0, 0) is the center of the map.
+  x           real not null,
+  y           real not null,
+  is_self     boolean not null default false,
+  color       text,
+  created_at  timestamptz not null default now(),
+  created_by  text
+);
+
+create index if not exists project_positioning_points_project_idx
+  on project_positioning_points (project_id);
+create index if not exists project_positioning_points_ref_idx
+  on project_positioning_points (ref_id);
 
 create table if not exists project_updates (
   id           uuid primary key default gen_random_uuid(),

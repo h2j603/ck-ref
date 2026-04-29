@@ -15,6 +15,9 @@ import {
   type Note,
   type Notification,
   type Project,
+  type ProjectPlanning,
+  type ProjectPositioning,
+  type ProjectPositioningPoint,
   type ProjectStatus,
   type ProjectUpdate,
   type Ref,
@@ -487,6 +490,59 @@ export async function fetchProjectInspirationRefs(
     reason: meta.get(r.id)?.reason ?? null,
     added_by: meta.get(r.id)?.added_by ?? null,
   }));
+}
+
+// Positioning map. The axis row may not exist yet (project never opened the
+// map); callers treat null as "all labels empty". Points are returned in
+// insertion order so the UI keeps a stable z-stack.
+export async function fetchProjectPositioning(
+  projectId: string,
+): Promise<{
+  axes: ProjectPositioning | null;
+  points: (ProjectPositioningPoint & {
+    ref: Pick<Ref, "id" | "title" | "image_path" | "image_width" | "image_height" | "color_hex"> | null;
+  })[];
+}> {
+  const supabase = await createClient();
+  const [axesRes, pointsRes] = await Promise.all([
+    supabase
+      .from("project_positioning")
+      .select("*")
+      .eq("project_id", projectId)
+      .maybeSingle(),
+    supabase
+      .from("project_positioning_points")
+      .select(
+        `id, project_id, ref_id, label, x, y, is_self, color, created_at, created_by,
+         ref:refs(id, title, image_path, image_width, image_height, color_hex)`,
+      )
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true }),
+  ]);
+  type RawRef = Pick<
+    Ref,
+    "id" | "title" | "image_path" | "image_width" | "image_height" | "color_hex"
+  >;
+  type PointRow = ProjectPositioningPoint & {
+    ref: RawRef | RawRef[] | null;
+  };
+  const points = ((pointsRes.data ?? []) as PointRow[]).map((row) => {
+    const ref = Array.isArray(row.ref) ? row.ref[0] ?? null : row.ref;
+    const { ref: _ref, ...rest } = row;
+    void _ref;
+    return { ...rest, ref };
+  });
+  return {
+    axes: (axesRes.data as ProjectPositioning | null) ?? null,
+    points,
+  };
+}
+
+// Convenience: planning is stored as jsonb so the column reads back as a
+// generic object. We don't validate shape here — sections are all optional.
+export function readPlanning(value: unknown): ProjectPlanning {
+  if (!value || typeof value !== "object") return {};
+  return value as ProjectPlanning;
 }
 
 export async function fetchUpdateRefs(

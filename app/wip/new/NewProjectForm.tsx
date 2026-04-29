@@ -31,7 +31,9 @@ export default function NewProjectForm() {
       .insert({
         title: title.trim(),
         description: description.trim() || null,
-        status: "in_progress",
+        // New projects start in planning. They can move to in_progress as
+        // soon as the first update is posted (or via the status select).
+        status: "planning",
         created_by: nickname || null,
       })
       .select("id")

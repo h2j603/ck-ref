@@ -102,14 +102,56 @@ export type Note = {
   updated_at: string;
 };
 
-export const PROJECT_STATUSES = ["in_progress", "done"] as const;
+export const PROJECT_STATUSES = ["planning", "in_progress", "done"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export type ProjectPlanning = {
+  concept?: string;
+  problem?: string;
+  audience?: string;
+  tone?: string[];
+  constraints?: string;
+  deliverables?: string;
+};
+
+export const PLANNING_SECTIONS = [
+  "concept",
+  "problem",
+  "audience",
+  "tone",
+  "constraints",
+  "deliverables",
+] as const;
+export type PlanningSection = (typeof PLANNING_SECTIONS)[number];
 
 export type Project = {
   id: string;
   title: string;
   description: string | null;
   status: ProjectStatus;
+  planning: ProjectPlanning;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ProjectPositioning = {
+  project_id: string;
+  x_low_label: string | null;
+  x_high_label: string | null;
+  y_low_label: string | null;
+  y_high_label: string | null;
+  updated_at: string;
+};
+
+export type ProjectPositioningPoint = {
+  id: string;
+  project_id: string;
+  ref_id: string | null;
+  label: string | null;
+  x: number;
+  y: number;
+  is_self: boolean;
+  color: string | null;
   created_at: string;
   created_by: string | null;
 };

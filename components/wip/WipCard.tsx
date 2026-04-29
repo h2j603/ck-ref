@@ -4,9 +4,12 @@ import Link from "next/link";
 import { NicknamePill } from "@/components/nickname-pill";
 import { StatusBadge } from "@/components/wip/StatusBadge";
 import type { ProjectSummary } from "@/lib/queries";
+import { readPlanning } from "@/lib/queries";
 import { publicImageUrl } from "@/lib/storage";
 
 export function WipCard({ project }: { project: ProjectSummary }) {
+  const planning = readPlanning(project.planning);
+  const isPlanning = project.status === "planning";
   return (
     <Link
       href={`/wip/${project.id}`}
@@ -28,9 +31,13 @@ export function WipCard({ project }: { project: ProjectSummary }) {
             sizes="(max-width: 640px) 50vw, 320px"
             className="object-cover"
           />
+        ) : isPlanning && planning.concept ? (
+          <p className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm italic leading-snug text-muted-foreground">
+            {planning.concept}
+          </p>
         ) : (
           <span className="absolute inset-0 flex items-center justify-center font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            no updates yet
+            {isPlanning ? "planning" : "no updates yet"}
           </span>
         )}
       </div>
