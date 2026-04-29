@@ -16,6 +16,7 @@ import {
   fetchProfiles,
   fetchProject,
   fetchProjectInspirationRefs,
+  fetchProjectMilestones,
   fetchProjectPositioningMaps,
   fetchProjectUpdates,
   fetchUpdateReactions,
@@ -31,14 +32,21 @@ export default async function WipDetailPage({
   const project = await fetchProject(id).catch(() => null);
   if (!project) notFound();
 
-  const [updates, projectNotes, inspiration, profiles, positioningMaps] =
-    await Promise.all([
-      fetchProjectUpdates(id).catch(() => []),
-      fetchNotesFor({ kind: "project", id }).catch(() => []),
-      fetchProjectInspirationRefs(id).catch(() => []),
-      fetchProfiles().catch(() => []),
-      fetchProjectPositioningMaps(id).catch(() => []),
-    ]);
+  const [
+    updates,
+    projectNotes,
+    inspiration,
+    profiles,
+    positioningMaps,
+    milestones,
+  ] = await Promise.all([
+    fetchProjectUpdates(id).catch(() => []),
+    fetchNotesFor({ kind: "project", id }).catch(() => []),
+    fetchProjectInspirationRefs(id).catch(() => []),
+    fetchProfiles().catch(() => []),
+    fetchProjectPositioningMaps(id).catch(() => []),
+    fetchProjectMilestones(id).catch(() => []),
+  ]);
   const reactionsByUpdate = await fetchUpdateReactions(
     updates.map((u) => u.id),
   ).catch(() => new Map());
@@ -89,6 +97,9 @@ export default async function WipDetailPage({
         createdBy={project.created_by}
         initial={planning}
         profiles={profiles}
+        initialUpdatedAt={project.planning_updated_at}
+        initialUpdatedBy={project.planning_updated_by}
+        initialMilestones={milestones}
       />
 
       <PositioningMaps

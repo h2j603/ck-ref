@@ -87,6 +87,9 @@ export type RefRating = {
   rated_at: string;
 };
 
+export const NOTE_KINDS = ["discussion", "decision", "open_question"] as const;
+export type NoteKind = (typeof NOTE_KINDS)[number];
+
 export type Note = {
   id: string;
   ref_id: string | null;
@@ -97,6 +100,7 @@ export type Note = {
   pros: string | null;
   cons: string | null;
   image_paths: string[];
+  kind: NoteKind;
   author: string;
   created_at: string;
   updated_at: string;
@@ -111,6 +115,15 @@ export type ProjectRole = {
   is_leader?: boolean;
 };
 
+// One row of the success metrics grid: what we measure, what we want it
+// to be, and roughly when. All optional past `metric` so partial entries
+// (e.g. a metric we haven't picked a target for yet) are still saveable.
+export type SuccessMetric = {
+  metric: string;
+  target?: string;
+  by_when?: string;
+};
+
 export type ProjectPlanning = {
   concept?: string;
   problem?: string;
@@ -118,6 +131,7 @@ export type ProjectPlanning = {
   positive_keywords?: string[];
   negative_keywords?: string[];
   roles?: ProjectRole[];
+  success_metrics?: SuccessMetric[];
   constraints?: string;
   deliverables?: string;
   // Legacy: pre-split single tone keyword list. Read-migrated into
@@ -147,6 +161,8 @@ export type Project = {
   description: string | null;
   status: ProjectStatus;
   planning: ProjectPlanning;
+  planning_updated_at: string | null;
+  planning_updated_by: string | null;
   created_at: string;
   created_by: string | null;
 };
@@ -204,6 +220,9 @@ export type Announcement = {
   expires_at: string;
 };
 
+export const EVENT_KINDS = ["general", "milestone"] as const;
+export type EventKind = (typeof EVENT_KINDS)[number];
+
 export type CalendarEvent = {
   id: string;
   project_id: string | null;
@@ -213,6 +232,7 @@ export type CalendarEvent = {
   ends_at: string | null;
   all_day: boolean;
   announce: boolean;
+  kind: EventKind;
   created_at: string;
   created_by: string | null;
 };

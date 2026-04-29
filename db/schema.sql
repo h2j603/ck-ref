@@ -57,6 +57,10 @@ create table if not exists projects (
 -- Existing deployments: planning column added later, and the status check
 -- needs to accept the new value. Both idempotent.
 alter table projects add column if not exists planning jsonb not null default '{}'::jsonb;
+-- Track who last touched the planning brief, for the "@미주 · 12분 전 수정"
+-- footer. Updated by the client on every planning persist.
+alter table projects add column if not exists planning_updated_at timestamptz;
+alter table projects add column if not exists planning_updated_by text;
 do $$
 begin
   alter table projects drop constraint if exists projects_status_check;
@@ -360,6 +364,19 @@ alter table notes add column if not exists parent_id uuid references notes(id) o
 alter table notes add column if not exists project_id uuid references projects(id) on delete cascade;
 alter table notes add column if not exists project_update_id uuid references project_updates(id) on delete cascade;
 alter table notes add column if not exists image_paths text[] not null default '{}';
+-- Three "shapes" of note: regular discussion (default), a recorded
+-- decision, or an open question awaiting an answer. We surface counts of
+-- the latter two on the project header so they don't get lost in a long
+-- thread.
+alter table notes add column if not exists kind text not null default 'discussion';
+do $$
+begin
+  alter table notes drop constraint if exists notes_kind_check;
+  alter table notes add constraint notes_kind_check
+    check (kind in ('discussion', 'decision', 'open_question'));
+exception when others then null;
+end $$;
+create index if not exists notes_kind_idx on notes (kind);
 alter table notes alter column body drop not null;
 alter table notes alter column ref_id drop not null;
 
@@ -544,6 +561,18 @@ create table if not exists events (
 alter table events add column if not exists notified_morning boolean not null default false;
 alter table events add column if not exists notified_hour    boolean not null default false;
 alter table events add column if not exists announce         boolean not null default false;
+-- v2: events grew a `kind` so the planning page can surface project
+-- milestones inline while keeping the same row visible on the calendar.
+-- 'general' is the default; 'milestone' marks a planning checkpoint.
+alter table events add column if not exists kind text not null default 'general';
+do $$
+begin
+  alter table events drop constraint if exists events_kind_check;
+  alter table events add constraint events_kind_check
+    check (kind in ('general', 'milestone'));
+exception when others then null;
+end $$;
+create index if not exists events_kind_idx on events (kind);
 
 create index if not exists events_starts_idx  on events (starts_at);
 create index if not exists events_project_idx on events (project_id);
