@@ -59,11 +59,6 @@ const SECTION_META: Record<PlanningTextSection, SectionMeta> = {
     placeholder: "마감, 매체, 포맷, 예산, 기술적 제약",
     rows: 3,
   },
-  deliverables: {
-    label: "산출물",
-    placeholder: "무엇을 만들 것인가 — 포맷, 사이즈, 개수",
-    rows: 3,
-  },
 };
 
 export function PlanningSections({
@@ -101,10 +96,11 @@ export function PlanningSections({
     Boolean(planning.problem) ||
     Boolean(planning.audience) ||
     Boolean(planning.constraints) ||
-    Boolean(planning.deliverables) ||
+    (planning.deliverables && planning.deliverables.length > 0) ||
     (planning.positive_keywords && planning.positive_keywords.length > 0) ||
     (planning.negative_keywords && planning.negative_keywords.length > 0) ||
     (planning.roles && planning.roles.length > 0) ||
+    (planning.success_metrics && planning.success_metrics.length > 0) ||
     milestones.length > 0;
   if (!canEdit && !hasContent) return null;
 
@@ -188,6 +184,21 @@ export function PlanningSections({
               profiles={profiles}
               value={milestones}
               onChange={setMilestones}
+            />
+          </div>
+        ) : null}
+        {canEdit ||
+        (planning.deliverables && planning.deliverables.length > 0) ? (
+          <div className="md:col-span-2">
+            <DeliverablesSection
+              value={planning.deliverables ?? []}
+              canEdit={canEdit}
+              onSave={(next) =>
+                persist({
+                  ...planning,
+                  deliverables: next.length ? next : undefined,
+                })
+              }
             />
           </div>
         ) : null}
@@ -835,3 +846,93 @@ function MilestonesSection({
   );
 }
 
+function DeliverablesSection({
+  value,
+  canEdit,
+  onSave,
+}: {
+  value: string[];
+  canEdit: boolean;
+  onSave: (next: string[]) => Promise<void> | void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    const next = draft.trim();
+    if (!next || value.some((v) => v.toLowerCase() === next.toLowerCase())) {
+      setDraft("");
+      return;
+    }
+    setBusy(true);
+    await onSave([...value, next]);
+    setBusy(false);
+    setDraft("");
+  }
+
+  async function remove(index: number) {
+    setBusy(true);
+    await onSave(value.filter((_, i) => i !== index));
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        산출물
+      </h3>
+      {value.length === 0 && !canEdit ? null : (
+        <ul className="flex flex-col gap-1.5">
+          {value.map((item, i) => (
+            <li
+              key={i}
+              className={cn(ROW_SHELL, "border-border/60 bg-muted/20")}
+            >
+              <span className="min-w-0 flex-1 truncate text-sm">{item}</span>
+              <div className={ROW_ACTIONS}>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => void remove(i)}
+                    disabled={busy}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="remove"
+                  >
+                    <X className="size-3" />
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+          className={cn(ROW_SHELL, "border-transparent bg-transparent pl-0")}
+        >
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="산출물 (예: 메인 포스터)"
+            className="h-8 flex-1 text-[12px]"
+            disabled={busy}
+          />
+          <div className={ROW_ACTIONS}>
+            <Button
+              type="submit"
+              size="sm"
+              className="h-8 w-full text-xs"
+              disabled={busy || draft.trim().length === 0}
+            >
+              등록
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </div>
+  );
+}
