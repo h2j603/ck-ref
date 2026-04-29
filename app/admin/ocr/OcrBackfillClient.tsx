@@ -5,10 +5,42 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { runOCR } from "@/lib/ocr";
-import { transformedImageUrl } from "@/lib/storage";
+import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
 
 const BATCH_SIZE = 5;
+const MAX_OCR_WIDTH = 1024;
+
+// Downscale before handing the bitmap to Tesseract. Originals can be
+// 4-6 MP which is overkill for OCR — anything past ~1024 wide just slows
+// recognition. Returns the original blob if it's already smaller, so we
+// don't waste a re-encode.
+async function downscaleForOCR(blob: Blob): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    if (bitmap.width <= MAX_OCR_WIDTH) {
+      bitmap.close();
+      return blob;
+    }
+    const scale = MAX_OCR_WIDTH / bitmap.width;
+    const canvas = new OffscreenCanvas(
+      MAX_OCR_WIDTH,
+      Math.round(bitmap.height * scale),
+    );
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return blob;
+    }
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return await canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 });
+  } catch {
+    // OffscreenCanvas / createImageBitmap unavailable on really old browsers.
+    // OCR can still chew through the original — just slower.
+    return blob;
+  }
+}
 
 type Stats = {
   total: number;
@@ -99,12 +131,13 @@ export function OcrBackfillClient() {
     let failed = 0;
     for (const row of rows) {
       try {
-        // Use the transform endpoint so Tesseract doesn't burn time on
-        // multi-megapixel scans — 1024px wide is plenty for OCR.
-        const url = transformedImageUrl(row.image_path, { width: 1024 });
+        // Public object URL — the storage transform endpoint is gated on
+        // Supabase Pro, so we pull the original and downscale client-side
+        // before OCR.
+        const url = publicImageUrl(row.image_path);
         const res = await fetch(url, { cache: "no-store" });
         if (!res.ok) throw new Error(`fetch ${res.status}`);
-        const blob = await res.blob();
+        const blob = await downscaleForOCR(await res.blob());
         const text = await runOCR(blob);
         const { error: updErr } = await supabase
           .from("refs")
