@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "./DesignerPicker";
 import { DropZone, type UploadFile } from "./DropZone";
+import { TagPresets } from "./TagPresets";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -408,12 +409,15 @@ export function MetadataForm() {
         </Field>
 
         <Field label="태그 (콤마 구분)" full>
-          <Textarea
-            value={tagsText}
-            onChange={(e) => setTagsText(e.target.value)}
-            placeholder="grid, swiss, riso, …"
-            rows={2}
-          />
+          <div className="flex flex-col gap-2">
+            <TagPresets tagsText={tagsText} onChange={setTagsText} />
+            <Textarea
+              value={tagsText}
+              onChange={(e) => setTagsText(e.target.value)}
+              placeholder="grid, swiss, riso, …"
+              rows={2}
+            />
+          </div>
         </Field>
 
         <Field label="디자이너" full>
