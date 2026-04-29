@@ -42,6 +42,9 @@ export default async function EditRefPage({
           languages: ref.languages,
           tags: ref.tags,
           designers: ref.designers,
+          image_path: ref.image_path,
+          image_width: ref.image_width,
+          image_height: ref.image_height,
         }}
       />
     </div>
