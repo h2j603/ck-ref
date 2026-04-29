@@ -572,6 +572,8 @@ alter table projects        enable row level security;
 alter table project_updates enable row level security;
 alter table project_refs    enable row level security;
 alter table project_update_refs enable row level security;
+alter table project_positioning enable row level security;
+alter table project_positioning_points enable row level security;
 alter table boards          enable row level security;
 alter table board_items     enable row level security;
 alter table designers       enable row level security;
@@ -604,6 +606,14 @@ create policy "anon all" on project_refs
 
 drop policy if exists "anon all" on project_update_refs;
 create policy "anon all" on project_update_refs
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_positioning;
+create policy "anon all" on project_positioning
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "anon all" on project_positioning_points;
+create policy "anon all" on project_positioning_points
   for all to anon, authenticated using (true) with check (true);
 
 drop policy if exists "anon all" on boards;
