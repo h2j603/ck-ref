@@ -556,7 +556,7 @@ function RolesSection({
             e.preventDefault();
             void add();
           }}
-          className={cn(ROW_SHELL, "border-transparent bg-transparent")}
+          className={cn(ROW_SHELL, "border-transparent bg-transparent pl-0")}
         >
           <div className={CONTENT_GRID}>
             <Select
@@ -733,7 +733,7 @@ function MilestonesSection({
             e.preventDefault();
             void add();
           }}
-          className={cn(ROW_SHELL, "border-transparent bg-transparent")}
+          className={cn(ROW_SHELL, "border-transparent bg-transparent pl-0")}
         >
           <div className={CONTENT_FLEX}>
             <Input
