@@ -6,8 +6,9 @@ import { cn } from "@/lib/utils";
 // Curated starter tags so the textarea isn't a blank prompt. Roughly
 // grouped by axis (style → typography → texture → color → mood) but
 // rendered as a single flat row — the goal is glanceability, not a
-// taxonomy. Order here is the on-screen order.
-const TAG_PRESETS = [
+// taxonomy. Order here is the on-screen order. Exported so the WIP
+// planning keyword sections can reuse the same vocabulary.
+export const TAG_PRESETS = [
   // style
   "swiss",
   "brutalist",

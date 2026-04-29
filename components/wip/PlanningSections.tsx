@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { NicknamePill } from "@/components/nickname-pill";
+import { TAG_PRESETS } from "@/components/upload/TagPresets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -361,7 +362,7 @@ function KeywordSection({
 
   async function add() {
     const next = draft.trim();
-    if (!next || value.includes(next)) {
+    if (!next || value.some((v) => v.toLowerCase() === next.toLowerCase())) {
       setDraft("");
       return;
     }
@@ -376,12 +377,28 @@ function KeywordSection({
     setBusy(false);
   }
 
+  // Toggle a preset tag in/out of the value list, case-insensitive so an
+  // existing "Swiss" still matches the "swiss" preset.
+  async function togglePreset(tag: string) {
+    const lower = tag.toLowerCase();
+    const present = value.some((v) => v.toLowerCase() === lower);
+    setBusy(true);
+    await onSave(
+      present
+        ? value.filter((v) => v.toLowerCase() !== lower)
+        : [...value, tag],
+    );
+    setBusy(false);
+  }
+
   // Greens/reds for positive/negative so the two columns are distinguishable
   // at a glance without resorting to icons that fight the rest of the UI.
   const chipClass =
     tone === "positive"
       ? "border-emerald-300/60 bg-emerald-50/60 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100"
       : "border-rose-300/60 bg-rose-50/60 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100";
+
+  const activeLower = new Set(value.map((v) => v.toLowerCase()));
 
   return (
     <div className="flex flex-col gap-2">
@@ -435,6 +452,32 @@ function KeywordSection({
           </form>
         ) : null}
       </div>
+      {canEdit ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            추천
+          </span>
+          {TAG_PRESETS.map((tag) => {
+            const on = activeLower.has(tag.toLowerCase());
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => void togglePreset(tag)}
+                disabled={busy}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider transition-colors",
+                  on
+                    ? chipClass
+                    : "border-input text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {tag}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
