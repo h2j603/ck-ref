@@ -45,6 +45,7 @@ export default async function EditRefPage({
           image_path: ref.image_path,
           image_width: ref.image_width,
           image_height: ref.image_height,
+          ocr_text: ref.ocr_text,
         }}
       />
     </div>

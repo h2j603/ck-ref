@@ -1,7 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "./DesignerPicker";
 import { DropZone, type UploadFile } from "./DropZone";
@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { probeImage } from "@/lib/imageProbe";
 import { useNickname } from "@/lib/nickname";
+import { runOCR } from "@/lib/ocr";
 import { parseTags } from "@/lib/slug";
 import { STORAGE_BUCKET, assertSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
@@ -90,6 +91,27 @@ export function MetadataForm() {
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Kick off OCR for every newly-added file (ocrText === undefined). We
+  // use a functional setState so concurrent OCR completions don't clobber
+  // each other. If the user removes a file mid-recognize the result is
+  // simply discarded by the setter's id check.
+  useEffect(() => {
+    const pending = files.filter((f) => f.ocrText === undefined);
+    if (pending.length === 0) return;
+    let cancelled = false;
+    for (const f of pending) {
+      void runOCR(f.file).then((text) => {
+        if (cancelled) return;
+        setFiles((prev) =>
+          prev.map((p) => (p.id === f.id ? { ...p, ocrText: text } : p)),
+        );
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [files]);
 
   async function importFromUrl() {
     const url = sourceUrl.trim();
@@ -183,6 +205,7 @@ export function MetadataForm() {
         height: number | null;
         colorHex: string | null;
         colorHue: number | null;
+        ocrText: string | null;
       }[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
@@ -203,6 +226,9 @@ export function MetadataForm() {
           height: f.height ?? null,
           colorHex: f.colorHex ?? null,
           colorHue: f.colorHue ?? null,
+          // Cover's OCR — if still recognising at submit time, save NULL
+          // (search just won't match it; user can re-run from edit page).
+          ocrText: f.ocrText && f.ocrText.length > 0 ? f.ocrText : null,
         });
       }
 
@@ -221,6 +247,7 @@ export function MetadataForm() {
           image_height: cover.height,
           color_hex: cover.colorHex,
           color_hue: cover.colorHue,
+          ocr_text: cover.ocrText,
           genre: genre === NONE ? null : genre,
           medium: medium === NONE ? null : medium,
           languages,

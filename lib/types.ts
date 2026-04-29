@@ -61,6 +61,7 @@ export type Ref = {
   created_by: string | null;
   color_hex: string | null;
   color_hue: number | null;
+  ocr_text: string | null;
 };
 
 export type RefImage = {

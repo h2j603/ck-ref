@@ -16,6 +16,10 @@ export type UploadFile = {
   height?: number;
   colorHex?: string | null;
   colorHue?: number | null;
+  // OCR runs asynchronously after the file lands. `undefined` = still
+  // working (badge visible); empty string = done with no text found;
+  // populated string = searchable text from the image.
+  ocrText?: string;
 };
 
 function fileId(file: File) {
@@ -226,6 +230,21 @@ export function DropZone({
                 alt={f.file.name}
                 className="block h-32 w-full object-cover"
               />
+              {f.ocrText === undefined ? (
+                <span
+                  className="absolute left-1 top-1 inline-flex items-center gap-1 rounded-full bg-background/90 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
+                  title="이미지에서 텍스트 추출 중"
+                >
+                  <Loader2 className="size-2.5 animate-spin" /> OCR
+                </span>
+              ) : f.ocrText ? (
+                <span
+                  className="absolute left-1 top-1 rounded-full bg-foreground/85 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-background"
+                  title={`OCR: ${f.ocrText.slice(0, 200)}`}
+                >
+                  TEXT
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={() => removeFile(f.id)}
