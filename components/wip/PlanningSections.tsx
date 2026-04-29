@@ -483,16 +483,21 @@ function RolesSection({
 
   // Toggle leader on the clicked row. Project leader is single-occupancy:
   // turning one on automatically turns the others off, so the crown badge
-  // never lies about who's actually leading.
+  // never lies about who's actually leading. Newly-promoted leader also
+  // jumps to the top of the list — the lead is the row people read first.
   async function toggleLeader(index: number) {
     setBusy(true);
     const target = !value[index].is_leader;
-    await onSave(
-      value.map((r, i) => ({
-        ...r,
-        is_leader: i === index ? target : false,
-      })),
-    );
+    const flagged = value.map((r, i) => ({
+      ...r,
+      is_leader: i === index ? target : false,
+    }));
+    let next = flagged;
+    if (target) {
+      const leader = flagged[index];
+      next = [leader, ...flagged.filter((_, i) => i !== index)];
+    }
+    await onSave(next);
     setBusy(false);
   }
 
@@ -517,7 +522,12 @@ function RolesSection({
           {value.map((r, i) => (
             <li
               key={i}
-              className={cn(ROW_SHELL, "border-border/60 bg-muted/20")}
+              className={cn(
+                ROW_SHELL,
+                r.is_leader
+                  ? "border-lime-400 bg-lime-100/70 dark:border-lime-500/60 dark:bg-lime-500/10"
+                  : "border-border/60 bg-muted/20",
+              )}
               onDoubleClick={() => {
                 if (canEdit) void toggleLeader(i);
               }}
@@ -533,7 +543,7 @@ function RolesSection({
               <div className={ROW_ACTIONS}>
                 {r.is_leader ? (
                   <span
-                    className="text-lime-600 dark:text-lime-400"
+                    className="text-lime-500 dark:text-lime-400"
                     title="프로젝트 리더"
                     aria-label="프로젝트 리더"
                   >
