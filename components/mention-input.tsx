@@ -34,8 +34,12 @@ type Props = Omit<
   profiles: Profile[];
 };
 
-const PILL_CLASS =
-  "inline-flex items-center rounded-full border border-input px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider leading-none align-baseline";
+// The mirror has to render at exactly the same width as the underlying
+// textarea text or the textarea's caret will visibly drift past characters
+// the user typed after the mention. So the pill keeps the textarea's
+// font / size / kerning and only signals "this is a mention" with a
+// background tint. No padding, no border, no font change.
+const PILL_CLASS = "rounded-sm bg-foreground/15 text-foreground";
 
 export const MentionInput = forwardRef<HTMLTextAreaElement, Props>(
   function MentionInput({ value, onChange, profiles, className, ...rest }, ref) {
