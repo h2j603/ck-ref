@@ -105,7 +105,11 @@ export type Note = {
 export const PROJECT_STATUSES = ["planning", "in_progress", "done"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
-export type ProjectRole = { person: string; role: string };
+export type ProjectRole = {
+  person: string;
+  role: string;
+  is_leader?: boolean;
+};
 
 export type ProjectPlanning = {
   concept?: string;
