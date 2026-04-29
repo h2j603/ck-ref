@@ -41,6 +41,19 @@ export function OcrBackfillClient() {
       setError(totalRes.error.message);
       return;
     }
+    // Surface the missing-column case explicitly. Without this we'd just
+    // show "Missing 0" and the page would look done, when in fact the
+    // schema migration hasn't run yet.
+    if (missingRes.error) {
+      const msg = missingRes.error.message;
+      setError(
+        msg.includes("ocr_text")
+          ? `refs.ocr_text 컬럼이 없습니다. 먼저 SQL 마이그레이션을 돌려주세요: alter table refs add column if not exists ocr_text text;`
+          : msg,
+      );
+      setStats({ total: totalRes.count ?? 0, missing: 0 });
+      return;
+    }
     setStats({
       total: totalRes.count ?? 0,
       missing: missingRes.count ?? 0,
