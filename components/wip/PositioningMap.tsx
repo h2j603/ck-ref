@@ -1,6 +1,6 @@
 "use client";
 
-import { Star, Trash2, X } from "lucide-react";
+import { Maximize2, Star, Trash2, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -133,6 +133,7 @@ export function PositioningMap({
 
   const [adding, setAdding] = useState<{ x: number; y: number } | null>(null);
   const [editing, setEditing] = useState<PositioningPoint | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Read-only viewers shouldn't see an empty grid; hide the whole map until
@@ -305,98 +306,120 @@ export function PositioningMap({
 
   if (!canEdit && !hasContent) return null;
 
+  // The board (axes + grid + points) is rendered either inline at its
+  // normal size or inside a fullscreen Dialog when `expanded` is on. Only
+  // one instance is ever in the DOM at a time, so containerRef stays
+  // attached to whichever is active and drag/click coords resolve cleanly.
+  const renderBoard = () => (
+    <div className="flex flex-col gap-2">
+      <AxisLabel
+        value={axes.y_high_label}
+        canEdit={canEdit}
+        onSave={(v) => persistAxes({ ...axes, y_high_label: v })}
+        align="center"
+        placeholder="(상단 축 라벨)"
+      />
+      <div className="flex items-center gap-2">
+        <AxisLabel
+          value={axes.x_low_label}
+          canEdit={canEdit}
+          onSave={(v) => persistAxes({ ...axes, x_low_label: v })}
+          align="vertical"
+          placeholder="(좌측 X)"
+        />
+        <div
+          ref={containerRef}
+          onClick={handleMapClick}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className={cn(
+            "relative aspect-square w-full select-none overflow-hidden rounded-md border border-border bg-muted/20",
+            canEdit ? "cursor-crosshair" : "cursor-default",
+          )}
+        >
+          <div className="absolute inset-x-0 top-1/2 h-px bg-border/60" />
+          <div className="absolute inset-y-0 left-1/2 w-px bg-border/60" />
+          {points.map((p) => (
+            <PointMarker
+              key={p.id}
+              point={p}
+              canEdit={canEdit}
+              // eslint-disable-next-line react-hooks/refs -- the ref write only happens inside the event handler, not during render
+              onPointerDown={(e) => handlePointerDownOnPoint(e, p)}
+              onClickEdit={() => setEditing(p)}
+            />
+          ))}
+        </div>
+        <AxisLabel
+          value={axes.x_high_label}
+          canEdit={canEdit}
+          onSave={(v) => persistAxes({ ...axes, x_high_label: v })}
+          align="vertical"
+          placeholder="(우측 X)"
+        />
+      </div>
+      <AxisLabel
+        value={axes.y_low_label}
+        canEdit={canEdit}
+        onSave={(v) => persistAxes({ ...axes, y_low_label: v })}
+        align="center"
+        placeholder="(하단 축 라벨)"
+      />
+    </div>
+  );
+
+  const renderPresets = () =>
+    canEdit &&
+    !axes.x_low_label &&
+    !axes.x_high_label &&
+    !axes.y_low_label &&
+    !axes.y_high_label ? (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          추천 축
+        </span>
+        {AXIS_PRESETS.map((preset) => (
+          <button
+            key={preset.name}
+            type="button"
+            onClick={() => void persistAxes(preset.axes)}
+            className="rounded-full border border-input px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+            title={`${preset.axes.x_low_label} ↔ ${preset.axes.x_high_label} / ${preset.axes.y_low_label} ↔ ${preset.axes.y_high_label}`}
+          >
+            {preset.name}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
   return (
     <section className="flex flex-col gap-3">
-      <header className="flex items-center justify-between border-b border-border/60 pb-2">
+      <header className="flex items-center justify-between gap-2 border-b border-border/60 pb-2">
         <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           포지셔닝 맵 — {points.length}
         </h2>
-        {canEdit ? (
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            빈 곳 클릭으로 추가 · 드래그로 이동
-          </p>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {canEdit ? (
+            <p className="hidden font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:block">
+              빈 곳 클릭으로 추가 · 드래그로 이동
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="확대"
+            title="확대"
+          >
+            <Maximize2 className="size-3.5" />
+          </button>
+        </div>
       </header>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
-      {canEdit &&
-      !axes.x_low_label &&
-      !axes.x_high_label &&
-      !axes.y_low_label &&
-      !axes.y_high_label ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            추천 축
-          </span>
-          {AXIS_PRESETS.map((preset) => (
-            <button
-              key={preset.name}
-              type="button"
-              onClick={() => void persistAxes(preset.axes)}
-              className="rounded-full border border-input px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
-              title={`${preset.axes.x_low_label} ↔ ${preset.axes.x_high_label} / ${preset.axes.y_low_label} ↔ ${preset.axes.y_high_label}`}
-            >
-              {preset.name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-2">
-        <AxisLabel
-          value={axes.y_high_label}
-          canEdit={canEdit}
-          onSave={(v) => persistAxes({ ...axes, y_high_label: v })}
-          align="center"
-          placeholder="(상단 축 라벨)"
-        />
-        <div className="flex items-center gap-2">
-          <AxisLabel
-            value={axes.x_low_label}
-            canEdit={canEdit}
-            onSave={(v) => persistAxes({ ...axes, x_low_label: v })}
-            align="vertical"
-            placeholder="(좌측 X)"
-          />
-          <div
-            ref={containerRef}
-            onClick={handleMapClick}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            className={cn(
-              "relative aspect-square w-full select-none overflow-hidden rounded-md border border-border bg-muted/20",
-              canEdit ? "cursor-crosshair" : "cursor-default",
-            )}
-          >
-            <div className="absolute inset-x-0 top-1/2 h-px bg-border/60" />
-            <div className="absolute inset-y-0 left-1/2 w-px bg-border/60" />
-            {points.map((p) => (
-              <PointMarker
-                key={p.id}
-                point={p}
-                canEdit={canEdit}
-                onPointerDown={(e) => handlePointerDownOnPoint(e, p)}
-                onClickEdit={() => setEditing(p)}
-              />
-            ))}
-          </div>
-          <AxisLabel
-            value={axes.x_high_label}
-            canEdit={canEdit}
-            onSave={(v) => persistAxes({ ...axes, x_high_label: v })}
-            align="vertical"
-            placeholder="(우측 X)"
-          />
-        </div>
-        <AxisLabel
-          value={axes.y_low_label}
-          canEdit={canEdit}
-          onSave={(v) => persistAxes({ ...axes, y_low_label: v })}
-          align="center"
-          placeholder="(하단 축 라벨)"
-        />
-      </div>
+      {!expanded ? renderPresets() : null}
+      {!expanded ? renderBoard() : null}
 
       {adding ? (
         <AddPointDialog
@@ -425,6 +448,19 @@ export function PositioningMap({
           }}
         />
       ) : null}
+
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent className="flex h-[min(96vh,96vw)] w-[min(96vw,96vh)] max-w-none flex-col gap-3 p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              포지셔닝 맵 — {points.length}
+            </DialogTitle>
+          </DialogHeader>
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          {renderPresets()}
+          <div className="min-h-0 flex-1">{expanded ? renderBoard() : null}</div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
