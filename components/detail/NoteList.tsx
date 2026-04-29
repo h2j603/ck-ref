@@ -158,9 +158,10 @@ export function NoteList({
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [draftKind, setDraftKind] = useState<NoteKind>("discussion");
   const [draftImages, setDraftImages] = useState<File[]>([]);
-  // Kind chips (decision / open question) only make sense on project
-  // discussion threads. Ref + project-update notes stay simple.
-  const showKinds = target.kind === "project";
+  // Kind chips (decision / open question) live on anything WIP-related —
+  // project threads and per-update threads. Ref archive notes stay simple
+  // since they're closer to comments than commitments.
+  const showKinds = target.kind !== "ref";
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<Draft>(EMPTY);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
