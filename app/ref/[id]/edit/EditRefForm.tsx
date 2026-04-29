@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { ImageIcon, RotateCcw } from "lucide-react";
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "@/components/upload/DesignerPicker";
 import { Button } from "@/components/ui/button";
@@ -14,9 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { probeImage, type ProbedImage } from "@/lib/imageProbe";
 import { useNickname } from "@/lib/nickname";
 import { parseTags } from "@/lib/slug";
+import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
+import { STORAGE_BUCKET, assertSupabaseConfigured } from "@/lib/supabase/env";
 import {
   GENRES,
   LANGUAGES,
@@ -37,7 +42,29 @@ type Initial = {
   languages: Language[];
   tags: string[];
   designers: DesignerLite[];
+  image_path: string;
+  image_width: number | null;
+  image_height: number | null;
 };
+
+type PendingImage = {
+  file: File;
+  previewUrl: string;
+  probed: ProbedImage | null;
+};
+
+function fileExtension(file: File) {
+  const dot = file.name.lastIndexOf(".");
+  if (dot >= 0) return file.name.slice(dot + 1).toLowerCase();
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return "bin";
+}
+
+function randomId() {
+  return Math.random().toString(36).slice(2, 10);
+}
 
 function extractErrorMessage(err: unknown): string {
   if (typeof err === "string" && err.trim()) return err;
@@ -71,8 +98,16 @@ export function EditRefForm({
   const [languages, setLanguages] = useState<Language[]>(initial.languages);
   const [tagsText, setTagsText] = useState(initial.tags.join(", "));
   const [designers, setDesigners] = useState<DesignerLite[]>(initial.designers);
+  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    };
+  }, [pendingImage]);
 
   if (!hydrated) {
     return (
@@ -95,6 +130,21 @@ export function EditRefForm({
     );
   }
 
+  async function pickFile(file: File) {
+    if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    const probed = await probeImage(file);
+    setPendingImage({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      probed,
+    });
+  }
+
+  function clearPending() {
+    if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
+    setPendingImage(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -102,6 +152,39 @@ export function EditRefForm({
     try {
       const tags = parseTags(tagsText);
       const yearNum = year.trim() ? Number(year.trim()) : null;
+
+      // If the user picked a new cover, upload it first so the row update
+      // can reference the new path. We keep the old path around to delete
+      // once the row is safely repointed.
+      let imageUpdate: {
+        image_path: string;
+        image_width: number | null;
+        image_height: number | null;
+        color_hex: string | null;
+        color_hue: number | null;
+      } | null = null;
+      let oldPathToDelete: string | null = null;
+      if (pendingImage) {
+        assertSupabaseConfigured();
+        const ext = fileExtension(pendingImage.file);
+        const path = `${new Date().toISOString().slice(0, 10)}/${randomId()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(path, pendingImage.file, {
+            cacheControl: "31536000",
+            upsert: false,
+            contentType: pendingImage.file.type || undefined,
+          });
+        if (uploadErr) throw uploadErr;
+        imageUpdate = {
+          image_path: path,
+          image_width: pendingImage.probed?.width ?? null,
+          image_height: pendingImage.probed?.height ?? null,
+          color_hex: pendingImage.probed?.colorHex ?? null,
+          color_hue: pendingImage.probed?.colorHue ?? null,
+        };
+        oldPathToDelete = initial.image_path;
+      }
 
       const { error: updErr } = await supabase
         .from("refs")
@@ -113,9 +196,29 @@ export function EditRefForm({
           medium: medium === NONE ? null : medium,
           languages,
           tags,
+          ...(imageUpdate ?? {}),
+          // Stale embedding now that the cover changed; force re-compute.
+          ...(imageUpdate ? { embedding: null } : {}),
         })
         .eq("id", refId);
       if (updErr) throw updErr;
+
+      // Best-effort cleanup + re-embed once the row is updated. Failures
+      // here don't roll back the edit — the user already saved their work.
+      if (oldPathToDelete && oldPathToDelete !== imageUpdate?.image_path) {
+        void supabase.storage
+          .from(STORAGE_BUCKET)
+          .remove([oldPathToDelete])
+          .catch(() => {});
+      }
+      if (imageUpdate) {
+        void fetch("/api/embed-ref", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: refId }),
+          keepalive: true,
+        }).catch(() => {});
+      }
 
       // Reset designer links: delete all then insert current selection.
       const { error: delErr } = await supabase
@@ -140,8 +243,86 @@ export function EditRefForm({
     }
   }
 
+  const previewWidth =
+    pendingImage?.probed?.width ?? initial.image_width ?? 4;
+  const previewHeight =
+    pendingImage?.probed?.height ?? initial.image_height ?? 5;
+  const currentSrc = pendingImage
+    ? pendingImage.previewUrl
+    : publicImageUrl(initial.image_path);
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          이미지
+        </Label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+          <div
+            className="relative w-40 shrink-0 overflow-hidden rounded-md border border-border bg-muted"
+            style={{ aspectRatio: `${previewWidth} / ${previewHeight}` }}
+          >
+            {pendingImage ? (
+              // Local object URL — Next/Image isn't worth the dance here.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={currentSrc}
+                alt="새 이미지 미리보기"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <Image
+                src={currentSrc}
+                alt={title || "현재 이미지"}
+                fill
+                sizes="160px"
+                className="object-cover"
+              />
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void pickFile(file);
+                e.target.value = "";
+              }}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImageIcon className="size-3.5" />
+                {pendingImage ? "다시 고르기" : "이미지 변경"}
+              </Button>
+              {pendingImage ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearPending}
+                >
+                  <RotateCcw className="size-3.5" />
+                  되돌리기
+                </Button>
+              ) : null}
+            </div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {pendingImage
+                ? `새 파일 — ${pendingImage.probed?.width ?? "?"}×${pendingImage.probed?.height ?? "?"}. 저장 시 기존 이미지를 교체하고 임베딩을 다시 계산합니다.`
+                : "교체하면 색상·임베딩(시각 유사도)도 자동 재계산돼요."}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Field label="제목">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} />
