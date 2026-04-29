@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { probeImage, type ProbedImage } from "@/lib/imageProbe";
+import { runOCR } from "@/lib/ocr";
 import { useNickname } from "@/lib/nickname";
 import { parseTags } from "@/lib/slug";
 import { publicImageUrl } from "@/lib/storage";
@@ -46,6 +47,7 @@ type Initial = {
   image_path: string;
   image_width: number | null;
   image_height: number | null;
+  ocr_text: string | null;
 };
 
 type PendingImage = {
@@ -100,6 +102,8 @@ export function EditRefForm({
   const [tagsText, setTagsText] = useState(initial.tags.join(", "));
   const [designers, setDesigners] = useState<DesignerLite[]>(initial.designers);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [ocrText, setOcrText] = useState(initial.ocr_text ?? "");
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -139,11 +143,33 @@ export function EditRefForm({
       previewUrl: URL.createObjectURL(file),
       probed,
     });
+    // Re-run OCR on the new file. The user can still hand-edit afterward;
+    // we just seed the field so the searchable text matches the new image.
+    setOcrBusy(true);
+    void runOCR(file).then((text) => {
+      setOcrText(text);
+      setOcrBusy(false);
+    });
   }
 
   function clearPending() {
     if (pendingImage) URL.revokeObjectURL(pendingImage.previewUrl);
     setPendingImage(null);
+    setOcrText(initial.ocr_text ?? "");
+  }
+
+  async function rerunOCRFromCurrent() {
+    setOcrBusy(true);
+    try {
+      const res = await fetch(publicImageUrl(initial.image_path));
+      const blob = await res.blob();
+      const text = await runOCR(blob);
+      setOcrText(text);
+    } catch (err) {
+      console.warn("rerun OCR failed", err);
+    } finally {
+      setOcrBusy(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -197,6 +223,7 @@ export function EditRefForm({
           medium: medium === NONE ? null : medium,
           languages,
           tags,
+          ocr_text: ocrText.trim() || null,
           ...(imageUpdate ?? {}),
           // Stale embedding now that the cover changed; force re-compute.
           ...(imageUpdate ? { embedding: null } : {}),
@@ -415,6 +442,34 @@ export function EditRefForm({
         </Field>
         <Field label="디자이너" full>
           <DesignerPicker selected={designers} onChange={setDesigners} />
+        </Field>
+        <Field label="OCR 텍스트 (검색용)" full>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                {ocrBusy
+                  ? "이미지에서 텍스트 추출 중…"
+                  : "이미지의 텍스트를 추출해서 검색에 쓰는 메타. 직접 수정 가능."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void rerunOCRFromCurrent()}
+                disabled={ocrBusy}
+                className="h-7 px-2 text-[11px]"
+              >
+                {ocrBusy ? "OCR 중…" : "OCR 재실행"}
+              </Button>
+            </div>
+            <Textarea
+              value={ocrText}
+              onChange={(e) => setOcrText(e.target.value)}
+              rows={3}
+              placeholder="이미지에 박힌 글자가 여기에 들어갑니다."
+              disabled={ocrBusy}
+            />
+          </div>
         </Field>
       </div>
 

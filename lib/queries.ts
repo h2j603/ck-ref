@@ -47,7 +47,7 @@ const REF_COLUMNS = `
   id, title, year, source_url,
   image_path, image_width, image_height,
   genre, medium, languages, tags,
-  color_hex, color_hue,
+  color_hex, color_hue, ocr_text,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) ),
   ref_images ( count )
@@ -121,10 +121,13 @@ export type RefFilter = {
 async function searchRefIds(q: string): Promise<Set<string>> {
   const supabase = await createClient();
   const like = `%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`;
-  const [titleRes, tagRes, designerRes, bodyRes, prosRes, consRes] =
+  const [titleRes, tagRes, ocrRes, designerRes, bodyRes, prosRes, consRes] =
     await Promise.all([
       supabase.from("refs").select("id").ilike("title", like).limit(500),
       supabase.from("refs").select("id").contains("tags", [q]).limit(500),
+      // Tesseract-extracted text — lets users find a poster by typing a
+      // phrase visible on it.
+      supabase.from("refs").select("id").ilike("ocr_text", like).limit(500),
       supabase
         .from("designers")
         .select("ref_designers(ref_id)")
@@ -138,6 +141,7 @@ async function searchRefIds(q: string): Promise<Set<string>> {
   const ids = new Set<string>();
   for (const r of titleRes.data ?? []) ids.add((r as { id: string }).id);
   for (const r of tagRes.data ?? []) ids.add((r as { id: string }).id);
+  for (const r of ocrRes.data ?? []) ids.add((r as { id: string }).id);
   for (const d of (designerRes.data ?? []) as {
     ref_designers: { ref_id: string }[] | null;
   }[]) {
@@ -954,7 +958,7 @@ const REF_COLUMNS_FOR_BOARD = `
   id, title, year, source_url,
   image_path, image_width, image_height,
   genre, medium, languages, tags,
-  color_hex, color_hue,
+  color_hex, color_hue, ocr_text,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) ),
   ref_images ( count )

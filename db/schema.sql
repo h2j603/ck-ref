@@ -266,6 +266,10 @@ create index if not exists refs_medium_idx     on refs (medium);
 -- color_hue (0-359) for cheap range filters; NULL hue = greyscale/neutral.
 alter table refs add column if not exists color_hex text;
 alter table refs add column if not exists color_hue smallint;
+-- Tesseract.js OCR run client-side at upload. Stores any text the model
+-- found in the image so we can search by poster copy / book title without
+-- the user having to retype it.
+alter table refs add column if not exists ocr_text text;
 create index if not exists refs_color_hue_idx on refs (color_hue);
 
 -- CLIP image embedding. Computed server-side via the embedding provider
