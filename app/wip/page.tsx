@@ -11,6 +11,7 @@ export const metadata = {
 
 const STATUS_LABELS: Record<ProjectStatus | "all", string> = {
   all: "전체",
+  planning: "기획",
   in_progress: "진행 중",
   done: "완료",
 };

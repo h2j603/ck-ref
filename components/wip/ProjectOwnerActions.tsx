@@ -1,13 +1,26 @@
 "use client";
 
-import { CheckCircle2, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
-import type { ProjectStatus } from "@/lib/types";
+import { PROJECT_STATUSES, type ProjectStatus } from "@/lib/types";
+
+const STATUS_LABELS: Record<ProjectStatus, string> = {
+  planning: "기획",
+  in_progress: "진행 중",
+  done: "완료",
+};
 
 export function ProjectOwnerActions({
   projectId,
@@ -26,10 +39,10 @@ export function ProjectOwnerActions({
   if (!hydrated) return null;
   if (!createdBy || !nickname || nickname !== createdBy) return null;
 
-  async function toggleStatus() {
+  async function changeStatus(next: ProjectStatus) {
+    if (next === status) return;
     setError(null);
     setBusy(true);
-    const next: ProjectStatus = status === "in_progress" ? "done" : "in_progress";
     const { error } = await supabase
       .from("projects")
       .update({ status: next })
@@ -72,24 +85,22 @@ export function ProjectOwnerActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 px-2 text-[11px]"
-        onClick={() => void toggleStatus()}
+      <Select
+        value={status}
+        onValueChange={(v) => void changeStatus(v as ProjectStatus)}
         disabled={busy}
       >
-        {status === "in_progress" ? (
-          <>
-            <CheckCircle2 className="size-3" /> 완료로
-          </>
-        ) : (
-          <>
-            <RotateCcw className="size-3" /> 진행 중으로
-          </>
-        )}
-      </Button>
+        <SelectTrigger className="h-7 w-[110px] text-[11px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PROJECT_STATUSES.map((s) => (
+            <SelectItem key={s} value={s} className="text-[12px]">
+              {STATUS_LABELS[s]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Button
         asChild
         variant="outline"

@@ -107,6 +107,7 @@ export function EditProjectForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="planning">기획</SelectItem>
             <SelectItem value="in_progress">진행 중</SelectItem>
             <SelectItem value="done">완료</SelectItem>
           </SelectContent>
