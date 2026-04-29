@@ -6,7 +6,7 @@ import { PROJECT_STATUSES, type ProjectStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "WIP — CK Ref.",
+  title: "WIP — KIWI Juice",
 };
 
 const STATUS_LABELS: Record<ProjectStatus | "all", string> = {

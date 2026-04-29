@@ -1,4 +1,4 @@
-# CK Ref.
+# KIWI Juice
 
 내부 그래픽 디자인 레퍼런스 아카이브 — Pinterest 스타일 매스메트리 갤러리.
 

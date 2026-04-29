@@ -4,7 +4,7 @@ import { BoardCard } from "@/components/board/BoardCard";
 import { fetchBoards } from "@/lib/queries";
 
 export const metadata = {
-  title: "Boards — CK Ref.",
+  title: "Boards — KIWI Juice",
 };
 
 export default async function BoardIndexPage() {

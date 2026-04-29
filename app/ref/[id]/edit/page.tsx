@@ -5,7 +5,7 @@ import { fetchRef } from "@/lib/queries";
 
 import { EditRefForm } from "./EditRefForm";
 
-export const metadata = { title: "Edit ref — CK Ref." };
+export const metadata = { title: "Edit ref — KIWI Juice" };
 
 export default async function EditRefPage({
   params,
@@ -20,7 +20,7 @@ export default async function EditRefPage({
     <div className="mx-auto flex max-w-2xl flex-col gap-6 pt-2">
       <header className="flex flex-col gap-1">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / ref / edit
+          KIWI Juice / ref / edit
         </p>
         <h1 className="text-2xl font-medium tracking-tight">레퍼런스 수정</h1>
         <Link

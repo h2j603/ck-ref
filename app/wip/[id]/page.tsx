@@ -48,7 +48,7 @@ export default async function WipDetailPage({
     <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-12">
       <header className="flex flex-col gap-3 pt-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / wip
+          KIWI Juice / wip
         </p>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-3xl font-medium tracking-tight">

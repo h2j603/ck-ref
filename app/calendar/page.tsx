@@ -2,7 +2,7 @@ import { CalendarClient } from "./CalendarClient";
 import { fetchEventsBetween, fetchProjects } from "@/lib/queries";
 
 export const metadata = {
-  title: "Calendar — CK Ref.",
+  title: "Calendar — KIWI Juice",
 };
 
 // Width of the date window we hand to the client: previous + current +
@@ -36,7 +36,7 @@ export default async function CalendarPage({
     <div className="mx-auto flex max-w-5xl flex-col gap-4 pt-2">
       <header>
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / Calendar
+          KIWI Juice / Calendar
         </p>
       </header>
       <CalendarClient

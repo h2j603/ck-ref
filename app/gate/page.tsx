@@ -6,7 +6,7 @@ import { fetchProfileRefCounts, fetchProfiles } from "@/lib/queries";
 import GateClient from "./GateClient";
 
 export const metadata = {
-  title: "CK Ref. — Gate",
+  title: "KIWI Juice — Gate",
 };
 
 export default async function GatePage({
@@ -28,7 +28,7 @@ export default async function GatePage({
     <div className="mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center gap-10">
       <div className="flex flex-col gap-2 text-center">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / 00
+          KIWI Juice / 00
         </p>
         <h1 className="text-2xl font-medium tracking-tight">
           프로필을 선택해주세요.

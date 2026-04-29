@@ -5,7 +5,7 @@ import { fetchBoard } from "@/lib/queries";
 
 import { EditBoardForm } from "./EditBoardForm";
 
-export const metadata = { title: "Edit board — CK Ref." };
+export const metadata = { title: "Edit board — KIWI Juice" };
 
 export default async function EditBoardPage({
   params,
@@ -20,7 +20,7 @@ export default async function EditBoardPage({
     <div className="mx-auto flex max-w-md flex-col gap-6 pt-2">
       <header className="flex flex-col gap-1">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / board / edit
+          KIWI Juice / board / edit
         </p>
         <h1 className="text-2xl font-medium tracking-tight">보드 수정</h1>
         <Link

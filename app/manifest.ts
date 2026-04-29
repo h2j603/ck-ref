@@ -5,8 +5,8 @@ import type { MetadataRoute } from "next";
 // gives the home-screen tile an app-like name and theme color.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "CK Ref.",
-    short_name: "CK Ref.",
+    name: "KIWI Juice",
+    short_name: "KIWI Juice",
     description: "Mass-symmetry graphic design reference archive.",
     start_url: "/",
     display: "standalone",

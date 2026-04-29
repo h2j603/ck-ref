@@ -75,7 +75,7 @@ async function sendDiscord(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: "CK Ref. — 캘린더",
+        username: "KIWI Juice — 캘린더",
         ...(ping ? { content: "@everyone" } : {}),
         embeds: [{ description }],
         allowed_mentions: ping ? { parse: ["everyone"] } : { parse: [] },

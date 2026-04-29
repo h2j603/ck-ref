@@ -29,7 +29,7 @@ export default async function UserPage({
     <div className="mx-auto flex max-w-[1600px] flex-col gap-8">
       <header className="flex flex-col gap-3 pt-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / user
+          KIWI Juice / user
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">

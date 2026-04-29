@@ -10,7 +10,7 @@ import { relativeTime } from "@/lib/relativeTime";
 import type { NotificationKind } from "@/lib/types";
 
 export const metadata = {
-  title: "Activity — CK Ref.",
+  title: "Activity — KIWI Juice",
 };
 
 const KIND_LABEL: Record<NotificationKind, string> = {

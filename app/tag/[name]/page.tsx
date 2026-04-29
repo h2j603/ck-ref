@@ -17,7 +17,7 @@ export default async function TagPage({
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <header className="flex flex-col gap-1 pt-2">
         <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          CK Ref. / tag
+          KIWI Juice / tag
         </p>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="font-mono text-2xl font-medium tracking-tight">
