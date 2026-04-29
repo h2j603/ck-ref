@@ -566,7 +566,53 @@ export function readPlanning(value: unknown): ProjectPlanning {
   if (!Array.isArray(planning.roles)) {
     delete planning.roles;
   }
+  if (!Array.isArray(planning.success_metrics)) {
+    delete planning.success_metrics;
+  }
   return planning;
+}
+
+// Counts of "decision" / "open_question" kind notes attached to the project,
+// for the inline summary above the discussion thread. We don't need the
+// note rows themselves here — just the totals — so we use head:true count
+// queries to avoid pulling bodies.
+export async function fetchProjectNoteCounts(
+  projectId: string,
+): Promise<{ decisions: number; openQuestions: number }> {
+  const supabase = await createClient();
+  const [decisionsRes, openRes] = await Promise.all([
+    supabase
+      .from("notes")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("kind", "decision"),
+    supabase
+      .from("notes")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("kind", "open_question"),
+  ]);
+  return {
+    decisions: decisionsRes.count ?? 0,
+    openQuestions: openRes.count ?? 0,
+  };
+}
+
+// Project milestones live in the shared events table with kind='milestone'
+// so they show up on the calendar too. The planning page just wants them
+// sorted by date ascending; calendar handles the broader query.
+export async function fetchProjectMilestones(
+  projectId: string,
+): Promise<CalendarEvent[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("kind", "milestone")
+    .order("starts_at", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as CalendarEvent[];
 }
 
 export async function fetchUpdateRefs(

@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, Pencil, Plus, X } from "lucide-react";
+import { Crown, Flag, Pencil, Plus, Target, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
@@ -17,13 +17,16 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import type { Profile } from "@/lib/profiles";
+import { relativeTime } from "@/lib/relativeTime";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   PLANNING_TEXT_SECTIONS,
+  type CalendarEvent,
   type PlanningTextSection,
   type ProjectPlanning,
   type ProjectRole,
+  type SuccessMetric,
 } from "@/lib/types";
 
 type SectionMeta = {
@@ -67,15 +70,25 @@ export function PlanningSections({
   createdBy,
   initial,
   profiles,
+  initialUpdatedAt,
+  initialUpdatedBy,
+  initialMilestones,
 }: {
   projectId: string;
   createdBy: string | null;
   initial: ProjectPlanning;
   profiles: Profile[];
+  initialUpdatedAt: string | null;
+  initialUpdatedBy: string | null;
+  initialMilestones: CalendarEvent[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const { nickname, hydrated } = useNickname();
   const [planning, setPlanning] = useState<ProjectPlanning>(initial);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(initialUpdatedAt);
+  const [updatedBy, setUpdatedBy] = useState<string | null>(initialUpdatedBy);
+  const [milestones, setMilestones] =
+    useState<CalendarEvent[]>(initialMilestones);
   const [error, setError] = useState<string | null>(null);
 
   const canEdit = hydrated && nickname !== null && nickname === createdBy;
@@ -90,29 +103,49 @@ export function PlanningSections({
     Boolean(planning.deliverables) ||
     (planning.positive_keywords && planning.positive_keywords.length > 0) ||
     (planning.negative_keywords && planning.negative_keywords.length > 0) ||
-    (planning.roles && planning.roles.length > 0);
+    (planning.roles && planning.roles.length > 0) ||
+    (planning.success_metrics && planning.success_metrics.length > 0) ||
+    milestones.length > 0;
   if (!canEdit && !hasContent) return null;
 
   async function persist(next: ProjectPlanning) {
     setError(null);
-    const previous = planning;
+    const previousPlanning = planning;
+    const previousAt = updatedAt;
+    const previousBy = updatedBy;
+    const nowIso = new Date().toISOString();
+    const author = nickname || null;
     setPlanning(next);
+    setUpdatedAt(nowIso);
+    setUpdatedBy(author);
     const { error } = await supabase
       .from("projects")
-      .update({ planning: next })
+      .update({
+        planning: next,
+        planning_updated_at: nowIso,
+        planning_updated_by: author,
+      })
       .eq("id", projectId);
     if (error) {
       setError(error.message);
-      setPlanning(previous);
+      setPlanning(previousPlanning);
+      setUpdatedAt(previousAt);
+      setUpdatedBy(previousBy);
     }
   }
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex items-center justify-between border-b border-border/60 pb-2">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
         <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           기획
         </h2>
+        {updatedAt ? (
+          <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {updatedBy ? <NicknamePill nickname={updatedBy} link={false} /> : null}
+            <span>· {relativeTime(updatedAt)} 수정</span>
+          </p>
+        ) : null}
       </header>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
@@ -143,6 +176,32 @@ export function PlanningSections({
                   roles: roles.length ? roles : undefined,
                 })
               }
+            />
+          </div>
+        ) : null}
+        {canEdit ||
+        (planning.success_metrics && planning.success_metrics.length > 0) ? (
+          <div className="md:col-span-2">
+            <SuccessMetricsSection
+              value={planning.success_metrics ?? []}
+              canEdit={canEdit}
+              onSave={(next) =>
+                persist({
+                  ...planning,
+                  success_metrics: next.length ? next : undefined,
+                })
+              }
+            />
+          </div>
+        ) : null}
+        {canEdit || milestones.length > 0 ? (
+          <div className="md:col-span-2">
+            <MilestonesSection
+              projectId={projectId}
+              canEdit={canEdit}
+              author={nickname}
+              value={milestones}
+              onChange={setMilestones}
             />
           </div>
         ) : null}
@@ -565,6 +624,293 @@ function RolesSection({
             size="sm"
             className="h-8 text-[11px]"
             disabled={busy || !draftPerson || draftRole.trim().length === 0}
+          >
+            등록
+          </Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function SuccessMetricsSection({
+  value,
+  canEdit,
+  onSave,
+}: {
+  value: SuccessMetric[];
+  canEdit: boolean;
+  onSave: (next: SuccessMetric[]) => Promise<void> | void;
+}) {
+  const [draftMetric, setDraftMetric] = useState("");
+  const [draftTarget, setDraftTarget] = useState("");
+  const [draftBy, setDraftBy] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    const metric = draftMetric.trim();
+    if (!metric) return;
+    setBusy(true);
+    await onSave([
+      ...value,
+      {
+        metric,
+        target: draftTarget.trim() || undefined,
+        by_when: draftBy.trim() || undefined,
+      },
+    ]);
+    setBusy(false);
+    setDraftMetric("");
+    setDraftTarget("");
+    setDraftBy("");
+  }
+
+  async function remove(index: number) {
+    setBusy(true);
+    await onSave(value.filter((_, i) => i !== index));
+    setBusy(false);
+  }
+
+  // metric / target / by_when / × — text columns are auto, so the
+  // separators line up regardless of how long any one cell is.
+  const ROW_GRID =
+    "grid grid-cols-[1fr_auto_minmax(0,0.7fr)_auto_minmax(0,0.5fr)_auto] items-center gap-2";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        <Target className="size-3" />
+        성공 지표
+      </h3>
+      {value.length === 0 && !canEdit ? null : (
+        <ul className="flex flex-col gap-1.5">
+          {value.map((m, i) => (
+            <li
+              key={i}
+              className={cn(
+                ROW_GRID,
+                "rounded-md border border-border/60 bg-muted/20 px-2 py-1",
+              )}
+            >
+              <span className="min-w-0 truncate text-sm">{m.metric}</span>
+              <span className="text-muted-foreground">|</span>
+              <span className="min-w-0 truncate text-sm text-muted-foreground">
+                {m.target || "—"}
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                {m.by_when || "—"}
+              </span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => void remove(i)}
+                  disabled={busy}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label="remove"
+                >
+                  <X className="size-3" />
+                </button>
+              ) : (
+                <span aria-hidden />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+          className={cn(ROW_GRID, "px-2")}
+        >
+          <Input
+            value={draftMetric}
+            onChange={(e) => setDraftMetric(e.target.value)}
+            placeholder="지표 (예: 인스타 참여율)"
+            className="h-8 w-full text-[12px]"
+            disabled={busy}
+          />
+          <span className="text-muted-foreground">|</span>
+          <Input
+            value={draftTarget}
+            onChange={(e) => setDraftTarget(e.target.value)}
+            placeholder="목표 (5%)"
+            className="h-8 w-full text-[12px]"
+            disabled={busy}
+          />
+          <span className="text-muted-foreground">·</span>
+          <Input
+            value={draftBy}
+            onChange={(e) => setDraftBy(e.target.value)}
+            placeholder="언제까지"
+            className="h-8 w-full text-[12px]"
+            disabled={busy}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            className="h-8 text-[11px]"
+            disabled={busy || !draftMetric.trim()}
+          >
+            등록
+          </Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function MilestonesSection({
+  projectId,
+  canEdit,
+  author,
+  value,
+  onChange,
+}: {
+  projectId: string;
+  canEdit: boolean;
+  author: string | null;
+  value: CalendarEvent[];
+  onChange: (next: CalendarEvent[]) => void;
+}) {
+  const supabase = useMemo(() => createClient(), []);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDate, setDraftDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    const title = draftTitle.trim();
+    const date = draftDate.trim();
+    if (!title || !date) return;
+    setError(null);
+    setBusy(true);
+    // Store as midnight UTC on the picked date so the calendar's all_day
+    // rendering picks it up cleanly. Calendar uses starts_at as the
+    // local-midnight reference.
+    const startsAt = new Date(`${date}T00:00:00Z`).toISOString();
+    const { data, error } = await supabase
+      .from("events")
+      .insert({
+        project_id: projectId,
+        title,
+        starts_at: startsAt,
+        all_day: true,
+        kind: "milestone",
+        created_by: author,
+      })
+      .select("*")
+      .single();
+    setBusy(false);
+    if (error || !data) {
+      setError(error?.message ?? "마일스톤 생성 실패");
+      return;
+    }
+    const row = data as CalendarEvent;
+    onChange(
+      [...value, row].sort((a, b) =>
+        a.starts_at.localeCompare(b.starts_at),
+      ),
+    );
+    setDraftTitle("");
+    setDraftDate("");
+  }
+
+  async function remove(id: string) {
+    setError(null);
+    setBusy(true);
+    const { error } = await supabase.from("events").delete().eq("id", id);
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    onChange(value.filter((e) => e.id !== id));
+  }
+
+  function dateLabel(iso: string) {
+    return new Date(iso).toLocaleDateString("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+    });
+  }
+
+  const ROW_GRID =
+    "grid grid-cols-[auto_1fr_minmax(0,7rem)_auto] items-center gap-2";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        <Flag className="size-3" />
+        마일스톤
+        <span className="ml-1 normal-case tracking-normal text-[10px] text-muted-foreground/80">
+          — 캘린더에도 자동 노출
+        </span>
+      </h3>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {value.length === 0 && !canEdit ? null : (
+        <ul className="flex flex-col gap-1.5">
+          {value.map((m) => (
+            <li
+              key={m.id}
+              className={cn(
+                ROW_GRID,
+                "rounded-md border border-border/60 bg-muted/20 px-2 py-1",
+              )}
+            >
+              <Flag className="size-3 text-muted-foreground" />
+              <span className="min-w-0 truncate text-sm">{m.title}</span>
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                {dateLabel(m.starts_at)}
+              </span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => void remove(m.id)}
+                  disabled={busy}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label="remove"
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              ) : (
+                <span aria-hidden />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canEdit ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+          className={cn(ROW_GRID, "px-2")}
+        >
+          <span aria-hidden className="size-3" />
+          <Input
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="마일스톤 (예: 시안 1차)"
+            className="h-8 w-full text-[12px]"
+            disabled={busy}
+          />
+          <Input
+            type="date"
+            value={draftDate}
+            onChange={(e) => setDraftDate(e.target.value)}
+            className="h-8 w-full text-[12px]"
+            disabled={busy}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            className="h-8 text-[11px]"
+            disabled={busy || !draftTitle.trim() || !draftDate}
           >
             등록
           </Button>

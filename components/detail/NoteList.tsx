@@ -1,6 +1,15 @@
 "use client";
 
-import { CornerDownRight, ImagePlus, MessageCircle, Pencil, Trash2, X } from "lucide-react";
+import {
+  CheckCircle2,
+  CircleHelp,
+  CornerDownRight,
+  ImagePlus,
+  MessageCircle,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
@@ -14,7 +23,8 @@ import { useNickname } from "@/lib/nickname";
 import { FALLBACK_PROFILES, type Profile } from "@/lib/profiles";
 import { STORAGE_BUCKET } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
-import type { Note, NoteTarget } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type { Note, NoteKind, NoteTarget } from "@/lib/types";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -84,6 +94,36 @@ function formatDate(iso: string) {
 type Draft = { body: string; pros: string; cons: string };
 const EMPTY: Draft = { body: "", pros: "", cons: "" };
 
+// Three "shapes" of note. Default `discussion` is the existing free-form
+// thread; the other two surface in the project header summary so threads
+// don't bury commitments and unanswered questions.
+const KIND_META: Record<
+  NoteKind,
+  { label: string; tone: string; chip: string; Icon: typeof MessageCircle }
+> = {
+  discussion: {
+    label: "논의",
+    tone: "text-muted-foreground",
+    chip:
+      "border-input text-muted-foreground hover:text-foreground",
+    Icon: MessageCircle,
+  },
+  decision: {
+    label: "결정",
+    tone: "text-emerald-700 dark:text-emerald-300",
+    chip:
+      "border-emerald-300/60 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100",
+    Icon: CheckCircle2,
+  },
+  open_question: {
+    label: "열린 질문",
+    tone: "text-amber-700 dark:text-amber-300",
+    chip:
+      "border-amber-300/60 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100",
+    Icon: CircleHelp,
+  },
+};
+
 function trimToNull(value: string): string | null {
   const t = value.trim();
   return t ? t : null;
@@ -110,6 +150,7 @@ export function NoteList({
   const { nickname, hydrated } = useNickname();
   const [notes, setNotes] = useState<Note[]>(initialNotes);
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [draftKind, setDraftKind] = useState<NoteKind>("discussion");
   const [draftImages, setDraftImages] = useState<File[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<Draft>(EMPTY);
@@ -118,6 +159,17 @@ export function NoteList({
   const [replyImages, setReplyImages] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Header summary — only render the chips that have at least one row,
+  // so a fresh thread still looks clean.
+  const kindCounts = useMemo(() => {
+    const c = { decision: 0, open_question: 0 };
+    for (const n of notes) {
+      if (n.kind === "decision") c.decision += 1;
+      else if (n.kind === "open_question") c.open_question += 1;
+    }
+    return c;
+  }, [notes]);
 
   // Refetch on mount in case server data is stale. Pulls top-level notes
   // for this target plus any replies whose parent is in that set.
@@ -210,6 +262,7 @@ export function NoteList({
         pros: trimToNull(draft.pros),
         cons: trimToNull(draft.cons),
         image_paths: imagePaths,
+        kind: draftKind,
         author: nickname,
       })
       .select("*")
@@ -221,6 +274,7 @@ export function NoteList({
     }
     setNotes((prev) => [...prev, data as Note]);
     setDraft(EMPTY);
+    setDraftKind("discussion");
     setDraftImages([]);
   }
 
@@ -318,10 +372,26 @@ export function NoteList({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-baseline justify-between border-b border-border/60 pb-2">
+      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/60 pb-2">
         <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           Notes — {notes.length}
         </h2>
+        {kindCounts.decision > 0 || kindCounts.open_question > 0 ? (
+          <div className="flex items-center gap-1.5">
+            {kindCounts.decision > 0 ? (
+              <KindBadge
+                kind="decision"
+                label={`결정 ${kindCounts.decision}`}
+              />
+            ) : null}
+            {kindCounts.open_question > 0 ? (
+              <KindBadge
+                kind="open_question"
+                label={`열린 질문 ${kindCounts.open_question}`}
+              />
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <ul className="flex flex-col gap-5">
@@ -504,6 +574,7 @@ export function NoteList({
       </ul>
 
       <form onSubmit={addNote} className="flex flex-col gap-3">
+        <KindPicker value={draftKind} onChange={setDraftKind} />
         <NoteFields
           draft={draft}
           onChange={setDraft}
@@ -544,7 +615,7 @@ function NoteHead({
   return (
     <div className="flex items-baseline justify-between gap-3">
       <div
-        className={`flex items-center gap-2 font-mono uppercase tracking-wider text-muted-foreground ${
+        className={`flex flex-wrap items-center gap-2 font-mono uppercase tracking-wider text-muted-foreground ${
           compact ? "text-[10px]" : "text-[11px]"
         }`}
       >
@@ -552,6 +623,9 @@ function NoteHead({
           <MessageCircle aria-hidden className="size-3" />
         ) : null}
         <NicknamePill nickname={note.author} />
+        {note.kind && note.kind !== "discussion" ? (
+          <KindBadge kind={note.kind} />
+        ) : null}
         <span>{formatDate(note.created_at)}</span>
         {note.created_at !== note.updated_at ? <span>· edited</span> : null}
       </div>
@@ -807,6 +881,60 @@ function Section({
       <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
         <MarkdownWithMentions text={content} />
       </div>
+    </div>
+  );
+}
+
+function KindBadge({ kind, label }: { kind: NoteKind; label?: string }) {
+  const meta = KIND_META[kind];
+  const Icon = meta.Icon;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider leading-none",
+        meta.chip,
+      )}
+    >
+      <Icon className="size-3" />
+      {label ?? meta.label}
+    </span>
+  );
+}
+
+function KindPicker({
+  value,
+  onChange,
+}: {
+  value: NoteKind;
+  onChange: (next: NoteKind) => void;
+}) {
+  const kinds: NoteKind[] = ["discussion", "decision", "open_question"];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        종류
+      </span>
+      {kinds.map((k) => {
+        const meta = KIND_META[k];
+        const Icon = meta.Icon;
+        const active = value === k;
+        return (
+          <button
+            key={k}
+            type="button"
+            onClick={() => onChange(k)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+              active
+                ? meta.chip
+                : "border-input text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="size-3" />
+            {meta.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
