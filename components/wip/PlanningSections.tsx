@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
 import {
-  PLANNING_SECTIONS,
-  type PlanningSection,
+  PLANNING_TEXT_SECTIONS,
+  type PlanningTextSection,
   type ProjectPlanning,
 } from "@/lib/types";
 
@@ -22,7 +22,7 @@ type SectionMeta = {
   short?: boolean;
 };
 
-const SECTION_META: Record<Exclude<PlanningSection, "tone">, SectionMeta> = {
+const SECTION_META: Record<PlanningTextSection, SectionMeta> = {
   concept: {
     label: "한 줄 컨셉",
     placeholder: "이 프로젝트를 한 문장으로",
@@ -51,13 +51,6 @@ const SECTION_META: Record<Exclude<PlanningSection, "tone">, SectionMeta> = {
   },
 };
 
-const TEXT_SECTIONS = (
-  PLANNING_SECTIONS.filter((s) => s !== "tone") as Exclude<
-    PlanningSection,
-    "tone"
-  >[]
-);
-
 export function PlanningSections({
   projectId,
   createdBy,
@@ -82,7 +75,8 @@ export function PlanningSections({
     Boolean(planning.audience) ||
     Boolean(planning.constraints) ||
     Boolean(planning.deliverables) ||
-    (planning.tone && planning.tone.length > 0);
+    (planning.positive_keywords && planning.positive_keywords.length > 0) ||
+    (planning.negative_keywords && planning.negative_keywords.length > 0);
   if (!canEdit && !hasContent) return null;
 
   async function persist(next: ProjectPlanning) {
@@ -108,7 +102,7 @@ export function PlanningSections({
       </header>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
-        {TEXT_SECTIONS.filter(
+        {PLANNING_TEXT_SECTIONS.filter(
           (key) => canEdit || (planning[key] ?? "").length > 0,
         ).map((key) => (
           <div
@@ -123,14 +117,39 @@ export function PlanningSections({
             />
           </div>
         ))}
-        {canEdit || (planning.tone && planning.tone.length > 0) ? (
-          <div className="md:col-span-2">
-            <ToneSection
-              value={planning.tone ?? []}
-              canEdit={canEdit}
-              onSave={(tone) => persist({ ...planning, tone: tone.length ? tone : undefined })}
-            />
-          </div>
+        {canEdit ||
+        (planning.positive_keywords &&
+          planning.positive_keywords.length > 0) ? (
+          <KeywordSection
+            label="포지티브 키워드"
+            hint="가져가고 싶은 분위기 — warm, gritty, lo-fi…"
+            tone="positive"
+            value={planning.positive_keywords ?? []}
+            canEdit={canEdit}
+            onSave={(next) =>
+              persist({
+                ...planning,
+                positive_keywords: next.length ? next : undefined,
+              })
+            }
+          />
+        ) : null}
+        {canEdit ||
+        (planning.negative_keywords &&
+          planning.negative_keywords.length > 0) ? (
+          <KeywordSection
+            label="네거티브 키워드"
+            hint="피하고 싶은 분위기 — cute, glossy, corporate…"
+            tone="negative"
+            value={planning.negative_keywords ?? []}
+            canEdit={canEdit}
+            onSave={(next) =>
+              persist({
+                ...planning,
+                negative_keywords: next.length ? next : undefined,
+              })
+            }
+          />
         ) : null}
       </div>
     </section>
@@ -251,11 +270,17 @@ function TextSection({
   );
 }
 
-function ToneSection({
+function KeywordSection({
+  label,
+  hint,
+  tone,
   value,
   canEdit,
   onSave,
 }: {
+  label: string;
+  hint: string;
+  tone: "positive" | "negative";
   value: string[];
   canEdit: boolean;
   onSave: (next: string[]) => Promise<void> | void;
@@ -280,19 +305,23 @@ function ToneSection({
     setBusy(false);
   }
 
+  // Greens/reds for positive/negative so the two columns are distinguishable
+  // at a glance without resorting to icons that fight the rest of the UI.
+  const chipClass =
+    tone === "positive"
+      ? "border-emerald-300/60 bg-emerald-50/60 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100"
+      : "border-rose-300/60 bg-rose-50/60 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100";
+
   return (
     <div className="flex flex-col gap-2">
       <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-        톤 & 무드 키워드
+        {label}
       </h3>
       <div className="flex flex-wrap items-center gap-1.5">
-        {value.length === 0 && !canEdit ? (
-          <p className="font-mono text-[11px] text-muted-foreground">—</p>
-        ) : null}
         {value.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 rounded-full border border-input bg-muted/40 px-2 py-0.5 text-[12px]"
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] ${chipClass}`}
           >
             {tag}
             {canEdit ? (
@@ -300,7 +329,7 @@ function ToneSection({
                 type="button"
                 onClick={() => void remove(tag)}
                 disabled={busy}
-                className="text-muted-foreground hover:text-destructive"
+                className="opacity-70 hover:opacity-100"
                 aria-label={`remove ${tag}`}
               >
                 <X className="size-3" />
@@ -319,8 +348,8 @@ function ToneSection({
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="warm, gritty, lo-fi…"
-              className="h-7 w-32 text-[12px]"
+              placeholder={hint}
+              className="h-7 w-40 text-[12px]"
               disabled={busy}
             />
             <Button

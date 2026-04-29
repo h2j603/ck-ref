@@ -2,7 +2,7 @@
 
 import { Star, Trash2, X } from "lucide-react";
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -623,12 +623,40 @@ function AddPointDialog({
     is_self: boolean;
   }) => Promise<void>;
 }) {
-  const [tab, setTab] = useState<"ref" | "label">(
-    inspirationRefs.length > 0 ? "ref" : "label",
-  );
+  const supabase = useMemo(() => createClient(), []);
+  const [tab, setTab] = useState<"ref" | "label">("ref");
   const [label, setLabel] = useState("");
   const [isSelf, setIsSelf] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Default candidates: project's inspiration refs (familiar, contextual).
+  // When the user types, we live-query refs across the whole library.
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<RefLite[]>([]);
+
+  useEffect(() => {
+    if (tab !== "ref") return;
+    const q = query.trim();
+    if (!q) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("refs")
+        .select("id, title, image_path, image_width, image_height, color_hex")
+        .ilike("title", `%${q}%`)
+        .order("created_at", { ascending: false })
+        .limit(18);
+      if (cancelled) return;
+      if (!error && data) setSearchResults(data as RefLite[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, tab, query]);
+
+  // Showing inspiration refs by default makes the project's mood pool the
+  // first thing the eye lands on; typing anything switches to library-wide
+  // search results.
+  const candidates = query.trim() ? searchResults : inspirationRefs;
 
   async function pickRef(ref: RefLite) {
     setBusy(true);
@@ -667,7 +695,6 @@ function AddPointDialog({
             <button
               type="button"
               onClick={() => setTab("ref")}
-              disabled={inspirationRefs.length === 0}
               className={cn(
                 "rounded-full border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider",
                 tab === "ref"
@@ -700,42 +727,57 @@ function AddPointDialog({
             </label>
           </div>
           {tab === "ref" ? (
-            inspirationRefs.length === 0 ? (
-              <p className="font-mono text-[11px] text-muted-foreground">
-                먼저 영감 ref를 추가해주세요.
-              </p>
-            ) : (
-              <ul className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto pr-1">
-                {inspirationRefs.map((r) => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => void pickRef(r)}
-                      disabled={busy}
-                      className="group block w-full overflow-hidden bg-muted text-left"
-                    >
-                      <div
-                        className="relative w-full"
-                        style={{
-                          aspectRatio: `${r.image_width ?? 4} / ${r.image_height ?? 5}`,
-                        }}
+            <>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={
+                  inspirationRefs.length > 0
+                    ? "영감 ref 또는 전체 ref에서 검색…"
+                    : "ref 제목으로 검색…"
+                }
+              />
+              {!query.trim() && inspirationRefs.length === 0 ? (
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  검색어를 입력하거나 라벨로 추가해주세요.
+                </p>
+              ) : candidates.length === 0 ? (
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  결과 없음
+                </p>
+              ) : (
+                <ul className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto pr-1">
+                  {candidates.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => void pickRef(r)}
+                        disabled={busy}
+                        className="group block w-full overflow-hidden bg-muted text-left"
                       >
-                        <Image
-                          src={publicImageUrl(r.image_path)}
-                          alt={r.title ?? "ref"}
-                          fill
-                          sizes="120px"
-                          className="object-cover transition-opacity group-hover:opacity-80"
-                        />
-                      </div>
-                      <p className="truncate px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
-                        {r.title ?? "untitled"}
-                      </p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )
+                        <div
+                          className="relative w-full"
+                          style={{
+                            aspectRatio: `${r.image_width ?? 4} / ${r.image_height ?? 5}`,
+                          }}
+                        >
+                          <Image
+                            src={publicImageUrl(r.image_path)}
+                            alt={r.title ?? "ref"}
+                            fill
+                            sizes="120px"
+                            className="object-cover transition-opacity group-hover:opacity-80"
+                          />
+                        </div>
+                        <p className="truncate px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+                          {r.title ?? "untitled"}
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           ) : (
             <Input
               value={label}
