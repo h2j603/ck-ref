@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, X } from "lucide-react";
+import { Crown, Pencil, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNickname } from "@/lib/nickname";
 import type { Profile } from "@/lib/profiles";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import {
   PLANNING_TEXT_SECTIONS,
   type PlanningTextSection,
@@ -427,6 +428,28 @@ function RolesSection({
     setBusy(false);
   }
 
+  // Toggle leader on the clicked row. Project leader is single-occupancy:
+  // turning one on automatically turns the others off, so the crown badge
+  // never lies about who's actually leading.
+  async function toggleLeader(index: number) {
+    setBusy(true);
+    const target = !value[index].is_leader;
+    await onSave(
+      value.map((r, i) => ({
+        ...r,
+        is_leader: i === index ? target : false,
+      })),
+    );
+    setBusy(false);
+  }
+
+  // The five-column grid keeps the | separators and trailing buttons in
+  // the same x-position across rows regardless of nickname length.
+  // Person column is fixed width (pill) so the role text always starts
+  // at the same place.
+  const ROW_GRID =
+    "grid grid-cols-[5.5rem_auto_1fr_auto_auto] items-center gap-2";
+
   return (
     <div className="flex flex-col gap-2">
       <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -437,11 +460,55 @@ function RolesSection({
           {value.map((r, i) => (
             <li
               key={i}
-              className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1"
+              className={cn(
+                ROW_GRID,
+                "rounded-md border px-2 py-1",
+                r.is_leader
+                  ? "border-lime-300 bg-lime-50 dark:border-lime-500/40 dark:bg-lime-500/10"
+                  : "border-border/60 bg-muted/20",
+              )}
             >
-              <NicknamePill nickname={r.person} link={false} />
+              <div className="min-w-0 truncate">
+                <NicknamePill nickname={r.person} link={false} />
+              </div>
               <span className="text-muted-foreground">|</span>
-              <span className="flex-1 text-sm">{r.role}</span>
+              <span className="min-w-0 truncate text-sm">{r.role}</span>
+              {canEdit ? (
+                <button
+                  type="button"
+                  onClick={() => void toggleLeader(i)}
+                  disabled={busy}
+                  className={cn(
+                    "transition-colors",
+                    r.is_leader
+                      ? "text-lime-600 hover:text-lime-700 dark:text-lime-400"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-label={
+                    r.is_leader ? "프로젝트 리더 해제" : "프로젝트 리더로 설정"
+                  }
+                  title={
+                    r.is_leader
+                      ? "프로젝트 리더 (클릭으로 해제)"
+                      : "프로젝트 리더로 설정"
+                  }
+                >
+                  <Crown
+                    className="size-3.5"
+                    fill={r.is_leader ? "currentColor" : "none"}
+                  />
+                </button>
+              ) : r.is_leader ? (
+                <span
+                  className="text-lime-600 dark:text-lime-400"
+                  title="프로젝트 리더"
+                  aria-label="프로젝트 리더"
+                >
+                  <Crown className="size-3.5" fill="currentColor" />
+                </span>
+              ) : (
+                <span aria-hidden />
+              )}
               {canEdit ? (
                 <button
                   type="button"
@@ -452,7 +519,9 @@ function RolesSection({
                 >
                   <X className="size-3" />
                 </button>
-              ) : null}
+              ) : (
+                <span aria-hidden />
+              )}
             </li>
           ))}
         </ul>
@@ -463,14 +532,14 @@ function RolesSection({
             e.preventDefault();
             void add();
           }}
-          className="flex items-center gap-2"
+          className={cn(ROW_GRID, "px-2")}
         >
           <Select
             value={draftPerson}
             onValueChange={setDraftPerson}
             disabled={busy}
           >
-            <SelectTrigger className="h-8 w-28 text-[12px]">
+            <SelectTrigger className="h-8 w-full text-[12px]">
               <SelectValue placeholder="인원" />
             </SelectTrigger>
             <SelectContent>
@@ -486,9 +555,11 @@ function RolesSection({
             value={draftRole}
             onChange={(e) => setDraftRole(e.target.value)}
             placeholder="역할"
-            className="h-8 flex-1 text-[12px]"
+            className="h-8 w-full text-[12px]"
             disabled={busy}
           />
+          {/* Empty cell to keep the leader column aligned with above rows. */}
+          <span aria-hidden />
           <Button
             type="submit"
             size="sm"
