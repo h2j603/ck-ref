@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { DesignerPicker, type DesignerLite } from "@/components/upload/DesignerPicker";
+import { TagPresets } from "@/components/upload/TagPresets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -403,11 +404,14 @@ export function EditRefForm({
           </div>
         </Field>
         <Field label="태그 (콤마 구분)" full>
-          <Textarea
-            value={tagsText}
-            onChange={(e) => setTagsText(e.target.value)}
-            rows={2}
-          />
+          <div className="flex flex-col gap-2">
+            <TagPresets tagsText={tagsText} onChange={setTagsText} />
+            <Textarea
+              value={tagsText}
+              onChange={(e) => setTagsText(e.target.value)}
+              rows={2}
+            />
+          </div>
         </Field>
         <Field label="디자이너" full>
           <DesignerPicker selected={designers} onChange={setDesigners} />
