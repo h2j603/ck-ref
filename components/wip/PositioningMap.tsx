@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useNickname } from "@/lib/nickname";
+import { searchRefIdsClient } from "@/lib/refSearch";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -800,10 +801,19 @@ function AddPointDialog({
     if (!q) return;
     let cancelled = false;
     void (async () => {
+      // Mirror the main /ref search: match across title, tags, OCR text,
+      // designer name, and note bodies. searchRefIdsClient returns the
+      // matching ids; we then hydrate the columns the dialog renders.
+      const ids = await searchRefIdsClient(supabase, q);
+      if (cancelled) return;
+      if (ids.size === 0) {
+        setSearchResults([]);
+        return;
+      }
       const { data, error } = await supabase
         .from("refs")
         .select("id, title, image_path, image_width, image_height, color_hex")
-        .ilike("title", `%${q}%`)
+        .in("id", [...ids])
         .order("created_at", { ascending: false })
         .limit(18);
       if (cancelled) return;
