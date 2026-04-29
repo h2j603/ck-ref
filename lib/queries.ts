@@ -16,7 +16,7 @@ import {
   type Notification,
   type Project,
   type ProjectPlanning,
-  type ProjectPositioning,
+  type ProjectPositioningMap,
   type ProjectPositioningPoint,
   type ProjectStatus,
   type ProjectUpdate,
@@ -492,33 +492,40 @@ export async function fetchProjectInspirationRefs(
   }));
 }
 
-// Positioning map. The axis row may not exist yet (project never opened the
-// map); callers treat null as "all labels empty". Points are returned in
-// insertion order so the UI keeps a stable z-stack.
-export async function fetchProjectPositioning(
-  projectId: string,
-): Promise<{
-  axes: ProjectPositioning | null;
+// Positioning maps. A project can carry several maps now (brand, tone,
+// audience…); each comes with its own axis pair and points. Points are
+// returned in insertion order so the UI keeps a stable z-stack. Maps are
+// ordered by `position` then created_at so manual reordering wins.
+export type PositioningMapWithPoints = ProjectPositioningMap & {
   points: (ProjectPositioningPoint & {
-    ref: Pick<Ref, "id" | "title" | "image_path" | "image_width" | "image_height" | "color_hex"> | null;
+    ref: Pick<
+      Ref,
+      "id" | "title" | "image_path" | "image_width" | "image_height" | "color_hex"
+    > | null;
   })[];
-}> {
+};
+
+export async function fetchProjectPositioningMaps(
+  projectId: string,
+): Promise<PositioningMapWithPoints[]> {
   const supabase = await createClient();
-  const [axesRes, pointsRes] = await Promise.all([
+  const [mapsRes, pointsRes] = await Promise.all([
     supabase
-      .from("project_positioning")
+      .from("project_positioning_maps")
       .select("*")
       .eq("project_id", projectId)
-      .maybeSingle(),
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
     supabase
       .from("project_positioning_points")
       .select(
-        `id, project_id, ref_id, label, x, y, is_self, color, created_at, created_by,
+        `id, project_id, map_id, ref_id, label, x, y, is_self, color, created_at, created_by,
          ref:refs(id, title, image_path, image_width, image_height, color_hex)`,
       )
       .eq("project_id", projectId)
       .order("created_at", { ascending: true }),
   ]);
+  const maps = (mapsRes.data ?? []) as ProjectPositioningMap[];
   type RawRef = Pick<
     Ref,
     "id" | "title" | "image_path" | "image_width" | "image_height" | "color_hex"
@@ -526,16 +533,16 @@ export async function fetchProjectPositioning(
   type PointRow = ProjectPositioningPoint & {
     ref: RawRef | RawRef[] | null;
   };
-  const points = ((pointsRes.data ?? []) as PointRow[]).map((row) => {
+  const allPoints = ((pointsRes.data ?? []) as PointRow[]).map((row) => {
     const ref = Array.isArray(row.ref) ? row.ref[0] ?? null : row.ref;
     const { ref: _ref, ...rest } = row;
     void _ref;
     return { ...rest, ref };
   });
-  return {
-    axes: (axesRes.data as ProjectPositioning | null) ?? null,
-    points,
-  };
+  return maps.map((map) => ({
+    ...map,
+    points: allPoints.filter((p) => p.map_id === map.id),
+  }));
 }
 
 // Convenience: planning is stored as jsonb so the column reads back as a

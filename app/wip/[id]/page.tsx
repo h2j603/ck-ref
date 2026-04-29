@@ -7,7 +7,7 @@ import { NicknamePill } from "@/components/nickname-pill";
 import { AddUpdateForm } from "@/components/wip/AddUpdateForm";
 import { InspirationRefs } from "@/components/wip/InspirationRefs";
 import { PlanningSections } from "@/components/wip/PlanningSections";
-import { PositioningMap } from "@/components/wip/PositioningMap";
+import { PositioningMaps } from "@/components/wip/PositioningMaps";
 import { ProjectOwnerActions } from "@/components/wip/ProjectOwnerActions";
 import { StatusBadge } from "@/components/wip/StatusBadge";
 import { UpdateCard } from "@/components/wip/UpdateCard";
@@ -16,7 +16,7 @@ import {
   fetchProfiles,
   fetchProject,
   fetchProjectInspirationRefs,
-  fetchProjectPositioning,
+  fetchProjectPositioningMaps,
   fetchProjectUpdates,
   fetchUpdateReactions,
   readPlanning,
@@ -31,13 +31,13 @@ export default async function WipDetailPage({
   const project = await fetchProject(id).catch(() => null);
   if (!project) notFound();
 
-  const [updates, projectNotes, inspiration, profiles, positioning] =
+  const [updates, projectNotes, inspiration, profiles, positioningMaps] =
     await Promise.all([
       fetchProjectUpdates(id).catch(() => []),
       fetchNotesFor({ kind: "project", id }).catch(() => []),
       fetchProjectInspirationRefs(id).catch(() => []),
       fetchProfiles().catch(() => []),
-      fetchProjectPositioning(id).catch(() => ({ axes: null, points: [] })),
+      fetchProjectPositioningMaps(id).catch(() => []),
     ]);
   const reactionsByUpdate = await fetchUpdateReactions(
     updates.map((u) => u.id),
@@ -90,28 +90,38 @@ export default async function WipDetailPage({
         initial={planning}
       />
 
-      <PositioningMap
+      <PositioningMaps
         projectId={project.id}
         createdBy={project.created_by}
-        initialAxes={positioning.axes}
-        initialPoints={positioning.points.map((p) => ({
-          id: p.id,
-          ref_id: p.ref_id,
-          label: p.label,
-          x: p.x,
-          y: p.y,
-          is_self: p.is_self,
-          color: p.color,
-          ref: p.ref
-            ? {
-                id: p.ref.id,
-                title: p.ref.title,
-                image_path: p.ref.image_path,
-                image_width: p.ref.image_width,
-                image_height: p.ref.image_height,
-                color_hex: p.ref.color_hex,
-              }
-            : null,
+        initial={positioningMaps.map((m) => ({
+          id: m.id,
+          name: m.name,
+          position: m.position,
+          axes: {
+            x_low_label: m.x_low_label,
+            x_high_label: m.x_high_label,
+            y_low_label: m.y_low_label,
+            y_high_label: m.y_high_label,
+          },
+          points: m.points.map((p) => ({
+            id: p.id,
+            ref_id: p.ref_id,
+            label: p.label,
+            x: p.x,
+            y: p.y,
+            is_self: p.is_self,
+            color: p.color,
+            ref: p.ref
+              ? {
+                  id: p.ref.id,
+                  title: p.ref.title,
+                  image_path: p.ref.image_path,
+                  image_width: p.ref.image_width,
+                  image_height: p.ref.image_height,
+                  color_hex: p.ref.color_hex,
+                }
+              : null,
+          })),
         }))}
         inspirationRefs={inspiration.map((r) => ({
           id: r.id,

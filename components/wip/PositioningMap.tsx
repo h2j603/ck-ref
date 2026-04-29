@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Star, Trash2, X } from "lucide-react";
+import { Maximize2, Pencil, Star, Trash2, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -107,21 +107,32 @@ const AXIS_PRESETS: { name: string; axes: PositioningAxes }[] = [
 
 export function PositioningMap({
   projectId,
+  mapId,
+  initialName,
   createdBy,
   initialAxes,
   initialPoints,
   inspirationRefs,
+  onRenamed,
+  onDeleted,
 }: {
   projectId: string;
+  mapId: string;
+  initialName: string | null;
   createdBy: string | null;
   initialAxes: PositioningAxes | null;
   initialPoints: PositioningPoint[];
   inspirationRefs: RefLite[];
+  onRenamed?: (next: string | null) => void;
+  onDeleted?: () => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const { nickname, hydrated } = useNickname();
   const canEdit = hydrated && nickname !== null && nickname === createdBy;
 
+  const [name, setName] = useState<string | null>(initialName);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(initialName ?? "");
   const [axes, setAxes] = useState<PositioningAxes>({
     x_low_label: initialAxes?.x_low_label ?? null,
     x_high_label: initialAxes?.x_high_label ?? null,
@@ -137,9 +148,10 @@ export function PositioningMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Read-only viewers shouldn't see an empty grid; hide the whole map until
-  // the owner has plotted something or labelled an axis.
+  // the owner has plotted something, labelled an axis, or named the map.
   const hasContent =
     points.length > 0 ||
+    Boolean(name) ||
     Boolean(axes.x_low_label) ||
     Boolean(axes.x_high_label) ||
     Boolean(axes.y_low_label) ||
@@ -169,18 +181,44 @@ export function PositioningMap({
     setError(null);
     const previous = axes;
     setAxes(next);
-    const { error } = await supabase.from("project_positioning").upsert(
-      {
-        project_id: projectId,
-        ...next,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "project_id" },
-    );
+    const { error } = await supabase
+      .from("project_positioning_maps")
+      .update({ ...next, updated_at: new Date().toISOString() })
+      .eq("id", mapId);
     if (error) {
       setError(error.message);
       setAxes(previous);
     }
+  }
+
+  async function persistName(next: string | null) {
+    setError(null);
+    const previous = name;
+    setName(next);
+    const { error } = await supabase
+      .from("project_positioning_maps")
+      .update({ name: next, updated_at: new Date().toISOString() })
+      .eq("id", mapId);
+    if (error) {
+      setError(error.message);
+      setName(previous);
+      return;
+    }
+    onRenamed?.(next);
+  }
+
+  async function deleteMap() {
+    if (!window.confirm("이 맵과 점들을 모두 삭제할까요?")) return;
+    setError(null);
+    const { error } = await supabase
+      .from("project_positioning_maps")
+      .delete()
+      .eq("id", mapId);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    onDeleted?.();
   }
 
   async function addPoint(input: {
@@ -195,6 +233,7 @@ export function PositioningMap({
       .from("project_positioning_points")
       .insert({
         project_id: projectId,
+        map_id: mapId,
         x: input.x,
         y: input.y,
         label: input.label,
@@ -393,12 +432,71 @@ export function PositioningMap({
       </div>
     ) : null;
 
+  // Map name is editable inline. Click pencil → input; Enter / blur saves;
+  // Escape cancels. Empty name renders as "(이름 없음)" placeholder so each
+  // map is still visually distinct in the stack.
+  function commitName() {
+    const next = nameDraft.trim();
+    setEditingName(false);
+    if ((next || null) === (name || null)) return;
+    void persistName(next || null);
+  }
+
+  const titleNode = editingName ? (
+    <Input
+      autoFocus
+      value={nameDraft}
+      onChange={(e) => setNameDraft(e.target.value)}
+      onBlur={commitName}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commitName();
+        if (e.key === "Escape") {
+          setNameDraft(name ?? "");
+          setEditingName(false);
+        }
+      }}
+      placeholder="맵 이름"
+      className="h-7 max-w-[14rem] text-[12px]"
+    />
+  ) : (
+    <button
+      type="button"
+      disabled={!canEdit}
+      onClick={() => {
+        if (!canEdit) return;
+        setNameDraft(name ?? "");
+        setEditingName(true);
+      }}
+      className={cn(
+        "font-mono text-[11px] uppercase tracking-widest",
+        name ? "text-foreground" : "text-muted-foreground",
+        canEdit && "hover:text-foreground",
+      )}
+    >
+      {name || "(이름 없음)"} — {points.length}
+    </button>
+  );
+
   return (
     <section className="flex flex-col gap-3">
       <header className="flex items-center justify-between gap-2 border-b border-border/60 pb-2">
-        <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          포지셔닝 맵 — {points.length}
-        </h2>
+        <div className="flex items-center gap-2">
+          {titleNode}
+          {canEdit && !editingName ? (
+            <button
+              type="button"
+              onClick={() => {
+                setNameDraft(name ?? "");
+                setEditingName(true);
+              }}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="이름 수정"
+              title="이름 수정"
+            >
+              <Pencil className="size-3" />
+            </button>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           {canEdit ? (
             <p className="hidden font-mono text-[10px] uppercase tracking-wider text-muted-foreground sm:block">
@@ -414,6 +512,17 @@ export function PositioningMap({
           >
             <Maximize2 className="size-3.5" />
           </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => void deleteMap()}
+              className="text-muted-foreground hover:text-destructive"
+              aria-label="맵 삭제"
+              title="맵 삭제"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
         </div>
       </header>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -453,7 +562,7 @@ export function PositioningMap({
         <DialogContent className="flex h-[min(96vh,96vw)] w-[min(96vw,96vh)] max-w-none flex-col gap-3 p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-              포지셔닝 맵 — {points.length}
+              {name || "(이름 없음)"} — {points.length}
             </DialogTitle>
           </DialogHeader>
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
@@ -503,11 +612,11 @@ function PointMarker({
             className={cn(
               "relative overflow-hidden rounded-sm border-2 bg-background shadow-sm",
               point.is_self
-                ? "border-foreground"
+                ? "border-lime-400"
                 : "border-background ring-1 ring-border",
             )}
             style={{
-              width: 56,
+              width: 36,
               aspectRatio: `${ref.image_width ?? 4} / ${ref.image_height ?? 5}`,
             }}
           >
@@ -515,12 +624,12 @@ function PointMarker({
               src={publicImageUrl(ref.image_path)}
               alt={ref.title ?? point.label ?? "ref"}
               fill
-              sizes="64px"
+              sizes="48px"
               className="object-cover pointer-events-none"
               draggable={false}
             />
             {point.is_self ? (
-              <span className="absolute -right-1 -top-1 rounded-full bg-foreground p-0.5 text-background">
+              <span className="absolute -right-1 -top-1 rounded-full bg-lime-400 p-0.5 text-lime-950">
                 <Star className="size-2.5 fill-current" />
               </span>
             ) : null}
@@ -530,7 +639,7 @@ function PointMarker({
             className={cn(
               "rounded-full border-2 px-2 py-0.5 text-[11px] shadow-sm",
               point.is_self
-                ? "border-foreground bg-foreground text-background"
+                ? "border-lime-500 bg-lime-400 text-lime-950"
                 : "border-foreground/60 bg-background text-foreground",
             )}
             style={
