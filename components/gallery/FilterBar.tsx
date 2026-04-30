@@ -103,17 +103,23 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           <Input
             value={qDraft}
             onChange={(e) => setQDraft(e.target.value)}
-            // iOS holds onChange while the IME (Korean) or autocorrect
-            // (English) is mid-composition. compositionupdate fires per
-            // keystroke during composition so we can mirror the live
-            // value into state without waiting for an explicit commit.
-            // compositionend keeps it accurate when the syllable
-            // finishes.
+            // iOS Safari has a long-standing bug where React's onChange
+            // synthetic doesn't fire reliably during IME / autocorrect
+            // composition. Mirroring the live input value on every
+            // other event we can reach (composition updates, key
+            // release, blur) is the documented workaround across the
+            // React + RN issues.
             onCompositionUpdate={(e) =>
               setQDraft((e.target as HTMLInputElement).value)
             }
             onCompositionEnd={(e) =>
               setQDraft((e.target as HTMLInputElement).value)
+            }
+            onKeyUp={(e) =>
+              setQDraft((e.currentTarget as HTMLInputElement).value)
+            }
+            onBlur={(e) =>
+              setQDraft((e.currentTarget as HTMLInputElement).value)
             }
             placeholder="검색 — 제목 / 태그 / 디자이너 / 노트"
             className="h-9 pl-8 pr-8 font-mono text-[12px]"

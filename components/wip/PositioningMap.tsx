@@ -791,25 +791,20 @@ function AddPointDialog({
   const [isSelf, setIsSelf] = useState(false);
   const [busy, setBusy] = useState(false);
   // Default candidates: project's inspiration refs (familiar, contextual).
-  // When the user types, we live-query refs across the whole library.
+  // When the user types, we live-query refs across the whole library —
+  // pre-OCR this dialog used a single ilike on title with no debounce,
+  // and that simple per-keystroke trigger is what the user remembers
+  // working reliably. Keep the broader search dimensions but drop the
+  // debounce indirection so the search is the only thing in the chain.
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RefLite[]>([]);
   const [searching, setSearching] = useState(false);
-
-  // Debounce the query so we don't fan out 7 supabase requests on every
-  // keystroke. 250ms feels live without saturating the connection on
-  // mobile.
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedQuery(query), 250);
-    return () => window.clearTimeout(id);
-  }, [query]);
 
   useEffect(() => {
     if (tab !== "ref") return;
     let cancelled = false;
     void (async () => {
-      const q = debouncedQuery.trim();
+      const q = query.trim();
       if (!q) {
         if (!cancelled) {
           setSearchResults([]);
@@ -841,7 +836,7 @@ function AddPointDialog({
     return () => {
       cancelled = true;
     };
-  }, [supabase, tab, debouncedQuery]);
+  }, [supabase, tab, query]);
 
   // Showing inspiration refs by default makes the project's mood pool the
   // first thing the eye lands on; typing anything switches to library-wide
@@ -922,16 +917,23 @@ function AddPointDialog({
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  // iOS holds onChange while the IME (Korean) or
-                  // autocorrect (English) is mid-composition. Keep
-                  // state in sync via the per-keystroke composition
-                  // events so search fires through debounce alone,
-                  // no manual commit required.
+                  // iOS Safari has a long-standing bug where the React
+                  // onChange synthetic doesn't fire reliably during IME
+                  // / autocorrect composition. Mirroring the live input
+                  // value on every other event we can reach (composition
+                  // updates, key release, blur) is the documented
+                  // workaround across the React + RN issues.
                   onCompositionUpdate={(e) =>
                     setQuery((e.target as HTMLInputElement).value)
                   }
                   onCompositionEnd={(e) =>
                     setQuery((e.target as HTMLInputElement).value)
+                  }
+                  onKeyUp={(e) =>
+                    setQuery((e.currentTarget as HTMLInputElement).value)
+                  }
+                  onBlur={(e) =>
+                    setQuery((e.currentTarget as HTMLInputElement).value)
                   }
                   placeholder={
                     inspirationRefs.length > 0
@@ -939,7 +941,7 @@ function AddPointDialog({
                       : "ref 제목·태그·OCR로 검색…"
                   }
                 />
-                {searching || (query.trim() && query !== debouncedQuery) ? (
+                {searching ? (
                   <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
                     <div className="size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
                   </div>
