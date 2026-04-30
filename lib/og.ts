@@ -119,32 +119,6 @@ const IG_BROWSER_UA =
 const IG_APP_ID = "936619743392459";
 const IG_SHORTCODE_DOC_ID = "10015901848480474";
 
-// Walk a freshly-served Set-Cookie header for the csrftoken — Instagram
-// sets it on the first GET, and the GraphQL POST below 4xx's without
-// it. Fetching the homepage (small payload) is cheaper than the post
-// page and gets us a token reliably.
-async function fetchInstagramCsrfToken(): Promise<string | null> {
-  try {
-    const res = await fetch("https://www.instagram.com/", {
-      headers: {
-        "User-Agent": IG_BROWSER_UA,
-        Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    const setCookie =
-      res.headers.get("set-cookie") ??
-      // some runtimes lower-case Set-Cookie, others split it
-      res.headers.get("Set-Cookie") ??
-      "";
-    const m = setCookie.match(/csrftoken=([^;,\s]+)/i);
-    return m?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-
 // Instagram returns image URLs in two shapes inside the inline JSON of
 // a public post page:
 //   1. "display_url":"https://...scontent..."
@@ -216,14 +190,16 @@ async function fetchInstagramGraphQL(
   shortcode: string,
 ): Promise<InstagramSlide[]> {
   try {
-    // GraphQL POST without a csrftoken returns 401 from Vercel egress
-    // IPs in 2026. Fetch one cheaply first.
-    const csrf = await fetchInstagramCsrfToken();
-    const body = new URLSearchParams({
-      variables: JSON.stringify({ shortcode }),
-      doc_id: IG_SHORTCODE_DOC_ID,
-    });
-    const res = await fetch("https://www.instagram.com/api/graphql", {
+    // Pattern from ahmedrangel/instagram-media-scraper: variables/doc_id/
+    // lsd in querystring, no body, no cookies, no CSRF. With cookies
+    // attached IG was returning a logged-out interstitial HTML on cloud
+    // egress; without them and with Sec-Fetch-Site, it returns proper
+    // JSON.
+    const url = new URL("https://www.instagram.com/api/graphql");
+    url.searchParams.set("variables", JSON.stringify({ shortcode }));
+    url.searchParams.set("doc_id", IG_SHORTCODE_DOC_ID);
+    url.searchParams.set("lsd", "AVqbxe3J_YA");
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "User-Agent": IG_BROWSER_UA,
@@ -231,17 +207,8 @@ async function fetchInstagramGraphQL(
         "X-IG-App-ID": IG_APP_ID,
         "X-FB-LSD": "AVqbxe3J_YA",
         "X-ASBD-ID": "129477",
-        ...(csrf
-          ? {
-              "X-CSRFToken": csrf,
-              Cookie: `csrftoken=${csrf}`,
-            }
-          : {}),
-        Accept: "*/*",
-        Referer: "https://www.instagram.com/",
-        Origin: "https://www.instagram.com",
+        "Sec-Fetch-Site": "same-origin",
       },
-      body: body.toString(),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
@@ -465,13 +432,13 @@ export async function inspectInstagramExtraction(
   // GraphQL
   if (shortcode) {
     try {
-      const csrf = await fetchInstagramCsrfToken();
-      report.graphql.csrfToken = Boolean(csrf);
-      const body = new URLSearchParams({
-        variables: JSON.stringify({ shortcode }),
-        doc_id: IG_SHORTCODE_DOC_ID,
-      });
-      const res = await fetch("https://www.instagram.com/api/graphql", {
+      // Cookieless pattern matches fetchInstagramGraphQL above.
+      report.graphql.csrfToken = false;
+      const url = new URL("https://www.instagram.com/api/graphql");
+      url.searchParams.set("variables", JSON.stringify({ shortcode }));
+      url.searchParams.set("doc_id", IG_SHORTCODE_DOC_ID);
+      url.searchParams.set("lsd", "AVqbxe3J_YA");
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           "User-Agent": IG_BROWSER_UA,
@@ -479,14 +446,8 @@ export async function inspectInstagramExtraction(
           "X-IG-App-ID": IG_APP_ID,
           "X-FB-LSD": "AVqbxe3J_YA",
           "X-ASBD-ID": "129477",
-          ...(csrf
-            ? { "X-CSRFToken": csrf, Cookie: `csrftoken=${csrf}` }
-            : {}),
-          Accept: "*/*",
-          Referer: "https://www.instagram.com/",
-          Origin: "https://www.instagram.com",
+          "Sec-Fetch-Site": "same-origin",
         },
-        body: body.toString(),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       report.graphql.httpStatus = res.status;
