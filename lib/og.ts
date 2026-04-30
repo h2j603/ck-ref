@@ -550,28 +550,24 @@ export async function inspectInstagramExtraction(
 
 // Layered fallback returning every slide, with video flag preserved.
 //
-//   1. Iframely — when IFRAMELY_KEY is set. Their resolver runs from
-//      residential infra so it survives Instagram's anti-bot, returns
-//      structured carousel slides + video media at original aspect.
-//   2. Public web-app GraphQL — structured edge_sidecar_to_children
-//      walk. Often 401's from cloud egress IPs but cheap to try.
-//   3. Re-fetch the post page with a browser UA and grep all
-//      `display_url` values from the inline JSON, in order. Logged-out
-//      HTML usually only carries the first slide.
-//   4. Microlink free tier — single image, no carousel, no video flag.
+//   1. HTML scrape — fetch the public post page with a browser UA and
+//      grep all `display_url` values from the inline JSON. Empirically
+//      this returns every carousel slide at the original aspect ratio,
+//      so it's our preferred path. Misses the is_video flag (treats
+//      video posts as image cover only) but that's acceptable.
+//   2. Iframely — when IFRAMELY_KEY is set. Free tier only returns the
+//      cover at a square crop, so it's a last-ditch backup not a
+//      primary source.
+//   3. Public web-app GraphQL — structured walk that *would* preserve
+//      the is_video flag, but cloud egress IPs get served the login
+//      interstitial (HTML, not JSON) so it almost always 0's.
+//   4. Microlink free tier — single image at og:image's square crop.
 //
 // First non-empty list wins.
 export async function fetchInstagramOriginalImages(
   href: string,
   shortcode: string,
 ): Promise<InstagramSlide[]> {
-  const fromIframely = await fetchInstagramIframely(href);
-  if (fromIframely.length > 0)
-    return fromIframely.slice(0, MAX_INSTAGRAM_SLIDES);
-
-  const fromGraph = await fetchInstagramGraphQL(shortcode);
-  if (fromGraph.length > 0) return fromGraph.slice(0, MAX_INSTAGRAM_SLIDES);
-
   const html = await fetchInstagramHtmlAsBrowser(href);
   if (html) {
     const urls = extractDisplayUrlsFromHtml(html);
@@ -579,6 +575,13 @@ export async function fetchInstagramOriginalImages(
       return urls.slice(0, MAX_INSTAGRAM_SLIDES).map((url) => ({ url }));
     }
   }
+
+  const fromIframely = await fetchInstagramIframely(href);
+  if (fromIframely.length > 0)
+    return fromIframely.slice(0, MAX_INSTAGRAM_SLIDES);
+
+  const fromGraph = await fetchInstagramGraphQL(shortcode);
+  if (fromGraph.length > 0) return fromGraph.slice(0, MAX_INSTAGRAM_SLIDES);
 
   const fromMicrolink = await fetchMicrolinkImage(href);
   return fromMicrolink ? [{ url: fromMicrolink }] : [];
