@@ -2,7 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -59,6 +59,17 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   // instead of trusting state.
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // iOS Safari + React: synthetic onChange / onInput skip some
+  // composition keystrokes. Attach a native `input` listener so qDraft
+  // tracks the live value without going through React's event system.
+  useEffect(() => {
+    const el = searchInputRef.current;
+    if (!el) return;
+    const handler = () => setQDraft(el.value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
+  }, []);
+
   function update(next: Record<string, string | string[] | null>) {
     const sp = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
@@ -112,13 +123,10 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           <Input
             ref={searchInputRef}
             value={qDraft}
-            // See PositioningMap for the iOS rationale: onInput catches
-            // the composition updates that onChange skips on Safari;
-            // composition / keyup / blur fall through as final commit.
+            // Native input listener (see useEffect above) is the
+            // primary keystroke source on iOS. React handlers stay for
+            // fallback / controlled value.
             onChange={(e) => setQDraft(e.target.value)}
-            onInput={(e) =>
-              setQDraft((e.currentTarget as HTMLInputElement).value)
-            }
             autoCorrect="off"
             autoCapitalize="none"
             autoComplete="off"

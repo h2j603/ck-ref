@@ -3,7 +3,7 @@
 import { Plus, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,20 @@ export function InspirationRefs({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // iOS Safari + React: synthetic events miss composition keystrokes
+  // (autocorrect / IME). Attach a native `input` listener so live
+  // search fires on every keystroke without going through React's
+  // synthetic event system.
+  useEffect(() => {
+    if (!open || pending) return;
+    const el = searchInputRef.current;
+    if (!el) return;
+    const handler = () => setQuery(el.value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
+  }, [open, pending]);
 
   const linkedIds = useMemo(
     () => new Set(linked.map((r) => r.id)),
@@ -232,14 +246,12 @@ export function InspirationRefs({
                 <div className="flex flex-col gap-3">
                   <div className="relative">
                     <Input
+                      ref={searchInputRef}
                       value={query}
-                      // See PositioningMap for the fuller iOS rationale.
-                      // onInput catches composition updates that onChange
-                      // skips on iOS Safari.
+                      // Native input listener (see useEffect above) is
+                      // the primary keystroke source on iOS. React
+                      // handlers stay for fallback / controlled value.
                       onChange={(e) => setQuery(e.target.value)}
-                      onInput={(e) =>
-                        setQuery((e.currentTarget as HTMLInputElement).value)
-                      }
                       autoCorrect="off"
                       autoCapitalize="none"
                       autoComplete="off"

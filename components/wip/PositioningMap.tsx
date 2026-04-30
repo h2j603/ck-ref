@@ -799,6 +799,21 @@ function AddPointDialog({
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RefLite[]>([]);
   const [searching, setSearching] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // iOS Safari + React: synthetic onChange / onInput intermittently
+  // skip composition keystrokes (autocorrect / IME), so live search via
+  // React state alone misses keystrokes. Attach a native `input` event
+  // listener directly to the DOM node — native events fire on every
+  // composition update without going through React's event system.
+  useEffect(() => {
+    if (tab !== "ref") return;
+    const el = searchInputRef.current;
+    if (!el) return;
+    const handler = () => setQuery(el.value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== "ref") return;
@@ -915,16 +930,13 @@ function AddPointDialog({
             <>
               <div className="relative">
                 <Input
+                  ref={searchInputRef}
                   value={query}
-                  // iOS Safari + React: onChange skips events during
-                  // IME / autocorrect composition. Native `input` event
-                  // (mapped via onInput) fires on every composition
-                  // update — React doesn't synthesise it the same way
-                  // as onChange, so it catches what onChange misses.
+                  // The native `input` listener attached via useEffect
+                  // handles per-keystroke updates on iOS. These React
+                  // handlers stay as fallbacks for non-iOS / non-IME
+                  // paths and to keep state controlled.
                   onChange={(e) => setQuery(e.target.value)}
-                  onInput={(e) =>
-                    setQuery((e.currentTarget as HTMLInputElement).value)
-                  }
                   autoCorrect="off"
                   autoCapitalize="none"
                   autoComplete="off"
