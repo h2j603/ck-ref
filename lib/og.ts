@@ -323,7 +323,10 @@ async function fetchInstagramIframely(
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.log("[iframely] non-ok status", res.status, await res.text().catch(() => ""));
+      return [];
+    }
     type Link = {
       href?: string;
       type?: string;
@@ -331,6 +334,13 @@ async function fetchInstagramIframely(
       media?: { width?: number; height?: number } | null;
     };
     const json = (await res.json()) as { links?: Link[] };
+    // Temporary diagnostic — drop once we've verified the response
+    // shape matches our parser. Logs to Vercel's function logs.
+    console.log(
+      "[iframely] response for",
+      href,
+      JSON.stringify(json, null, 2).slice(0, 4000),
+    );
     const links = json.links ?? [];
 
     // Iframely tags carousel slides with rel containing "image" (or
@@ -354,8 +364,10 @@ async function fetchInstagramIframely(
         slides.push({ url: h });
       }
     }
+    console.log("[iframely] parsed slides:", slides.length, slides);
     return slides;
-  } catch {
+  } catch (err) {
+    console.log("[iframely] threw", err);
     return [];
   }
 }
