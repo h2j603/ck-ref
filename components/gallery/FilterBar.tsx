@@ -70,11 +70,12 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     return () => el.removeEventListener("input", handler);
   }, []);
 
-  // Live search — push the URL update 120ms after qDraft settles so
-  // results refresh almost the moment the user pauses typing. Form
-  // submit (Enter / search icon) still bypasses the wait. Skip when
-  // the draft already matches the URL to dodge the redundant replace
-  // that would otherwise fire after submitSearch syncs both ends.
+  // Live search — push the URL update on the next tick after qDraft
+  // changes. setTimeout(..., 0) gives React time to settle the input
+  // render before we navigate, but feels effectively instant. Fast
+  // consecutive keystrokes still coalesce: the cleanup clears the
+  // pending tick before it fires, so only the last keystroke's update
+  // survives. Form submit (Enter / search icon) bypasses entirely.
   useEffect(() => {
     const trimmed = qDraft.trim();
     if (trimmed === qParam) return;
@@ -84,7 +85,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
       if (trimmed) sp.set("q", trimmed);
       const qs = sp.toString();
       router.replace(qs ? `/?${qs}` : "/");
-    }, 120);
+    }, 0);
     return () => window.clearTimeout(id);
   }, [qDraft, qParam, params, router]);
 
