@@ -323,10 +323,7 @@ async function fetchInstagramIframely(
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) {
-      console.log("[iframely] non-ok status", res.status, await res.text().catch(() => ""));
-      return [];
-    }
+    if (!res.ok) return [];
     type Link = {
       href?: string;
       type?: string;
@@ -334,13 +331,6 @@ async function fetchInstagramIframely(
       media?: { width?: number; height?: number } | null;
     };
     const json = (await res.json()) as { links?: Link[] };
-    // Temporary diagnostic — drop once we've verified the response
-    // shape matches our parser. Logs to Vercel's function logs.
-    console.log(
-      "[iframely] response for",
-      href,
-      JSON.stringify(json, null, 2).slice(0, 4000),
-    );
     const links = json.links ?? [];
 
     // Iframely tags carousel slides with rel containing "image" (or
@@ -364,10 +354,8 @@ async function fetchInstagramIframely(
         slides.push({ url: h });
       }
     }
-    console.log("[iframely] parsed slides:", slides.length, slides);
     return slides;
-  } catch (err) {
-    console.log("[iframely] threw", err);
+  } catch {
     return [];
   }
 }
@@ -393,6 +381,163 @@ async function fetchMicrolinkImage(href: string): Promise<string | null> {
 }
 
 const MAX_INSTAGRAM_SLIDES = 20;
+
+// Per-layer diagnostic for the /admin/og-debug page. Runs every step
+// of the chain regardless of whether earlier ones succeeded, so the
+// admin can see exactly which layers are working.
+export type InstagramDebugReport = {
+  shortcode: string | null;
+  iframely: {
+    keyPresent: boolean;
+    skipped?: boolean;
+    httpStatus?: number;
+    raw?: unknown;
+    slides?: InstagramSlide[];
+    error?: string;
+  };
+  graphql: {
+    csrfToken: boolean;
+    httpStatus?: number;
+    raw?: unknown;
+    slides?: InstagramSlide[];
+    error?: string;
+  };
+  html: {
+    httpStatus?: number;
+    htmlLength?: number;
+    foundUrls?: string[];
+    error?: string;
+  };
+  microlink: {
+    httpStatus?: number;
+    image?: string | null;
+    error?: string;
+  };
+};
+
+export async function inspectInstagramExtraction(
+  href: string,
+): Promise<InstagramDebugReport> {
+  const shortcode = instagramShortcode(href);
+  const report: InstagramDebugReport = {
+    shortcode,
+    iframely: { keyPresent: Boolean(process.env.IFRAMELY_KEY) },
+    graphql: { csrfToken: false },
+    html: {},
+    microlink: {},
+  };
+
+  // Iframely
+  if (!report.iframely.keyPresent) {
+    report.iframely.skipped = true;
+  } else {
+    try {
+      const key = process.env.IFRAMELY_KEY!;
+      const url = `https://iframe.ly/api/iframely?url=${encodeURIComponent(
+        href,
+      )}&api_key=${encodeURIComponent(key)}&omit_css=1&omit_script=1`;
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      report.iframely.httpStatus = res.status;
+      if (res.ok) {
+        const json = (await res.json()) as unknown;
+        report.iframely.raw = json;
+        report.iframely.slides = await fetchInstagramIframely(href);
+      } else {
+        report.iframely.error = await res.text().catch(() => "");
+      }
+    } catch (err) {
+      report.iframely.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // GraphQL
+  if (shortcode) {
+    try {
+      const csrf = await fetchInstagramCsrfToken();
+      report.graphql.csrfToken = Boolean(csrf);
+      const body = new URLSearchParams({
+        variables: JSON.stringify({ shortcode }),
+        doc_id: IG_SHORTCODE_DOC_ID,
+      });
+      const res = await fetch("https://www.instagram.com/api/graphql", {
+        method: "POST",
+        headers: {
+          "User-Agent": IG_BROWSER_UA,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-IG-App-ID": IG_APP_ID,
+          "X-FB-LSD": "AVqbxe3J_YA",
+          "X-ASBD-ID": "129477",
+          ...(csrf
+            ? { "X-CSRFToken": csrf, Cookie: `csrftoken=${csrf}` }
+            : {}),
+          Accept: "*/*",
+          Referer: "https://www.instagram.com/",
+          Origin: "https://www.instagram.com",
+        },
+        body: body.toString(),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      report.graphql.httpStatus = res.status;
+      if (res.ok) {
+        const text = await res.text();
+        try {
+          report.graphql.raw = JSON.parse(text);
+        } catch {
+          report.graphql.raw = text.slice(0, 4000);
+        }
+        report.graphql.slides = await fetchInstagramGraphQL(shortcode);
+      } else {
+        report.graphql.error = (await res.text().catch(() => "")).slice(0, 2000);
+      }
+    } catch (err) {
+      report.graphql.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // HTML scrape
+  try {
+    const res = await fetch(href, {
+      headers: {
+        "User-Agent": IG_BROWSER_UA,
+        Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    report.html.httpStatus = res.status;
+    if (res.ok) {
+      const html = await res.text();
+      report.html.htmlLength = html.length;
+      report.html.foundUrls = extractDisplayUrlsFromHtml(html);
+    }
+  } catch (err) {
+    report.html.error = err instanceof Error ? err.message : String(err);
+  }
+
+  // Microlink
+  try {
+    const url = `https://api.microlink.io/?url=${encodeURIComponent(href)}`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    report.microlink.httpStatus = res.status;
+    if (res.ok) {
+      const json = (await res.json()) as {
+        data?: { image?: { url?: string | null } | null };
+      };
+      report.microlink.image = json.data?.image?.url ?? null;
+    }
+  } catch (err) {
+    report.microlink.error = err instanceof Error ? err.message : String(err);
+  }
+
+  return report;
+}
 
 // Layered fallback returning every slide, with video flag preserved.
 //
