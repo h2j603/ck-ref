@@ -937,10 +937,6 @@ function AddPointDialog({
                   // handlers stay as fallbacks for non-iOS / non-IME
                   // paths and to keep state controlled.
                   onChange={(e) => setQuery(e.target.value)}
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  autoComplete="off"
-                  spellCheck={false}
                   onCompositionEnd={(e) =>
                     setQuery((e.target as HTMLInputElement).value)
                   }
