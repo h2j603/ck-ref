@@ -116,8 +116,14 @@ export function instagramShortcode(href: string): string | null {
 const IG_BROWSER_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
-const IG_APP_ID = "936619743392459";
-const IG_SHORTCODE_DOC_ID = "10015901848480474";
+// Older endpoint /api/graphql required this; the current /graphql/query
+// pattern does not, but keeping the constant exported in case a future
+// fallback layer needs it.
+// const IG_APP_ID = "936619743392459";
+// Current doc_id from victorsouzaleal/instagram-direct-url (npm
+// instagram-url-direct, actively maintained). Older 10015901848480474
+// stopped working in 2026.
+const IG_SHORTCODE_DOC_ID = "9510064595728286";
 
 // Instagram returns image URLs in two shapes inside the inline JSON of
 // a public post page:
@@ -186,29 +192,50 @@ export type InstagramSlide = {
   poster?: string;
 };
 
+// Walk a freshly-served Set-Cookie header for csrftoken. Required by
+// the /graphql/query endpoint pattern below.
+async function fetchInstagramCsrfToken(): Promise<string | null> {
+  try {
+    const res = await fetch("https://www.instagram.com/", {
+      headers: { "User-Agent": IG_BROWSER_UA },
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const setCookie =
+      res.headers.get("set-cookie") ?? res.headers.get("Set-Cookie") ?? "";
+    const m = setCookie.match(/csrftoken=([^;,\s]+)/i);
+    return m?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchInstagramGraphQL(
   shortcode: string,
 ): Promise<InstagramSlide[]> {
   try {
-    // Pattern from ahmedrangel/instagram-media-scraper: variables/doc_id/
-    // lsd in querystring, no body, no cookies, no CSRF. With cookies
-    // attached IG was returning a logged-out interstitial HTML on cloud
-    // egress; without them and with Sec-Fetch-Site, it returns proper
-    // JSON.
-    const url = new URL("https://www.instagram.com/api/graphql");
-    url.searchParams.set("variables", JSON.stringify({ shortcode }));
-    url.searchParams.set("doc_id", IG_SHORTCODE_DOC_ID);
-    url.searchParams.set("lsd", "AVqbxe3J_YA");
-    const res = await fetch(url, {
+    // Pattern from victorsouzaleal/instagram-direct-url (npm
+    // instagram-url-direct@2.0.7, actively maintained 2026).
+    // Endpoint is /graphql/query (not /api/graphql) with the current
+    // doc_id and a CSRF token grabbed from the homepage cookie.
+    const token = await fetchInstagramCsrfToken();
+    if (!token) return [];
+    const body = new URLSearchParams({
+      variables: JSON.stringify({
+        shortcode,
+        fetch_tagged_user_count: null,
+        hoisted_comment_id: null,
+        hoisted_reply_id: null,
+      }),
+      doc_id: IG_SHORTCODE_DOC_ID,
+    });
+    const res = await fetch("https://www.instagram.com/graphql/query", {
       method: "POST",
       headers: {
-        "User-Agent": IG_BROWSER_UA,
+        "X-CSRFToken": token,
         "Content-Type": "application/x-www-form-urlencoded",
-        "X-IG-App-ID": IG_APP_ID,
-        "X-FB-LSD": "AVqbxe3J_YA",
-        "X-ASBD-ID": "129477",
-        "Sec-Fetch-Site": "same-origin",
       },
+      body: body.toString(),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
@@ -389,6 +416,13 @@ export type InstagramDebugReport = {
     image?: string | null;
     error?: string;
   };
+  // What fetchInstagramOriginalImages (the chain the upload form
+  // actually uses) ends up returning — surfaces parser bugs that
+  // wouldn't be obvious from per-layer raw responses alone.
+  finalChain?: {
+    slideCount: number;
+    slides: InstagramSlide[];
+  };
 };
 
 export async function inspectInstagramExtraction(
@@ -432,22 +466,25 @@ export async function inspectInstagramExtraction(
   // GraphQL
   if (shortcode) {
     try {
-      // Cookieless pattern matches fetchInstagramGraphQL above.
-      report.graphql.csrfToken = false;
-      const url = new URL("https://www.instagram.com/api/graphql");
-      url.searchParams.set("variables", JSON.stringify({ shortcode }));
-      url.searchParams.set("doc_id", IG_SHORTCODE_DOC_ID);
-      url.searchParams.set("lsd", "AVqbxe3J_YA");
-      const res = await fetch(url, {
+      // Mirrors fetchInstagramGraphQL: /graphql/query + CSRF cookie.
+      const token = await fetchInstagramCsrfToken();
+      report.graphql.csrfToken = Boolean(token);
+      const body = new URLSearchParams({
+        variables: JSON.stringify({
+          shortcode,
+          fetch_tagged_user_count: null,
+          hoisted_comment_id: null,
+          hoisted_reply_id: null,
+        }),
+        doc_id: IG_SHORTCODE_DOC_ID,
+      });
+      const res = await fetch("https://www.instagram.com/graphql/query", {
         method: "POST",
         headers: {
-          "User-Agent": IG_BROWSER_UA,
+          "X-CSRFToken": token ?? "",
           "Content-Type": "application/x-www-form-urlencoded",
-          "X-IG-App-ID": IG_APP_ID,
-          "X-FB-LSD": "AVqbxe3J_YA",
-          "X-ASBD-ID": "129477",
-          "Sec-Fetch-Site": "same-origin",
         },
+        body: body.toString(),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       report.graphql.httpStatus = res.status;
@@ -505,6 +542,15 @@ export async function inspectInstagramExtraction(
   } catch (err) {
     report.microlink.error = err instanceof Error ? err.message : String(err);
   }
+
+  // Run the actual chain to capture what the upload form would receive.
+  const finalSlides = shortcode
+    ? await fetchInstagramOriginalImages(href, shortcode)
+    : [];
+  report.finalChain = {
+    slideCount: finalSlides.length,
+    slides: finalSlides,
+  };
 
   return report;
 }

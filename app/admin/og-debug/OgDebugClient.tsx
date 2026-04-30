@@ -34,6 +34,10 @@ type Report = {
     image?: string | null;
     error?: string;
   };
+  finalChain: {
+    slideCount: number;
+    slides: { url: string; is_video?: boolean }[];
+  };
 };
 
 export function OgDebugClient() {
@@ -216,6 +220,19 @@ function ReportView({ report }: { report: Report }) {
         {report.microlink.error ? (
           <Row label="에러" value={report.microlink.error} />
         ) : null}
+      </Section>
+
+      <Section
+        title="실제 체인 결과 (업로드 폼이 받는 값)"
+        ok={report.finalChain.slideCount > 0}
+      >
+        <Row
+          label="슬라이드 수"
+          value={`${report.finalChain.slideCount}개`}
+        />
+        {report.finalChain.slides.map((s, i) => (
+          <SlideLine key={i} slide={s} />
+        ))}
       </Section>
     </div>
   );
