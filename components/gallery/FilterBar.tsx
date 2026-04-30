@@ -70,6 +70,24 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     return () => el.removeEventListener("input", handler);
   }, []);
 
+  // Live search — push the URL update 300ms after qDraft settles so
+  // results refresh as the user types, no Enter required. Form submit
+  // (Enter / search icon) still bypasses the wait. Skip when the draft
+  // already matches the URL to dodge the redundant replace that would
+  // otherwise fire after submitSearch syncs both ends.
+  useEffect(() => {
+    const trimmed = qDraft.trim();
+    if (trimmed === qParam) return;
+    const id = window.setTimeout(() => {
+      const sp = new URLSearchParams(params.toString());
+      sp.delete("q");
+      if (trimmed) sp.set("q", trimmed);
+      const qs = sp.toString();
+      router.replace(qs ? `/?${qs}` : "/");
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, [qDraft, qParam, params, router]);
+
   function update(next: Record<string, string | string[] | null>) {
     const sp = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
