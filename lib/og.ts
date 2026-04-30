@@ -243,8 +243,10 @@ async function fetchInstagramGraphQL(
       __typename?: string;
       is_video?: boolean | null;
       video_url?: string | null;
+      video_versions?: { url?: string | null; width?: number }[] | null;
       display_url?: string | null;
       display_resources?: { src?: string | null }[];
+      product_type?: string | null;
     };
     const json = (await res.json()) as {
       data?: {
@@ -270,19 +272,44 @@ async function fetchInstagramGraphQL(
       }
       return null;
     }
+    function pickVideoUrl(node: Node | undefined | null): string | null {
+      if (!node) return null;
+      if (node.video_url) return node.video_url;
+      const versions = node.video_versions ?? [];
+      // Highest-resolution version first.
+      const sorted = [...versions].sort(
+        (a, b) => (b.width ?? 0) - (a.width ?? 0),
+      );
+      for (const v of sorted) {
+        if (v.url) return v.url;
+      }
+      return null;
+    }
     function isVideo(node: Node | undefined | null): boolean {
-      return Boolean(node?.is_video) || node?.__typename === "GraphVideo";
+      if (!node) return false;
+      if (node.is_video) return true;
+      // Schemas across doc_ids: GraphVideo, XDTGraphVideo, or any
+      // typename ending in "Video".
+      if (node.__typename && /Video$/i.test(node.__typename)) return true;
+      // product_type "clips" / "feed_video" indicate Reels / video posts.
+      if (node.product_type && /clip|video/i.test(node.product_type))
+        return true;
+      // Presence of video media is itself decisive.
+      if (node.video_url) return true;
+      if (node.video_versions && node.video_versions.length > 0) return true;
+      return false;
     }
     function toSlide(node: Node | undefined | null): InstagramSlide | null {
       if (!node) return null;
       const poster = pickPoster(node);
       if (isVideo(node)) {
-        const url = node.video_url ?? poster;
+        const videoUrl = pickVideoUrl(node);
+        const url = videoUrl ?? poster;
         if (!url) return null;
         return {
           url,
           is_video: true,
-          ...(node.video_url && poster ? { poster } : {}),
+          ...(videoUrl && poster ? { poster } : {}),
         };
       }
       return poster ? { url: poster } : null;
