@@ -161,9 +161,19 @@ async function fetchInstagramHtmlAsBrowser(
   }
 }
 
+// Each carousel slide we surface to the upload form. The video flag
+// lets the UI hint that the imported file is the still poster, not
+// the moving frames — Instagram returns the same display_url shape
+// for both, just with __typename === "GraphVideo" / is_video for the
+// video slide.
+export type InstagramSlide = {
+  url: string;
+  is_video?: boolean;
+};
+
 async function fetchInstagramGraphQL(
   shortcode: string,
-): Promise<string[]> {
+): Promise<InstagramSlide[]> {
   try {
     const body = new URLSearchParams({
       variables: JSON.stringify({ shortcode }),
@@ -185,6 +195,7 @@ async function fetchInstagramGraphQL(
     if (!res.ok) return [];
     type Node = {
       __typename?: string;
+      is_video?: boolean | null;
       display_url?: string | null;
       display_resources?: { src?: string | null }[];
     };
@@ -206,26 +217,28 @@ async function fetchInstagramGraphQL(
       if (!node) return null;
       if (node.display_url) return node.display_url;
       const resources = node.display_resources ?? [];
-      // Highest-resolution candidate sits last.
       for (let i = resources.length - 1; i >= 0; i -= 1) {
         const src = resources[i]?.src;
         if (src) return src;
       }
       return null;
     }
+    function isVideo(node: Node | undefined | null): boolean {
+      return Boolean(node?.is_video) || node?.__typename === "GraphVideo";
+    }
 
-    // Carousel: walk every child node in order so the first slide ends
-    // up as the cover and the rest become extras.
     const children = media.edge_sidecar_to_children?.edges ?? [];
     if (children.length > 0) {
-      const urls = children
-        .map((edge) => pickUrl(edge.node))
-        .filter((u): u is string => Boolean(u));
-      if (urls.length > 0) return urls;
+      return children
+        .map<InstagramSlide | null>((edge) => {
+          const url = pickUrl(edge.node);
+          return url ? { url, is_video: isVideo(edge.node) } : null;
+        })
+        .filter((s): s is InstagramSlide => s !== null);
     }
 
     const single = pickUrl(media);
-    return single ? [single] : [];
+    return single ? [{ url: single, is_video: isVideo(media) }] : [];
   } catch {
     return [];
   }
@@ -251,35 +264,37 @@ async function fetchMicrolinkImage(href: string): Promise<string | null> {
   }
 }
 
-// Cap how many carousel slides we'll pull. A normal post has ≤10; the
-// limit is an emergency brake against a regex blowup or a very long
-// reels-tray response leaking into the carousel match.
 const MAX_INSTAGRAM_SLIDES = 20;
 
-// Layered fallback chain returning every slide for carousel posts.
+// Layered fallback returning every slide, with video flag preserved.
 //
-//   1. Re-fetch the post page with a browser UA and grep all
-//      "display_url" values from the inline React JSON, in order.
-//      Carousel posts surface one per slide.
-//   2. Hit Instagram's public web-app GraphQL for the structured
-//      sidecar children.
-//   3. Microlink as a single-image last resort.
+//   1. Public web-app GraphQL — structured edge_sidecar_to_children
+//      walk, the only path that reliably yields every slide of a
+//      carousel + the per-node is_video flag.
+//   2. Re-fetch the post page with a browser UA and grep all
+//      `display_url` values from the inline JSON, in order. Catches
+//      cases where the GraphQL endpoint is rate-limited or has
+//      rotated its doc_id; carousel coverage may be partial.
+//   3. Microlink free tier — single image, no carousel, no video flag.
 //
-// First non-empty list wins. The og:image (cropped square) we already
-// had stays as the implicit final fallback if everything fails.
+// First non-empty list wins.
 export async function fetchInstagramOriginalImages(
   href: string,
   shortcode: string,
-): Promise<string[]> {
-  const html = await fetchInstagramHtmlAsBrowser(href);
-  if (html) {
-    const fromHtml = extractDisplayUrlsFromHtml(html);
-    if (fromHtml.length > 0) return fromHtml.slice(0, MAX_INSTAGRAM_SLIDES);
-  }
+): Promise<InstagramSlide[]> {
   const fromGraph = await fetchInstagramGraphQL(shortcode);
   if (fromGraph.length > 0) return fromGraph.slice(0, MAX_INSTAGRAM_SLIDES);
+
+  const html = await fetchInstagramHtmlAsBrowser(href);
+  if (html) {
+    const urls = extractDisplayUrlsFromHtml(html);
+    if (urls.length > 0) {
+      return urls.slice(0, MAX_INSTAGRAM_SLIDES).map((url) => ({ url }));
+    }
+  }
+
   const fromMicrolink = await fetchMicrolinkImage(href);
-  return fromMicrolink ? [fromMicrolink] : [];
+  return fromMicrolink ? [{ url: fromMicrolink }] : [];
 }
 
 export function parseOg(html: string, baseHref: string): OgMeta {
