@@ -438,6 +438,15 @@ export type InstagramDebugReport = {
     // Heuristic — array fields that look like they might hold the
     // carousel slides, with their item count.
     arrayFields?: { key: string; count: number }[];
+    // Per-slide raw metadata — lets us see why a slide was classified
+    // image vs video without dumping the full JSON.
+    slideMeta?: {
+      typename?: string;
+      is_video?: boolean | null;
+      hasVideoUrl?: boolean;
+      videoVersionsCount?: number;
+      product_type?: string | null;
+    }[];
   };
   html: {
     httpStatus?: number;
@@ -556,6 +565,36 @@ export async function inspectInstagramExtraction(
             }
           }
           report.graphql.arrayFields = arrays;
+
+          // Per-slide metadata — walk edge_sidecar_to_children if
+          // present, otherwise treat the media itself as the single
+          // slide.
+          type SlideNode = {
+            __typename?: string;
+            is_video?: boolean | null;
+            video_url?: string | null;
+            video_versions?: unknown[] | null;
+            product_type?: string | null;
+          };
+          const summarize = (node: SlideNode) => ({
+            typename: node.__typename,
+            is_video: node.is_video ?? null,
+            hasVideoUrl: Boolean(node.video_url),
+            videoVersionsCount: Array.isArray(node.video_versions)
+              ? node.video_versions.length
+              : 0,
+            product_type: node.product_type ?? null,
+          });
+          const sidecar = obj["edge_sidecar_to_children"] as
+            | { edges?: { node?: SlideNode }[] }
+            | undefined;
+          if (sidecar?.edges && sidecar.edges.length > 0) {
+            report.graphql.slideMeta = sidecar.edges.map((e) =>
+              summarize((e.node ?? {}) as SlideNode),
+            );
+          } else {
+            report.graphql.slideMeta = [summarize(obj as SlideNode)];
+          }
         }
         report.graphql.slides = await fetchInstagramGraphQL(shortcode);
       } else {

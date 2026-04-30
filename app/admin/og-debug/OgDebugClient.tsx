@@ -24,6 +24,13 @@ type Report = {
     error?: string;
     mediaKeys?: string[];
     arrayFields?: { key: string; count: number }[];
+    slideMeta?: {
+      typename?: string;
+      is_video?: boolean | null;
+      hasVideoUrl?: boolean;
+      videoVersionsCount?: number;
+      product_type?: string | null;
+    }[];
   };
   html: {
     httpStatus?: number;
@@ -187,6 +194,17 @@ function ReportView({ report }: { report: Report }) {
               .join(", ")}
           />
         ) : null}
+        {report.graphql.slideMeta?.map((m, i) => (
+          <p
+            key={i}
+            className="break-all font-mono text-[10px] text-muted-foreground"
+          >
+            #{i + 1} {m.typename ?? "?"} · is_video={String(m.is_video)} ·
+            video_url={m.hasVideoUrl ? "있음" : "없음"} · video_versions={" "}
+            {m.videoVersionsCount ?? 0}
+            {m.product_type ? ` · pt=${m.product_type}` : ""}
+          </p>
+        ))}
         {report.graphql.error ? (
           <Row label="에러" value={report.graphql.error} />
         ) : null}
