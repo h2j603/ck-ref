@@ -157,7 +157,9 @@ export default async function RefDetailPage({
               )}
             </Meta>
             <Meta term="Year">{ref.year ?? "—"}</Meta>
-            <Meta term="Genre">{ref.genre ?? "—"}</Meta>
+            <Meta term="Genre">
+              {ref.genres.length > 0 ? ref.genres.join(", ") : "—"}
+            </Meta>
             <Meta term="Medium">{ref.medium ?? "—"}</Meta>
             <Meta term="Lang">
               {ref.languages.length > 0 ? ref.languages.join(", ") : "—"}

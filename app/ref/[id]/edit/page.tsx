@@ -37,7 +37,7 @@ export default async function EditRefPage({
           title: ref.title,
           year: ref.year,
           source_url: ref.source_url,
-          genre: ref.genre,
+          genres: ref.genres,
           medium: ref.medium,
           languages: ref.languages,
           tags: ref.tags,

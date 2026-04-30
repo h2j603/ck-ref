@@ -81,7 +81,7 @@ export function MetadataForm() {
   const [title, setTitle] = useState("");
   const [year, setYear] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
-  const [genre, setGenre] = useState<Genre | typeof NONE>(NONE);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [medium, setMedium] = useState<Medium | typeof NONE>(NONE);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [tagsText, setTagsText] = useState("");
@@ -311,7 +311,7 @@ export function MetadataForm() {
           color_hex: cover.colorHex,
           color_hue: cover.colorHue,
           ocr_text: cover.ocrText,
-          genre: genre === NONE ? null : genre,
+          genres,
           medium: medium === NONE ? null : medium,
           languages,
           tags,
@@ -378,7 +378,7 @@ export function MetadataForm() {
       <DropZone
         files={files}
         onChange={setFiles}
-        genre={genre === NONE ? null : genre}
+        genre={genres.includes("web") ? "web" : null}
         onUrlFetched={({ url, title: ogTitle }) => {
           setSourceUrl(url);
           if (ogTitle && !title.trim()) setTitle(ogTitle);
@@ -441,22 +441,31 @@ export function MetadataForm() {
         </Field>
 
         <Field label="장르">
-          <Select
-            value={genre}
-            onValueChange={(v) => setGenre(v as Genre | typeof NONE)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>—</SelectItem>
-              {GENRES.map((g) => (
-                <SelectItem key={g} value={g}>
+          <div className="flex flex-wrap gap-1.5">
+            {GENRES.map((g) => {
+              const active = genres.includes(g);
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() =>
+                    setGenres(
+                      active
+                        ? genres.filter((x) => x !== g)
+                        : [...genres, g],
+                    )
+                  }
+                  className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors ${
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-input text-muted-foreground hover:text-foreground"
+                  }`}
+                >
                   {g}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                </button>
+              );
+            })}
+          </div>
         </Field>
         <Field label="매체">
           <Select

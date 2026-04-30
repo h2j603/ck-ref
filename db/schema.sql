@@ -262,6 +262,14 @@ create index if not exists refs_languages_idx  on refs using gin (languages);
 create index if not exists refs_genre_idx      on refs (genre);
 create index if not exists refs_medium_idx     on refs (medium);
 
+-- Multi-genre support. Original `genre` was a single text column; copy
+-- existing values into the array, drop the scalar column. Idempotent.
+alter table refs add column if not exists genres text[] not null default '{}';
+update refs set genres = array[genre]
+  where genre is not null and (genres is null or array_length(genres, 1) is null);
+alter table refs drop column if exists genre;
+create index if not exists refs_genres_idx on refs using gin (genres);
+
 -- Dominant color extracted client-side at upload. color_hex is for display,
 -- color_hue (0-359) for cheap range filters; NULL hue = greyscale/neutral.
 alter table refs add column if not exists color_hex text;

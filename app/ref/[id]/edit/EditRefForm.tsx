@@ -39,7 +39,7 @@ type Initial = {
   title: string | null;
   year: number | null;
   source_url: string | null;
-  genre: Genre | null;
+  genres: Genre[];
   medium: Medium | null;
   languages: Language[];
   tags: string[];
@@ -96,14 +96,13 @@ export function EditRefForm({
   const [title, setTitle] = useState(initial.title ?? "");
   const [year, setYear] = useState(initial.year != null ? String(initial.year) : "");
   const [sourceUrl, setSourceUrl] = useState(initial.source_url ?? "");
-  const [genre, setGenre] = useState<Genre | typeof NONE>(initial.genre ?? NONE);
+  const [genres, setGenres] = useState<Genre[]>(initial.genres);
   const [medium, setMedium] = useState<Medium | typeof NONE>(initial.medium ?? NONE);
   const [languages, setLanguages] = useState<Language[]>(initial.languages);
   const [tagsText, setTagsText] = useState(initial.tags.join(", "));
   const [designers, setDesigners] = useState<DesignerLite[]>(initial.designers);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [ocrText, setOcrText] = useState(initial.ocr_text ?? "");
-  const [ocrBusy, setOcrBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -143,13 +142,9 @@ export function EditRefForm({
       previewUrl: URL.createObjectURL(file),
       probed,
     });
-    // Re-run OCR on the new file. The user can still hand-edit afterward;
-    // we just seed the field so the searchable text matches the new image.
-    setOcrBusy(true);
-    void runOCR(file).then((text) => {
-      setOcrText(text);
-      setOcrBusy(false);
-    });
+    // Re-run OCR on the new file so the searchable text matches the new
+    // image. Stays in state and gets saved on submit; no UI surface.
+    void runOCR(file).then((text) => setOcrText(text));
   }
 
   function clearPending() {
@@ -206,7 +201,7 @@ export function EditRefForm({
           title: title.trim() || null,
           year: yearNum,
           source_url: sourceUrl.trim() || null,
-          genre: genre === NONE ? null : genre,
+          genres,
           medium: medium === NONE ? null : medium,
           languages,
           tags,
@@ -367,19 +362,31 @@ export function EditRefForm({
           />
         </Field>
         <Field label="장르">
-          <Select value={genre} onValueChange={(v) => setGenre(v as Genre | typeof NONE)}>
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>—</SelectItem>
-              {GENRES.map((g) => (
-                <SelectItem key={g} value={g}>
+          <div className="flex flex-wrap gap-1.5">
+            {GENRES.map((g) => {
+              const active = genres.includes(g);
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() =>
+                    setGenres(
+                      active
+                        ? genres.filter((x) => x !== g)
+                        : [...genres, g],
+                    )
+                  }
+                  className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors ${
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-input text-muted-foreground hover:text-foreground"
+                  }`}
+                >
                   {g}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                </button>
+              );
+            })}
+          </div>
         </Field>
         <Field label="매체">
           <Select value={medium} onValueChange={(v) => setMedium(v as Medium | typeof NONE)}>
@@ -429,22 +436,6 @@ export function EditRefForm({
         </Field>
         <Field label="디자이너" full>
           <DesignerPicker selected={designers} onChange={setDesigners} />
-        </Field>
-        <Field label="OCR 텍스트 (검색용)" full>
-          <div className="flex flex-col gap-2">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              {ocrBusy
-                ? "이미지에서 텍스트 추출 중…"
-                : "이미지의 텍스트를 추출해서 검색에 쓰는 메타. 직접 수정 가능. 이미지 교체 시 자동 갱신."}
-            </p>
-            <Textarea
-              value={ocrText}
-              onChange={(e) => setOcrText(e.target.value)}
-              rows={3}
-              placeholder="이미지에 박힌 글자가 여기에 들어갑니다."
-              disabled={ocrBusy}
-            />
-          </div>
         </Field>
       </div>
 

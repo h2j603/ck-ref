@@ -52,7 +52,7 @@ export type Ref = {
   image_path: string;
   image_width: number | null;
   image_height: number | null;
-  genre: Genre | null;
+  genres: Genre[];
   medium: Medium | null;
   languages: Language[];
   tags: string[];
