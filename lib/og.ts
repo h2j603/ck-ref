@@ -92,6 +92,47 @@ function looksLikePinterestBoilerplate(title: string): boolean {
   return false;
 }
 
+// Instagram serves a center-cropped square via og:image regardless of the
+// post's actual aspect ratio. The /embed/captioned/ page, which is
+// publicly accessible without login, embeds the original image at its
+// real proportions inside an EmbeddedMediaImage container.
+export function isInstagramHost(host: string): boolean {
+  return /(?:^|\.)instagram\.com$/i.test(host);
+}
+
+export function instagramEmbedUrl(href: string): string | null {
+  try {
+    const u = new URL(href);
+    if (!isInstagramHost(u.host)) return null;
+    // Match /p/<shortcode>/, /reel/<shortcode>/, /tv/<shortcode>/.
+    const m = u.pathname.match(/^\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
+    if (!m) return null;
+    return `https://www.instagram.com/p/${m[1]}/embed/captioned/`;
+  } catch {
+    return null;
+  }
+}
+
+// Pull the original-aspect image URL out of Instagram's embed page. The
+// embed HTML carries the post image as a regular <img> tag (the
+// EmbeddedMediaImage element) plus an og:image of the same source — so
+// we just walk the same meta path and fall back to the first scontent
+// image src if og isn't surfaced.
+export function extractInstagramEmbedImage(html: string): string | null {
+  const head = html.slice(0, Math.min(html.length, 256 * 1024));
+  const og =
+    metaContent(head, "og:image") ??
+    metaContent(head, "og:image:url") ??
+    metaContent(head, "og:image:secure_url");
+  if (og && !/\/p\/.*\/media\//.test(og)) return og;
+  // Fallback: scrape the first scontent image src — this is the rendered
+  // post image inside the embed iframe and respects the original ratio.
+  const m = head.match(
+    /<img[^>]+src=["'](https?:\/\/[^"']*scontent[^"']+)["']/i,
+  );
+  return m?.[1] ?? null;
+}
+
 export function parseOg(html: string, baseHref: string): OgMeta {
   // Cap the slice we scan so a multi-MB page doesn't blow up regex backtracking.
   const head = html.slice(0, Math.min(html.length, 256 * 1024));
