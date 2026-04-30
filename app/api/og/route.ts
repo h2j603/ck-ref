@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   FETCH_TIMEOUT_MS,
   OG_USER_AGENT,
-  fetchInstagramDisplayUrl,
+  fetchInstagramOriginalImage,
   instagramShortcode,
   parseOg,
   safeUrl,
@@ -51,15 +51,16 @@ export async function GET(request: Request) {
   const html = await res.text();
   const meta = parseOg(html, res.url || target.href);
 
-  // Instagram's og:image is a center-cropped square. Hit Instagram's
-  // public GraphQL endpoint with the post shortcode — that returns the
-  // display_url at the post's real aspect ratio without requiring a
-  // login. Falls through silently to the cropped og:image on any
-  // failure (rate limit, query rotation, network) so this is strictly
-  // additive.
+  // Instagram's og:image is a center-cropped square. Try a layered
+  // fallback (page HTML scrape → GraphQL → Microlink) to recover the
+  // original-aspect image. Silent fall-through if all of them fail —
+  // we keep whatever cropped og:image we already had.
   const shortcode = instagramShortcode(target.href);
   if (shortcode) {
-    const original = await fetchInstagramDisplayUrl(shortcode);
+    const original = await fetchInstagramOriginalImage(
+      target.href,
+      shortcode,
+    );
     if (original) meta.image = original;
   }
 

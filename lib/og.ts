@@ -93,9 +93,8 @@ function looksLikePinterestBoilerplate(title: string): boolean {
 }
 
 // Instagram serves a center-cropped square via og:image regardless of the
-// post's actual aspect ratio. The public GraphQL endpoint at
-// /api/graphql returns the post's display_url at its real proportions
-// without needing a login.
+// post's actual aspect ratio. We try several public paths to recover
+// the original-aspect image URL — see fetchInstagramOriginalImage.
 export function isInstagramHost(host: string): boolean {
   return /(?:^|\.)instagram\.com$/i.test(host);
 }
@@ -111,14 +110,53 @@ export function instagramShortcode(href: string): string | null {
   }
 }
 
-// Instagram's public web app id — the same value the in-browser code
-// sends. doc_id is the persisted GraphQL query for "media via shortcode";
-// it occasionally rotates but the value below has been stable for the
-// scraper community in 2025-2026.
+// A normal browser User-Agent — Instagram serves a richer page (with the
+// post JSON inline) to browser UAs than to crawler UAs. Updated to a
+// recent Safari mobile string which their anti-bot tolerates well.
+const IG_BROWSER_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
 const IG_APP_ID = "936619743392459";
 const IG_SHORTCODE_DOC_ID = "10015901848480474";
 
-export async function fetchInstagramDisplayUrl(
+// Pull the post's JSON `display_url` straight out of the page HTML. The
+// browser-UA fetch below returns the React tree where "display_url"
+// appears inline as a JSON-escaped string. Cheap, no extra round-trip
+// when we already have the HTML.
+function extractDisplayUrlFromHtml(html: string): string | null {
+  const re = /"display_url":\s*"((?:[^"\\]|\\.)*)"/;
+  const m = html.match(re);
+  if (!m?.[1]) return null;
+  try {
+    return JSON.parse(`"${m[1]}"`) as string;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchInstagramHtmlAsBrowser(
+  href: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(href, {
+      headers: {
+        "User-Agent": IG_BROWSER_UA,
+        Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") ?? "";
+    if (!ct.includes("text/html")) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchInstagramGraphQL(
   shortcode: string,
 ): Promise<string | null> {
   try {
@@ -129,7 +167,7 @@ export async function fetchInstagramDisplayUrl(
     const res = await fetch("https://www.instagram.com/api/graphql", {
       method: "POST",
       headers: {
-        "User-Agent": OG_USER_AGENT,
+        "User-Agent": IG_BROWSER_UA,
         "Content-Type": "application/x-www-form-urlencoded",
         "X-IG-App-ID": IG_APP_ID,
         "X-FB-LSD": "AVqbxe3J_YA",
@@ -152,7 +190,6 @@ export async function fetchInstagramDisplayUrl(
     if (!media) return null;
     if (media.display_url) return media.display_url;
     const resources = media.display_resources ?? [];
-    // Highest-resolution candidate sits last in display_resources.
     for (let i = resources.length - 1; i >= 0; i -= 1) {
       const src = resources[i]?.src;
       if (src) return src;
@@ -161,6 +198,51 @@ export async function fetchInstagramDisplayUrl(
   } catch {
     return null;
   }
+}
+
+async function fetchMicrolinkImage(href: string): Promise<string | null> {
+  try {
+    // Microlink's free tier (no key) returns proper Instagram media
+    // with the original aspect ratio. Capped at 50 req/day per IP — fine
+    // as a last-resort fallback.
+    const url = `https://api.microlink.io/?url=${encodeURIComponent(href)}`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: { image?: { url?: string | null } | null };
+    };
+    return json.data?.image?.url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Layered fallback chain. Order chosen so we lean on the cheapest /
+// most reliable path first and only escalate when each fails.
+//
+//   1. Re-fetch the post page with a browser UA and grep "display_url"
+//      out of the inline JSON. Same kind of request the og fetch
+//      already does, just with a different UA — no extra service.
+//   2. Hit Instagram's public web-app GraphQL for display_url.
+//   3. As a last resort, ask Microlink (free tier, ~50/day per IP).
+//
+// First non-null wins. The og:image (cropped square) we already had
+// stays as the implicit final fallback if everything fails.
+export async function fetchInstagramOriginalImage(
+  href: string,
+  shortcode: string,
+): Promise<string | null> {
+  const html = await fetchInstagramHtmlAsBrowser(href);
+  if (html) {
+    const fromHtml = extractDisplayUrlFromHtml(html);
+    if (fromHtml) return fromHtml;
+  }
+  const fromGraph = await fetchInstagramGraphQL(shortcode);
+  if (fromGraph) return fromGraph;
+  return await fetchMicrolinkImage(href);
 }
 
 export function parseOg(html: string, baseHref: string): OgMeta {
