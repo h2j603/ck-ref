@@ -125,6 +125,7 @@ export function MetadataForm() {
       const ogRes = await fetch(`/api/og?url=${encodeURIComponent(url)}`);
       const og = (await ogRes.json()) as {
         image?: string | null;
+        images?: string[] | null;
         title?: string | null;
         sourceUrl?: string;
         error?: string;
@@ -132,31 +133,64 @@ export function MetadataForm() {
       if (!ogRes.ok || !og.image) {
         throw new Error(og.error ?? "이미지를 찾지 못했어요.");
       }
-      const imgRes = await fetch(`/api/og/image?url=${encodeURIComponent(og.image)}`);
-      if (!imgRes.ok) {
-        const data = (await imgRes.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(data?.error ?? "이미지를 받아오지 못했어요.");
+      // Carousel posts return the full slide list under `images`. Pull
+      // every slide so the user lands in DropZone with all of them and
+      // can drop the ones they don't want before submitting.
+      const targets =
+        og.images && og.images.length > 0 ? og.images : [og.image];
+
+      const fetched: UploadFile[] = [];
+      const failures: string[] = [];
+      for (let i = 0; i < targets.length; i += 1) {
+        const src = targets[i];
+        try {
+          const imgRes = await fetch(
+            `/api/og/image?url=${encodeURIComponent(src)}`,
+          );
+          if (!imgRes.ok) {
+            const data = (await imgRes.json().catch(() => null)) as
+              | { error?: string }
+              | null;
+            throw new Error(data?.error ?? `slide ${i + 1}`);
+          }
+          const blob = await imgRes.blob();
+          const ct = blob.type || "image/jpeg";
+          const ext = ct.split("/")[1]?.split(";")[0] || "jpg";
+          const name = `imported-${Date.now()}-${i + 1}.${ext}`;
+          const file = new File([blob], name, { type: ct });
+          const probed = await probeImage(file);
+          fetched.push({
+            id: `imported-${Date.now()}-${i}`,
+            file,
+            previewUrl: URL.createObjectURL(file),
+            width: probed?.width,
+            height: probed?.height,
+            colorHex: probed?.colorHex ?? null,
+            colorHue: probed?.colorHue ?? null,
+          });
+        } catch (slideErr) {
+          failures.push(
+            `${i + 1}: ${slideErr instanceof Error ? slideErr.message : "실패"}`,
+          );
+        }
       }
-      const blob = await imgRes.blob();
-      const ct = blob.type || "image/jpeg";
-      const ext = ct.split("/")[1]?.split(";")[0] || "jpg";
-      const name = `imported-${Date.now()}.${ext}`;
-      const file = new File([blob], name, { type: ct });
-      const probed = await probeImage(file);
-      const newUploadFile: UploadFile = {
-        id: `imported-${Date.now()}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-        width: probed?.width,
-        height: probed?.height,
-        colorHex: probed?.colorHex ?? null,
-        colorHue: probed?.colorHue ?? null,
-      };
-      setFiles((prev) => [...prev, newUploadFile]);
+
+      if (fetched.length === 0) {
+        throw new Error(
+          failures.length > 0
+            ? `슬라이드 가져오기 실패 — ${failures.join(", ")}`
+            : "이미지를 받아오지 못했어요.",
+        );
+      }
+
+      setFiles((prev) => [...prev, ...fetched]);
       if (!title.trim() && og.title) setTitle(og.title);
       if (og.sourceUrl) setSourceUrl(og.sourceUrl);
+      if (failures.length > 0) {
+        setImportError(
+          `일부 슬라이드를 못 가져왔어요 (${failures.length}장).`,
+        );
+      }
     } catch (err) {
       setImportError(extractErrorMessage(err));
     } finally {

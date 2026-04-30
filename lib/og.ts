@@ -119,19 +119,24 @@ const IG_BROWSER_UA =
 const IG_APP_ID = "936619743392459";
 const IG_SHORTCODE_DOC_ID = "10015901848480474";
 
-// Pull the post's JSON `display_url` straight out of the page HTML. The
-// browser-UA fetch below returns the React tree where "display_url"
-// appears inline as a JSON-escaped string. Cheap, no extra round-trip
-// when we already have the HTML.
-function extractDisplayUrlFromHtml(html: string): string | null {
-  const re = /"display_url":\s*"((?:[^"\\]|\\.)*)"/;
-  const m = html.match(re);
-  if (!m?.[1]) return null;
-  try {
-    return JSON.parse(`"${m[1]}"`) as string;
-  } catch {
-    return null;
+// Pull every `display_url` JSON value out of the page HTML, in order.
+// For carousel posts this is one URL per slide. The browser-UA fetch
+// below returns the React tree where "display_url" appears inline as
+// JSON-escaped strings, so a global regex preserves order without us
+// having to parse the whole blob.
+function extractDisplayUrlsFromHtml(html: string): string[] {
+  const re = /"display_url":\s*"((?:[^"\\]|\\.)*)"/g;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const url = JSON.parse(`"${m[1]}"`) as string;
+      if (typeof url === "string" && !out.includes(url)) out.push(url);
+    } catch {
+      /* skip malformed entry */
+    }
   }
+  return out;
 }
 
 async function fetchInstagramHtmlAsBrowser(
@@ -158,7 +163,7 @@ async function fetchInstagramHtmlAsBrowser(
 
 async function fetchInstagramGraphQL(
   shortcode: string,
-): Promise<string | null> {
+): Promise<string[]> {
   try {
     const body = new URLSearchParams({
       variables: JSON.stringify({ shortcode }),
@@ -177,34 +182,60 @@ async function fetchInstagramGraphQL(
       body: body.toString(),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
+    type Node = {
+      __typename?: string;
+      display_url?: string | null;
+      display_resources?: { src?: string | null }[];
+    };
     const json = (await res.json()) as {
       data?: {
-        xdt_shortcode_media?: {
-          display_url?: string | null;
-          display_resources?: { src?: string | null }[];
-        } | null;
+        xdt_shortcode_media?:
+          | (Node & {
+              edge_sidecar_to_children?: {
+                edges?: { node?: Node }[];
+              };
+            })
+          | null;
       };
     };
     const media = json.data?.xdt_shortcode_media;
-    if (!media) return null;
-    if (media.display_url) return media.display_url;
-    const resources = media.display_resources ?? [];
-    for (let i = resources.length - 1; i >= 0; i -= 1) {
-      const src = resources[i]?.src;
-      if (src) return src;
+    if (!media) return [];
+
+    function pickUrl(node: Node | undefined | null): string | null {
+      if (!node) return null;
+      if (node.display_url) return node.display_url;
+      const resources = node.display_resources ?? [];
+      // Highest-resolution candidate sits last.
+      for (let i = resources.length - 1; i >= 0; i -= 1) {
+        const src = resources[i]?.src;
+        if (src) return src;
+      }
+      return null;
     }
-    return null;
+
+    // Carousel: walk every child node in order so the first slide ends
+    // up as the cover and the rest become extras.
+    const children = media.edge_sidecar_to_children?.edges ?? [];
+    if (children.length > 0) {
+      const urls = children
+        .map((edge) => pickUrl(edge.node))
+        .filter((u): u is string => Boolean(u));
+      if (urls.length > 0) return urls;
+    }
+
+    const single = pickUrl(media);
+    return single ? [single] : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
 async function fetchMicrolinkImage(href: string): Promise<string | null> {
   try {
     // Microlink's free tier (no key) returns proper Instagram media
-    // with the original aspect ratio. Capped at 50 req/day per IP — fine
-    // as a last-resort fallback.
+    // with the original aspect ratio — single image only, no carousel
+    // support. Used as a last-resort cover fallback.
     const url = `https://api.microlink.io/?url=${encodeURIComponent(href)}`;
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
@@ -220,29 +251,35 @@ async function fetchMicrolinkImage(href: string): Promise<string | null> {
   }
 }
 
-// Layered fallback chain. Order chosen so we lean on the cheapest /
-// most reliable path first and only escalate when each fails.
+// Cap how many carousel slides we'll pull. A normal post has ≤10; the
+// limit is an emergency brake against a regex blowup or a very long
+// reels-tray response leaking into the carousel match.
+const MAX_INSTAGRAM_SLIDES = 20;
+
+// Layered fallback chain returning every slide for carousel posts.
 //
-//   1. Re-fetch the post page with a browser UA and grep "display_url"
-//      out of the inline JSON. Same kind of request the og fetch
-//      already does, just with a different UA — no extra service.
-//   2. Hit Instagram's public web-app GraphQL for display_url.
-//   3. As a last resort, ask Microlink (free tier, ~50/day per IP).
+//   1. Re-fetch the post page with a browser UA and grep all
+//      "display_url" values from the inline React JSON, in order.
+//      Carousel posts surface one per slide.
+//   2. Hit Instagram's public web-app GraphQL for the structured
+//      sidecar children.
+//   3. Microlink as a single-image last resort.
 //
-// First non-null wins. The og:image (cropped square) we already had
-// stays as the implicit final fallback if everything fails.
-export async function fetchInstagramOriginalImage(
+// First non-empty list wins. The og:image (cropped square) we already
+// had stays as the implicit final fallback if everything fails.
+export async function fetchInstagramOriginalImages(
   href: string,
   shortcode: string,
-): Promise<string | null> {
+): Promise<string[]> {
   const html = await fetchInstagramHtmlAsBrowser(href);
   if (html) {
-    const fromHtml = extractDisplayUrlFromHtml(html);
-    if (fromHtml) return fromHtml;
+    const fromHtml = extractDisplayUrlsFromHtml(html);
+    if (fromHtml.length > 0) return fromHtml.slice(0, MAX_INSTAGRAM_SLIDES);
   }
   const fromGraph = await fetchInstagramGraphQL(shortcode);
-  if (fromGraph) return fromGraph;
-  return await fetchMicrolinkImage(href);
+  if (fromGraph.length > 0) return fromGraph.slice(0, MAX_INSTAGRAM_SLIDES);
+  const fromMicrolink = await fetchMicrolinkImage(href);
+  return fromMicrolink ? [fromMicrolink] : [];
 }
 
 export function parseOg(html: string, baseHref: string): OgMeta {
