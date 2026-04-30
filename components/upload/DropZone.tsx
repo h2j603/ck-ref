@@ -342,7 +342,7 @@ export function DropZone({
               <button
                 type="button"
                 onClick={() => removeFile(f.id)}
-                className="absolute right-1 top-1 hidden rounded-full bg-background/90 p-1 group-hover:block"
+                className="absolute right-1 top-1 rounded-full bg-background/90 p-1 shadow-sm hover:bg-background"
                 aria-label="remove"
               >
                 <X className="size-3" />
