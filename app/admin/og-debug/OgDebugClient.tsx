@@ -22,6 +22,8 @@ type Report = {
     raw?: unknown;
     slides?: { url: string; is_video?: boolean }[];
     error?: string;
+    mediaKeys?: string[];
+    arrayFields?: { key: string; count: number }[];
   };
   html: {
     httpStatus?: number;
@@ -170,6 +172,21 @@ function ReportView({ report }: { report: Report }) {
         {report.graphql.slides?.map((s, i) => (
           <SlideLine key={i} slide={s} />
         ))}
+        {report.graphql.mediaKeys ? (
+          <Row
+            label="media 키 전체"
+            value={report.graphql.mediaKeys.join(", ")}
+          />
+        ) : null}
+        {report.graphql.arrayFields &&
+        report.graphql.arrayFields.length > 0 ? (
+          <Row
+            label="배열/edges 필드"
+            value={report.graphql.arrayFields
+              .map((f) => `${f.key}(${f.count})`)
+              .join(", ")}
+          />
+        ) : null}
         {report.graphql.error ? (
           <Row label="에러" value={report.graphql.error} />
         ) : null}
@@ -299,7 +316,7 @@ function Pre({ label, value }: { label: string; value: unknown }) {
         {label}
       </summary>
       <pre className="mt-1 max-h-96 overflow-auto rounded-sm bg-muted p-2 font-mono text-[10px] leading-relaxed">
-        {JSON.stringify(value, null, 2).slice(0, 8000)}
+        {JSON.stringify(value, null, 2).slice(0, 30000)}
       </pre>
     </details>
   );
