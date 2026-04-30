@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 
-import {
-  FETCH_TIMEOUT_MS,
-  MAX_BYTES,
-  OG_USER_AGENT,
-  safeUrl,
-} from "@/lib/og";
+import { FETCH_TIMEOUT_MS, MAX_BYTES, safeUrl } from "@/lib/og";
+
+// A normal browser UA + Referer so Instagram's CDN serves video bytes
+// rather than redirecting to a login interstitial. The Facebook
+// crawler UA we use elsewhere works for og:image fetches but gets a
+// different (often empty) response for /o1/v/...mp4 video URLs.
+const BROWSER_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
 export async function GET(request: Request) {
   const target = safeUrl(new URL(request.url).searchParams.get("url"));
@@ -13,12 +15,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
   }
 
+  const isInstagramCdn = /(?:^|\.)cdninstagram\.com$/i.test(target.hostname);
+  const headers: Record<string, string> = {
+    "User-Agent": BROWSER_UA,
+    Accept: "image/*,video/*,*/*;q=0.8",
+  };
+  if (isInstagramCdn) {
+    headers.Referer = "https://www.instagram.com/";
+  }
+
   let res: Response;
   try {
     res = await fetch(target.href, {
-      headers: { "User-Agent": OG_USER_AGENT },
+      headers,
       redirect: "follow",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      // Videos can be 10s+ MB — give them more time to stream.
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS * 3),
     });
   } catch {
     return NextResponse.json(
@@ -35,13 +47,13 @@ export async function GET(request: Request) {
   const ct = res.headers.get("content-type") ?? "";
   if (!ct.startsWith("image/") && !ct.startsWith("video/")) {
     return NextResponse.json(
-      { error: "이미지·비디오가 아닌 파일이에요." },
+      { error: `이미지·비디오가 아닌 파일이에요. (${ct || "unknown"})` },
       { status: 415 },
     );
   }
   const len = res.headers.get("content-length");
   if (len && Number(len) > MAX_BYTES) {
-    return NextResponse.json({ error: "이미지가 너무 커요." }, { status: 413 });
+    return NextResponse.json({ error: "파일이 너무 커요." }, { status: 413 });
   }
 
   const buf = await res.arrayBuffer();
