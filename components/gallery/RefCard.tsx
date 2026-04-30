@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { RatingDisplay } from "./RatingDisplay";
+import { isVideoPath } from "@/lib/media";
 import { publicImageUrl } from "@/lib/storage";
 import type { RefSort, RefWithDesigners } from "@/lib/types";
 
@@ -21,6 +22,7 @@ export function RefCard({
   sort?: RefSort;
 }) {
   const url = publicImageUrl(ref_.image_path);
+  const isVideo = isVideoPath(ref_.image_path);
   // Fall back to a sane aspect when image dimensions are missing.
   const w = ref_.image_width ?? 4;
   const h = ref_.image_height ?? 5;
@@ -29,13 +31,27 @@ export function RefCard({
     <Link href={`/ref/${ref_.id}`} className="group block">
       <div className="relative overflow-hidden bg-muted">
         <div className="relative w-full" style={{ aspectRatio: `${w} / ${h}` }}>
-          <Image
-            src={url}
-            alt={ref_.title ?? "untitled"}
-            fill
-            sizes="(max-width: 480px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-            className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
-          />
+          {isVideo ? (
+            // Looping muted preview keeps the grid quiet but alive —
+            // mirrors how Are.na / Pinterest treat motion content.
+            <video
+              src={url}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <Image
+              src={url}
+              alt={ref_.title ?? "untitled"}
+              fill
+              sizes="(max-width: 480px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+              className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+            />
+          )}
         </div>
         {ref_.extra_image_count > 0 ? (
           <span

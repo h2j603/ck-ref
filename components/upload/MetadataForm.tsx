@@ -101,6 +101,19 @@ export function MetadataForm() {
     if (pending.length === 0) return;
     let cancelled = false;
     for (const f of pending) {
+      // Video files have no readable text; resolve immediately with an
+      // empty string so the OCR badge never spins forever. queueMicrotask
+      // pushes the setState out of the effect body so the lint rule
+      // against synchronous setState-in-effect doesn't trip.
+      if (f.file.type.startsWith("video/")) {
+        queueMicrotask(() => {
+          if (cancelled) return;
+          setFiles((prev) =>
+            prev.map((p) => (p.id === f.id ? { ...p, ocrText: "" } : p)),
+          );
+        });
+        continue;
+      }
       void runOCR(f.file).then((text) => {
         if (cancelled) return;
         setFiles((prev) =>
@@ -161,9 +174,14 @@ export function MetadataForm() {
             throw new Error(data?.error ?? `slide ${i + 1}`);
           }
           const blob = await imgRes.blob();
-          const ct = blob.type || "image/jpeg";
-          const ext = ct.split("/")[1]?.split(";")[0] || "jpg";
-          const prefix = slide.is_video ? "video-poster" : "imported";
+          // Trust the server's content-type — image/* for stills,
+          // video/mp4 for Reels / video carousel slides.
+          const ct =
+            blob.type ||
+            (slide.is_video ? "video/mp4" : "image/jpeg");
+          let ext = ct.split("/")[1]?.split(";")[0] || "bin";
+          if (ext === "quicktime") ext = "mov";
+          const prefix = slide.is_video ? "video" : "imported";
           const name = `${prefix}-${Date.now()}-${i + 1}.${ext}`;
           const file = new File([blob], name, { type: ct });
           const probed = await probeImage(file);
@@ -199,9 +217,7 @@ export function MetadataForm() {
         notes.push(`못 가져온 슬라이드 ${failures.length}장`);
       }
       if (videoSlideCount > 0) {
-        notes.push(
-          `비디오 ${videoSlideCount}장은 정지 컷(포스터)으로 들어왔어요`,
-        );
+        notes.push(`비디오 ${videoSlideCount}장 포함`);
       }
       if (notes.length > 0) setImportError(notes.join(" · "));
     } catch (err) {
@@ -331,16 +347,17 @@ export function MetadataForm() {
         if (linkErr) throw linkErr;
       }
 
-      // Kick off image-embedding compute in the background. We don't await
-      // it — even if the provider is slow or unconfigured, the ref is
-      // saved and visible immediately. The reranker will pick the
-      // embedding up the next time someone opens the detail page.
-      void fetch("/api/embed-ref", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: refId }),
-        keepalive: true,
-      }).catch(() => {});
+      // Kick off image-embedding compute in the background. Skip for
+      // videos — CLIP doesn't take an mp4 and the provider would just
+      // return a 4xx. The reranker handles missing embeddings.
+      if (!files[0]?.file.type.startsWith("video/")) {
+        void fetch("/api/embed-ref", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: refId }),
+          keepalive: true,
+        }).catch(() => {});
+      }
 
       setProgress("완료. 인덱스로 이동합니다.");
       // Full reload so the newly-inserted ref shows up in the index RSC and

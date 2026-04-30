@@ -32,6 +32,9 @@ function extFromMime(mime: string): string {
   if (mime.includes("webp")) return "webp";
   if (mime.includes("gif")) return "gif";
   if (mime.includes("avif")) return "avif";
+  if (mime.includes("mp4")) return "mp4";
+  if (mime.includes("webm")) return "webm";
+  if (mime.includes("quicktime") || mime.includes("mov")) return "mov";
   return "img";
 }
 
@@ -64,7 +67,10 @@ export function DropZone({
 
   const addFiles = useCallback(
     async (incoming: File[]) => {
-      const accepted = incoming.filter((f) => f.type.startsWith("image/"));
+      const accepted = incoming.filter(
+        (f) =>
+          f.type.startsWith("image/") || f.type.startsWith("video/"),
+      );
       const existingIds = new Set(files.map((f) => f.id));
       const next: UploadFile[] = [];
       for (const file of accepted) {
@@ -163,7 +169,7 @@ export function DropZone({
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -222,15 +228,34 @@ export function DropZone({
       </div>
       {files.length > 0 ? (
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-          {files.map((f) => (
+          {files.map((f) => {
+            const isVideo = f.file.type.startsWith("video/");
+            return (
             <li key={f.id} className="group relative overflow-hidden bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={f.previewUrl}
-                alt={f.file.name}
-                className="block h-32 w-full object-cover"
-              />
-              {f.ocrText === undefined ? (
+              {isVideo ? (
+                <video
+                  src={f.previewUrl}
+                  className="block h-32 w-full object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={f.previewUrl}
+                  alt={f.file.name}
+                  className="block h-32 w-full object-cover"
+                />
+              )}
+              {isVideo ? (
+                <span
+                  className="absolute left-1 top-1 rounded-full bg-foreground/85 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-background"
+                  title="비디오"
+                >
+                  VIDEO
+                </span>
+              ) : f.ocrText === undefined ? (
                 <span
                   className="absolute left-1 top-1 inline-flex items-center gap-1 rounded-full bg-background/90 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"
                   title="이미지에서 텍스트 추출 중"
@@ -257,7 +282,8 @@ export function DropZone({
                 {f.file.name}
               </p>
             </li>
-          ))}
+            );
+          })}
         </ul>
       ) : null}
     </div>

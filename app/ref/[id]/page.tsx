@@ -22,6 +22,7 @@ import {
   fetchRefRatings,
   fetchSimilarRefs,
 } from "@/lib/queries";
+import { isVideoPath } from "@/lib/media";
 import { publicImageUrl } from "@/lib/storage";
 
 export default async function RefDetailPage({
@@ -49,25 +50,65 @@ export default async function RefDetailPage({
   const url = publicImageUrl(ref.image_path);
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
+  const coverIsVideo = isVideoPath(ref.image_path);
 
   return (
     <div className="mx-auto grid max-w-[1400px] gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex flex-col gap-4">
-        <AnnotationLayer
-          target={{ kind: "ref", id: ref.id }}
-          imageUrl={url}
-          alt={ref.title ?? "untitled"}
-          width={w}
-          height={h}
-          initial={annotations}
-          profiles={profiles}
-          sourceUrl={ref.source_url}
-        />
+        {coverIsVideo ? (
+          <div
+            className="relative w-full overflow-hidden rounded-md bg-muted"
+            style={{ aspectRatio: `${w} / ${h}` }}
+          >
+            {/* Annotations don't apply to motion content; just play the
+                file with the standard browser controls. */}
+            <video
+              src={url}
+              className="absolute inset-0 h-full w-full"
+              controls
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+            />
+          </div>
+        ) : (
+          <AnnotationLayer
+            target={{ kind: "ref", id: ref.id }}
+            imageUrl={url}
+            alt={ref.title ?? "untitled"}
+            width={w}
+            height={h}
+            initial={annotations}
+            profiles={profiles}
+            sourceUrl={ref.source_url}
+          />
+        )}
         {extras.length > 0 ? (
           <div className="flex flex-col gap-4">
             {extras.map((img, i) => {
               const ew = img.image_width ?? 4;
               const eh = img.image_height ?? 5;
+              if (isVideoPath(img.image_path)) {
+                return (
+                  <div
+                    key={img.id}
+                    className="relative w-full overflow-hidden rounded-md bg-muted"
+                    style={{ aspectRatio: `${ew} / ${eh}` }}
+                  >
+                    <video
+                      src={publicImageUrl(img.image_path)}
+                      className="absolute inset-0 h-full w-full"
+                      controls
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                    />
+                  </div>
+                );
+              }
               return (
                 <AnnotationLayer
                   key={img.id}

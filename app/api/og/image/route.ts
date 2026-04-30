@@ -33,9 +33,9 @@ export async function GET(request: Request) {
     );
   }
   const ct = res.headers.get("content-type") ?? "";
-  if (!ct.startsWith("image/")) {
+  if (!ct.startsWith("image/") && !ct.startsWith("video/")) {
     return NextResponse.json(
-      { error: "이미지가 아닌 파일이에요." },
+      { error: "이미지·비디오가 아닌 파일이에요." },
       { status: 415 },
     );
   }
