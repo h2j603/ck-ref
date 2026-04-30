@@ -233,11 +233,13 @@ export function InspirationRefs({
                   <div className="relative">
                     <Input
                       value={query}
+                      // See PositioningMap for the fuller iOS rationale.
+                      // onInput catches composition updates that onChange
+                      // skips on iOS Safari.
                       onChange={(e) => setQuery(e.target.value)}
-                      // iOS Safari composition handling — see PositioningMap
-                      // for the fuller comment. Disable auto-correct / cap /
-                      // spellcheck so search inputs never enter composition,
-                      // and keep keyup/blur fallbacks for swipe-to-type.
+                      onInput={(e) =>
+                        setQuery((e.currentTarget as HTMLInputElement).value)
+                      }
                       autoCorrect="off"
                       autoCapitalize="none"
                       autoComplete="off"
