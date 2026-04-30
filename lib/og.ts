@@ -404,6 +404,13 @@ export type InstagramDebugReport = {
     raw?: unknown;
     slides?: InstagramSlide[];
     error?: string;
+    // Top-level keys present on data.xdt_shortcode_media — surfaces
+    // whatever the carousel-children field is actually named in the
+    // response.
+    mediaKeys?: string[];
+    // Heuristic — array fields that look like they might hold the
+    // carousel slides, with their item count.
+    arrayFields?: { key: string; count: number }[];
   };
   html: {
     httpStatus?: number;
@@ -490,10 +497,38 @@ export async function inspectInstagramExtraction(
       report.graphql.httpStatus = res.status;
       if (res.ok) {
         const text = await res.text();
+        let parsed: unknown;
         try {
-          report.graphql.raw = JSON.parse(text);
+          parsed = JSON.parse(text);
+          report.graphql.raw = parsed;
         } catch {
           report.graphql.raw = text.slice(0, 4000);
+        }
+        // Pull all top-level keys + any array fields under
+        // xdt_shortcode_media so we can spot the carousel children
+        // field even if its name has changed.
+        const media = (parsed as { data?: { xdt_shortcode_media?: unknown } })
+          ?.data?.xdt_shortcode_media;
+        if (media && typeof media === "object") {
+          const obj = media as Record<string, unknown>;
+          report.graphql.mediaKeys = Object.keys(obj);
+          const arrays: { key: string; count: number }[] = [];
+          for (const [k, v] of Object.entries(obj)) {
+            if (Array.isArray(v)) {
+              arrays.push({ key: k, count: v.length });
+            } else if (
+              v &&
+              typeof v === "object" &&
+              "edges" in (v as Record<string, unknown>) &&
+              Array.isArray((v as { edges: unknown }).edges)
+            ) {
+              arrays.push({
+                key: `${k}.edges`,
+                count: (v as { edges: unknown[] }).edges.length,
+              });
+            }
+          }
+          report.graphql.arrayFields = arrays;
         }
         report.graphql.slides = await fetchInstagramGraphQL(shortcode);
       } else {
