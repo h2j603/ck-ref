@@ -922,11 +922,14 @@ function AddPointDialog({
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  // iOS Korean IME holds onChange until a syllable
-                  // commits — without compositionend the user has to
-                  // tap the input to flush the in-progress char into
-                  // state. Mirror committed value here so search fires
-                  // as soon as the IME finishes a character.
+                  // iOS holds onChange while the IME (Korean) or
+                  // autocorrect (English) is mid-composition. Keep
+                  // state in sync via the per-keystroke composition
+                  // events so search fires through debounce alone,
+                  // no manual commit required.
+                  onCompositionUpdate={(e) =>
+                    setQuery((e.target as HTMLInputElement).value)
+                  }
                   onCompositionEnd={(e) =>
                     setQuery((e.target as HTMLInputElement).value)
                   }
