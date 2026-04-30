@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import {
   FETCH_TIMEOUT_MS,
   OG_USER_AGENT,
+  extractInstagramEmbedImage,
+  instagramEmbedUrl,
   parseOg,
   safeUrl,
 } from "@/lib/og";
@@ -48,5 +50,32 @@ export async function GET(request: Request) {
 
   const html = await res.text();
   const meta = parseOg(html, res.url || target.href);
+
+  // Instagram's og:image is a center-cropped square. Hit the public
+  // /embed/captioned/ page for the same post and use its image instead
+  // — that one keeps the original aspect ratio. Failures here fall
+  // through to the (cropped) og:image we already have, so it's never
+  // worse than the prior behaviour.
+  const embedHref = instagramEmbedUrl(target.href);
+  if (embedHref) {
+    try {
+      const embedRes = await fetch(embedHref, {
+        headers: {
+          "User-Agent": OG_USER_AGENT,
+          Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+        },
+        redirect: "follow",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (embedRes.ok) {
+        const embedHtml = await embedRes.text();
+        const original = extractInstagramEmbedImage(embedHtml);
+        if (original) meta.image = original;
+      }
+    } catch {
+      /* keep cropped og:image */
+    }
+  }
+
   return NextResponse.json({ ...meta, sourceUrl: target.href });
 }
