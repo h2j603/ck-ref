@@ -6,6 +6,7 @@ export const GENRES = [
   "identity",
   "type",
   "packaging",
+  "album",
   "web",
   "motion",
   "exhibition",
