@@ -103,6 +103,13 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           <Input
             value={qDraft}
             onChange={(e) => setQDraft(e.target.value)}
+            // iOS Korean IME holds onChange until a syllable commits;
+            // explicitly mirror the committed value on compositionend so
+            // the URL update fires per character rather than only when
+            // the user taps elsewhere.
+            onCompositionEnd={(e) =>
+              setQDraft((e.target as HTMLInputElement).value)
+            }
             placeholder="검색 — 제목 / 태그 / 디자이너 / 노트"
             className="h-9 pl-8 pr-8 font-mono text-[12px]"
             inputMode="search"

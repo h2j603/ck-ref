@@ -922,6 +922,14 @@ function AddPointDialog({
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  // iOS Korean IME holds onChange until a syllable
+                  // commits — without compositionend the user has to
+                  // tap the input to flush the in-progress char into
+                  // state. Mirror committed value here so search fires
+                  // as soon as the IME finishes a character.
+                  onCompositionEnd={(e) =>
+                    setQuery((e.target as HTMLInputElement).value)
+                  }
                   placeholder={
                     inspirationRefs.length > 0
                       ? "영감 ref 또는 전체 ref에서 검색…"
