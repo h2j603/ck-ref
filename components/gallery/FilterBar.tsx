@@ -103,10 +103,15 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           <Input
             value={qDraft}
             onChange={(e) => setQDraft(e.target.value)}
-            // iOS Korean IME holds onChange until a syllable commits;
-            // explicitly mirror the committed value on compositionend so
-            // the URL update fires per character rather than only when
-            // the user taps elsewhere.
+            // iOS holds onChange while the IME (Korean) or autocorrect
+            // (English) is mid-composition. compositionupdate fires per
+            // keystroke during composition so we can mirror the live
+            // value into state without waiting for an explicit commit.
+            // compositionend keeps it accurate when the syllable
+            // finishes.
+            onCompositionUpdate={(e) =>
+              setQDraft((e.target as HTMLInputElement).value)
+            }
             onCompositionEnd={(e) =>
               setQDraft((e.target as HTMLInputElement).value)
             }

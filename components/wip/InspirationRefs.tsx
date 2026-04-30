@@ -238,12 +238,14 @@ export function InspirationRefs({
                     <Input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      // iOS Korean IME holds onChange until a syllable
-                      // commits — without an explicit compositionend
-                      // handler the user has to tap the input to flush
-                      // the in-progress char into state. Mirror the
-                      // committed value back into query here so search
-                      // fires as soon as the IME finishes a character.
+                      // iOS holds onChange while the IME (Korean) or
+                      // autocorrect (English) is mid-composition.
+                      // compositionupdate fires per keystroke during
+                      // composition so we can mirror the live value
+                      // without waiting for an explicit commit.
+                      onCompositionUpdate={(e) =>
+                        setQuery((e.target as HTMLInputElement).value)
+                      }
                       onCompositionEnd={(e) =>
                         setQuery((e.target as HTMLInputElement).value)
                       }
