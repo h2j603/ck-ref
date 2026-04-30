@@ -252,10 +252,6 @@ export function InspirationRefs({
                       // the primary keystroke source on iOS. React
                       // handlers stay for fallback / controlled value.
                       onChange={(e) => setQuery(e.target.value)}
-                      autoCorrect="off"
-                      autoCapitalize="none"
-                      autoComplete="off"
-                      spellCheck={false}
                       onCompositionEnd={(e) =>
                         setQuery((e.target as HTMLInputElement).value)
                       }

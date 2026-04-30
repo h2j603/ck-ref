@@ -146,10 +146,6 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             // primary keystroke source on iOS. React handlers stay for
             // fallback / controlled value.
             onChange={(e) => setQDraft(e.target.value)}
-            autoCorrect="off"
-            autoCapitalize="none"
-            autoComplete="off"
-            spellCheck={false}
             onCompositionEnd={(e) =>
               setQDraft((e.target as HTMLInputElement).value)
             }
