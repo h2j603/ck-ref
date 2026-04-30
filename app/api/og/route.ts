@@ -56,16 +56,13 @@ export async function GET(request: Request) {
   // including every slide of a carousel post. First entry overrides
   // `image` (the cover); the full list goes back as `images` so the
   // upload form can populate the DropZone with all slides.
-  let images: string[] | undefined;
+  let images: { url: string; is_video?: boolean }[] | undefined;
   const shortcode = instagramShortcode(target.href);
   if (shortcode) {
-    const originals = await fetchInstagramOriginalImages(
-      target.href,
-      shortcode,
-    );
-    if (originals.length > 0) {
-      meta.image = originals[0];
-      if (originals.length > 1) images = originals;
+    const slides = await fetchInstagramOriginalImages(target.href, shortcode);
+    if (slides.length > 0) {
+      meta.image = slides[0].url;
+      if (slides.length > 1) images = slides;
     }
   }
 

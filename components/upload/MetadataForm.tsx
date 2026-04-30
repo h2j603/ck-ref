@@ -125,7 +125,7 @@ export function MetadataForm() {
       const ogRes = await fetch(`/api/og?url=${encodeURIComponent(url)}`);
       const og = (await ogRes.json()) as {
         image?: string | null;
-        images?: string[] | null;
+        images?: { url: string; is_video?: boolean }[] | null;
         title?: string | null;
         sourceUrl?: string;
         error?: string;
@@ -135,17 +135,24 @@ export function MetadataForm() {
       }
       // Carousel posts return the full slide list under `images`. Pull
       // every slide so the user lands in DropZone with all of them and
-      // can drop the ones they don't want before submitting.
-      const targets =
-        og.images && og.images.length > 0 ? og.images : [og.image];
+      // can drop the ones they don't want before submitting. For video
+      // slides Instagram returns the still poster as display_url —
+      // we import it like any other image and prefix the filename with
+      // "video-" so the user knows the moving frames weren't captured.
+      const targets: { url: string; is_video?: boolean }[] =
+        og.images && og.images.length > 0
+          ? og.images
+          : [{ url: og.image }];
 
       const fetched: UploadFile[] = [];
       const failures: string[] = [];
+      let videoSlideCount = 0;
       for (let i = 0; i < targets.length; i += 1) {
-        const src = targets[i];
+        const slide = targets[i];
+        if (slide.is_video) videoSlideCount += 1;
         try {
           const imgRes = await fetch(
-            `/api/og/image?url=${encodeURIComponent(src)}`,
+            `/api/og/image?url=${encodeURIComponent(slide.url)}`,
           );
           if (!imgRes.ok) {
             const data = (await imgRes.json().catch(() => null)) as
@@ -156,7 +163,8 @@ export function MetadataForm() {
           const blob = await imgRes.blob();
           const ct = blob.type || "image/jpeg";
           const ext = ct.split("/")[1]?.split(";")[0] || "jpg";
-          const name = `imported-${Date.now()}-${i + 1}.${ext}`;
+          const prefix = slide.is_video ? "video-poster" : "imported";
+          const name = `${prefix}-${Date.now()}-${i + 1}.${ext}`;
           const file = new File([blob], name, { type: ct });
           const probed = await probeImage(file);
           fetched.push({
@@ -186,11 +194,16 @@ export function MetadataForm() {
       setFiles((prev) => [...prev, ...fetched]);
       if (!title.trim() && og.title) setTitle(og.title);
       if (og.sourceUrl) setSourceUrl(og.sourceUrl);
+      const notes: string[] = [];
       if (failures.length > 0) {
-        setImportError(
-          `일부 슬라이드를 못 가져왔어요 (${failures.length}장).`,
+        notes.push(`못 가져온 슬라이드 ${failures.length}장`);
+      }
+      if (videoSlideCount > 0) {
+        notes.push(
+          `비디오 ${videoSlideCount}장은 정지 컷(포스터)으로 들어왔어요`,
         );
       }
+      if (notes.length > 0) setImportError(notes.join(" · "));
     } catch (err) {
       setImportError(extractErrorMessage(err));
     } finally {
