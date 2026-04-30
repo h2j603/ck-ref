@@ -2,7 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,12 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     setLastQParam(qParam);
     setQDraft(qParam);
   }
+  // We also keep a live ref to the DOM input. iOS holds onChange in
+  // composition state during autocorrect / IME, which means qDraft can
+  // be one keystroke behind the visible value when the user presses
+  // Enter — that's the "Enter twice" bug. submitSearch reads the ref
+  // instead of trusting state.
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   function update(next: Record<string, string | string[] | null>) {
     const sp = new URLSearchParams(params.toString());
@@ -85,7 +91,10 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = qDraft.trim();
+    // Live DOM value beats React state — see searchInputRef comment.
+    const live = searchInputRef.current?.value ?? qDraft;
+    const trimmed = live.trim();
+    if (trimmed !== qDraft) setQDraft(trimmed);
     update({ q: trimmed || null });
   }
 
@@ -101,12 +110,15 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
           />
           <Input
+            ref={searchInputRef}
             value={qDraft}
+            // See PositioningMap for the iOS rationale: onInput catches
+            // the composition updates that onChange skips on Safari;
+            // composition / keyup / blur fall through as final commit.
             onChange={(e) => setQDraft(e.target.value)}
-            // iOS Safari composition handling — see PositioningMap for
-            // the fuller comment. Disable auto-correct / cap / spellcheck
-            // so search inputs never enter composition state, plus
-            // keyup/blur fallbacks for swipe-to-type.
+            onInput={(e) =>
+              setQDraft((e.currentTarget as HTMLInputElement).value)
+            }
             autoCorrect="off"
             autoCapitalize="none"
             autoComplete="off"
