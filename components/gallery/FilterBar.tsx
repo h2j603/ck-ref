@@ -103,15 +103,14 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
           <Input
             value={qDraft}
             onChange={(e) => setQDraft(e.target.value)}
-            // iOS Safari has a long-standing bug where React's onChange
-            // synthetic doesn't fire reliably during IME / autocorrect
-            // composition. Mirroring the live input value on every
-            // other event we can reach (composition updates, key
-            // release, blur) is the documented workaround across the
-            // React + RN issues.
-            onCompositionUpdate={(e) =>
-              setQDraft((e.target as HTMLInputElement).value)
-            }
+            // iOS Safari composition handling — see PositioningMap for
+            // the fuller comment. Disable auto-correct / cap / spellcheck
+            // so search inputs never enter composition state, plus
+            // keyup/blur fallbacks for swipe-to-type.
+            autoCorrect="off"
+            autoCapitalize="none"
+            autoComplete="off"
+            spellCheck={false}
             onCompositionEnd={(e) =>
               setQDraft((e.target as HTMLInputElement).value)
             }
