@@ -330,8 +330,17 @@ async function fetchInstagramIframely(
       rel?: string[];
       media?: { width?: number; height?: number } | null;
     };
-    const json = (await res.json()) as { links?: Link[] };
-    const links = json.links ?? [];
+    // Iframely returns `links` as an object keyed by category
+    // ("app", "image", "thumbnail", "player", ...), each value an array.
+    // (Older docs show it as a flat array — handle both shapes.)
+    const json = (await res.json()) as {
+      links?: Link[] | Record<string, Link[]>;
+    };
+    const links: Link[] = Array.isArray(json.links)
+      ? json.links
+      : json.links && typeof json.links === "object"
+        ? Object.values(json.links).flat()
+        : [];
 
     // Iframely tags carousel slides with rel containing "image" (or
     // "thumbnail" for the cover). Player rel marks the embeddable

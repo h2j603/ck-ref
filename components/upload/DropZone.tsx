@@ -111,6 +111,75 @@ export function DropZone({
     }
     setUrlBusy(true);
     try {
+      // Instagram (and any URL whose `/api/og` returns an `images`
+      // array) gets the carousel-aware path: hit /api/og to discover
+      // every slide, then download each via /api/og/image. This
+      // matches the MetadataForm "Import" button behavior so the
+      // single URL field on this DropZone Just Works for IG too.
+      const isInstagram = /(?:^|\.)instagram\.com$/i.test(parsed.hostname);
+      const useOgChain = isInstagram && genre !== "web";
+      if (useOgChain) {
+        const ogRes = await fetch(
+          `/api/og?url=${encodeURIComponent(parsed.href)}`,
+        );
+        const og = (await ogRes.json().catch(() => ({}))) as {
+          image?: string | null;
+          images?: { url: string; is_video?: boolean }[] | null;
+          title?: string | null;
+          error?: string;
+        };
+        if (!ogRes.ok || !og.image) {
+          setUrlError(og.error ?? `이미지를 찾지 못했어요 (${ogRes.status})`);
+          return;
+        }
+        const targets =
+          og.images && og.images.length > 0
+            ? og.images
+            : [{ url: og.image }];
+        const fetched: File[] = [];
+        const failures: number[] = [];
+        for (let i = 0; i < targets.length; i += 1) {
+          const slide = targets[i];
+          try {
+            const imgRes = await fetch(
+              `/api/og/image?url=${encodeURIComponent(slide.url)}`,
+            );
+            if (!imgRes.ok) throw new Error(`slide ${i + 1}`);
+            const blob = await imgRes.blob();
+            const ct =
+              blob.type ||
+              (slide.is_video ? "video/mp4" : "image/jpeg");
+            const ext = extFromMime(ct);
+            const prefix = slide.is_video ? "video" : "imported";
+            fetched.push(
+              new File(
+                [blob],
+                `${prefix}-${parsed.hostname.replace(/[^a-z0-9]+/gi, "-")}-${i + 1}.${ext}`,
+                { type: ct },
+              ),
+            );
+          } catch {
+            failures.push(i + 1);
+          }
+        }
+        if (fetched.length === 0) {
+          setUrlError("이미지를 받아오지 못했어요.");
+          return;
+        }
+        await addFiles(fetched);
+        onUrlFetched?.({
+          url: parsed.href,
+          title: og.title ?? undefined,
+        });
+        if (failures.length > 0) {
+          setUrlError(
+            `${fetched.length}장 가져왔어요. 일부 슬라이드 실패: ${failures.join(", ")}`,
+          );
+        }
+        setUrlInput("");
+        return;
+      }
+
       const mode = genre === "web" ? "screenshot" : "og";
       const res = await fetch(
         `/api/og-thumb?url=${encodeURIComponent(parsed.href)}&mode=${mode}`,
