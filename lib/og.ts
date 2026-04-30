@@ -93,44 +93,74 @@ function looksLikePinterestBoilerplate(title: string): boolean {
 }
 
 // Instagram serves a center-cropped square via og:image regardless of the
-// post's actual aspect ratio. The /embed/captioned/ page, which is
-// publicly accessible without login, embeds the original image at its
-// real proportions inside an EmbeddedMediaImage container.
+// post's actual aspect ratio. The public GraphQL endpoint at
+// /api/graphql returns the post's display_url at its real proportions
+// without needing a login.
 export function isInstagramHost(host: string): boolean {
   return /(?:^|\.)instagram\.com$/i.test(host);
 }
 
-export function instagramEmbedUrl(href: string): string | null {
+export function instagramShortcode(href: string): string | null {
   try {
     const u = new URL(href);
     if (!isInstagramHost(u.host)) return null;
-    // Match /p/<shortcode>/, /reel/<shortcode>/, /tv/<shortcode>/.
-    const m = u.pathname.match(/^\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
-    if (!m) return null;
-    return `https://www.instagram.com/p/${m[1]}/embed/captioned/`;
+    const m = u.pathname.match(/^\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/([^/?#]+)/i);
+    return m?.[1] ?? null;
   } catch {
     return null;
   }
 }
 
-// Pull the original-aspect image URL out of Instagram's embed page. The
-// embed HTML carries the post image as a regular <img> tag (the
-// EmbeddedMediaImage element) plus an og:image of the same source — so
-// we just walk the same meta path and fall back to the first scontent
-// image src if og isn't surfaced.
-export function extractInstagramEmbedImage(html: string): string | null {
-  const head = html.slice(0, Math.min(html.length, 256 * 1024));
-  const og =
-    metaContent(head, "og:image") ??
-    metaContent(head, "og:image:url") ??
-    metaContent(head, "og:image:secure_url");
-  if (og && !/\/p\/.*\/media\//.test(og)) return og;
-  // Fallback: scrape the first scontent image src — this is the rendered
-  // post image inside the embed iframe and respects the original ratio.
-  const m = head.match(
-    /<img[^>]+src=["'](https?:\/\/[^"']*scontent[^"']+)["']/i,
-  );
-  return m?.[1] ?? null;
+// Instagram's public web app id — the same value the in-browser code
+// sends. doc_id is the persisted GraphQL query for "media via shortcode";
+// it occasionally rotates but the value below has been stable for the
+// scraper community in 2025-2026.
+const IG_APP_ID = "936619743392459";
+const IG_SHORTCODE_DOC_ID = "10015901848480474";
+
+export async function fetchInstagramDisplayUrl(
+  shortcode: string,
+): Promise<string | null> {
+  try {
+    const body = new URLSearchParams({
+      variables: JSON.stringify({ shortcode }),
+      doc_id: IG_SHORTCODE_DOC_ID,
+    });
+    const res = await fetch("https://www.instagram.com/api/graphql", {
+      method: "POST",
+      headers: {
+        "User-Agent": OG_USER_AGENT,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-IG-App-ID": IG_APP_ID,
+        "X-FB-LSD": "AVqbxe3J_YA",
+        "X-ASBD-ID": "129477",
+        Accept: "*/*",
+      },
+      body: body.toString(),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: {
+        xdt_shortcode_media?: {
+          display_url?: string | null;
+          display_resources?: { src?: string | null }[];
+        } | null;
+      };
+    };
+    const media = json.data?.xdt_shortcode_media;
+    if (!media) return null;
+    if (media.display_url) return media.display_url;
+    const resources = media.display_resources ?? [];
+    // Highest-resolution candidate sits last in display_resources.
+    for (let i = resources.length - 1; i >= 0; i -= 1) {
+      const src = resources[i]?.src;
+      if (src) return src;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function parseOg(html: string, baseHref: string): OgMeta {
