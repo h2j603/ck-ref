@@ -234,15 +234,14 @@ export function InspirationRefs({
                     <Input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      // iOS Safari has a long-standing bug where the
-                      // React onChange synthetic doesn't fire reliably
-                      // during IME / autocorrect composition. Mirroring
-                      // the live input value on every other event we
-                      // can reach (composition updates, key release,
-                      // blur) is the documented workaround.
-                      onCompositionUpdate={(e) =>
-                        setQuery((e.target as HTMLInputElement).value)
-                      }
+                      // iOS Safari composition handling — see PositioningMap
+                      // for the fuller comment. Disable auto-correct / cap /
+                      // spellcheck so search inputs never enter composition,
+                      // and keep keyup/blur fallbacks for swipe-to-type.
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                      spellCheck={false}
                       onCompositionEnd={(e) =>
                         setQuery((e.target as HTMLInputElement).value)
                       }

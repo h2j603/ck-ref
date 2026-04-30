@@ -917,15 +917,20 @@ function AddPointDialog({
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  // iOS Safari has a long-standing bug where the React
-                  // onChange synthetic doesn't fire reliably during IME
-                  // / autocorrect composition. Mirroring the live input
-                  // value on every other event we can reach (composition
-                  // updates, key release, blur) is the documented
-                  // workaround across the React + RN issues.
-                  onCompositionUpdate={(e) =>
-                    setQuery((e.target as HTMLInputElement).value)
-                  }
+                  // iOS Safari puts text inputs into a composition state
+                  // for autocorrect (English) and IME (Korean), and React
+                  // onChange doesn't fire reliably mid-composition. Two
+                  // layers of defence:
+                  //   1. Tell iOS to skip auto-correct / auto-cap /
+                  //      spellcheck entirely so search inputs never
+                  //      enter composition in the first place.
+                  //   2. Mirror the live value on key release / blur /
+                  //      compositionend in case something still slips
+                  //      through (e.g. swipe-to-type).
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
                   onCompositionEnd={(e) =>
                     setQuery((e.target as HTMLInputElement).value)
                   }
