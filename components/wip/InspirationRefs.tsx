@@ -238,6 +238,15 @@ export function InspirationRefs({
                     <Input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
+                      // iOS Korean IME holds onChange until a syllable
+                      // commits — without an explicit compositionend
+                      // handler the user has to tap the input to flush
+                      // the in-progress char into state. Mirror the
+                      // committed value back into query here so search
+                      // fires as soon as the IME finishes a character.
+                      onCompositionEnd={(e) =>
+                        setQuery((e.target as HTMLInputElement).value)
+                      }
                       placeholder="제목·태그·OCR·디자이너로 검색…"
                     />
                     {searching || (query.trim() && query !== debouncedQuery) ? (
