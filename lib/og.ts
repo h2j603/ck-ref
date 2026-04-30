@@ -119,23 +119,63 @@ const IG_BROWSER_UA =
 const IG_APP_ID = "936619743392459";
 const IG_SHORTCODE_DOC_ID = "10015901848480474";
 
-// Pull every `display_url` JSON value out of the page HTML, in order.
-// For carousel posts this is one URL per slide. The browser-UA fetch
-// below returns the React tree where "display_url" appears inline as
-// JSON-escaped strings, so a global regex preserves order without us
-// having to parse the whole blob.
+// Walk a freshly-served Set-Cookie header for the csrftoken — Instagram
+// sets it on the first GET, and the GraphQL POST below 4xx's without
+// it. Fetching the homepage (small payload) is cheaper than the post
+// page and gets us a token reliably.
+async function fetchInstagramCsrfToken(): Promise<string | null> {
+  try {
+    const res = await fetch("https://www.instagram.com/", {
+      headers: {
+        "User-Agent": IG_BROWSER_UA,
+        Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const setCookie =
+      res.headers.get("set-cookie") ??
+      // some runtimes lower-case Set-Cookie, others split it
+      res.headers.get("Set-Cookie") ??
+      "";
+    const m = setCookie.match(/csrftoken=([^;,\s]+)/i);
+    return m?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Instagram returns image URLs in two shapes inside the inline JSON of
+// a public post page:
+//   1. "display_url":"https://...scontent..."
+//   2. "image_versions2":{"candidates":[{"url":"https://...","width":...}]}
+// `display_url` covers the carousel cover but is sometimes the only
+// entry served to logged-out viewers. The image_versions2 candidates
+// list gives us the highest-resolution variants per slide, including
+// non-square ratios. Walk both paths and dedupe.
 function extractDisplayUrlsFromHtml(html: string): string[] {
-  const re = /"display_url":\s*"((?:[^"\\]|\\.)*)"/g;
   const out: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
+  const seen = new Set<string>();
+  function push(raw: string) {
     try {
-      const url = JSON.parse(`"${m[1]}"`) as string;
-      if (typeof url === "string" && !out.includes(url)) out.push(url);
+      const url = JSON.parse(`"${raw}"`) as string;
+      if (typeof url !== "string") return;
+      if (seen.has(url)) return;
+      seen.add(url);
+      out.push(url);
     } catch {
-      /* skip malformed entry */
+      /* skip malformed */
     }
   }
+  const displayRe = /"display_url":\s*"((?:[^"\\]|\\.)*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = displayRe.exec(html)) !== null) push(m[1]);
+  // image_versions2.candidates[].url — first (highest-res) candidate
+  // wins per slide. Pattern is loose because the JSON is minified
+  // without consistent whitespace.
+  const candidatesRe =
+    /"image_versions2":\s*\{[^}]*?"candidates":\s*\[\s*\{[^}]*?"url":\s*"((?:[^"\\]|\\.)*)"/g;
+  while ((m = candidatesRe.exec(html)) !== null) push(m[1]);
   return out;
 }
 
@@ -161,20 +201,24 @@ async function fetchInstagramHtmlAsBrowser(
   }
 }
 
-// Each carousel slide we surface to the upload form. The video flag
-// lets the UI hint that the imported file is the still poster, not
-// the moving frames — Instagram returns the same display_url shape
-// for both, just with __typename === "GraphVideo" / is_video for the
-// video slide.
+// Each carousel slide we surface to the upload form. For video slides
+// `url` is the actual mp4 (preferred when available) so the upload
+// form can store the moving frames; `poster` carries the still image
+// for cards / grid thumbnails. Image slides leave is_video false and
+// poster undefined.
 export type InstagramSlide = {
   url: string;
   is_video?: boolean;
+  poster?: string;
 };
 
 async function fetchInstagramGraphQL(
   shortcode: string,
 ): Promise<InstagramSlide[]> {
   try {
+    // GraphQL POST without a csrftoken returns 401 from Vercel egress
+    // IPs in 2026. Fetch one cheaply first.
+    const csrf = await fetchInstagramCsrfToken();
     const body = new URLSearchParams({
       variables: JSON.stringify({ shortcode }),
       doc_id: IG_SHORTCODE_DOC_ID,
@@ -187,7 +231,15 @@ async function fetchInstagramGraphQL(
         "X-IG-App-ID": IG_APP_ID,
         "X-FB-LSD": "AVqbxe3J_YA",
         "X-ASBD-ID": "129477",
+        ...(csrf
+          ? {
+              "X-CSRFToken": csrf,
+              Cookie: `csrftoken=${csrf}`,
+            }
+          : {}),
         Accept: "*/*",
+        Referer: "https://www.instagram.com/",
+        Origin: "https://www.instagram.com",
       },
       body: body.toString(),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -196,6 +248,7 @@ async function fetchInstagramGraphQL(
     type Node = {
       __typename?: string;
       is_video?: boolean | null;
+      video_url?: string | null;
       display_url?: string | null;
       display_resources?: { src?: string | null }[];
     };
@@ -213,7 +266,7 @@ async function fetchInstagramGraphQL(
     const media = json.data?.xdt_shortcode_media;
     if (!media) return [];
 
-    function pickUrl(node: Node | undefined | null): string | null {
+    function pickPoster(node: Node | undefined | null): string | null {
       if (!node) return null;
       if (node.display_url) return node.display_url;
       const resources = node.display_resources ?? [];
@@ -226,19 +279,30 @@ async function fetchInstagramGraphQL(
     function isVideo(node: Node | undefined | null): boolean {
       return Boolean(node?.is_video) || node?.__typename === "GraphVideo";
     }
+    function toSlide(node: Node | undefined | null): InstagramSlide | null {
+      if (!node) return null;
+      const poster = pickPoster(node);
+      if (isVideo(node)) {
+        const url = node.video_url ?? poster;
+        if (!url) return null;
+        return {
+          url,
+          is_video: true,
+          ...(node.video_url && poster ? { poster } : {}),
+        };
+      }
+      return poster ? { url: poster } : null;
+    }
 
     const children = media.edge_sidecar_to_children?.edges ?? [];
     if (children.length > 0) {
       return children
-        .map<InstagramSlide | null>((edge) => {
-          const url = pickUrl(edge.node);
-          return url ? { url, is_video: isVideo(edge.node) } : null;
-        })
+        .map((edge) => toSlide(edge.node))
         .filter((s): s is InstagramSlide => s !== null);
     }
 
-    const single = pickUrl(media);
-    return single ? [{ url: single, is_video: isVideo(media) }] : [];
+    const single = toSlide(media);
+    return single ? [single] : [];
   } catch {
     return [];
   }
