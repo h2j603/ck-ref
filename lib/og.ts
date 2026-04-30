@@ -308,6 +308,58 @@ async function fetchInstagramGraphQL(
   }
 }
 
+// Iframely returns structured media for Instagram posts including every
+// carousel slide at original aspect. Free tier is 10K/mo with an API
+// key set as IFRAMELY_KEY in env. Returns [] silently when the key is
+// absent or the call fails so the chain falls back gracefully.
+async function fetchInstagramIframely(
+  href: string,
+): Promise<InstagramSlide[]> {
+  const key = process.env.IFRAMELY_KEY;
+  if (!key) return [];
+  try {
+    const url = `https://iframe.ly/api/iframely?url=${encodeURIComponent(href)}&api_key=${encodeURIComponent(key)}&omit_css=1&omit_script=1`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    type Link = {
+      href?: string;
+      type?: string;
+      rel?: string[];
+      media?: { width?: number; height?: number } | null;
+    };
+    const json = (await res.json()) as { links?: Link[] };
+    const links = json.links ?? [];
+
+    // Iframely tags carousel slides with rel containing "image" (or
+    // "thumbnail" for the cover). Player rel marks the embeddable
+    // video. Walk in order, dedupe by href, prefer non-square media.
+    const slides: InstagramSlide[] = [];
+    const seen = new Set<string>();
+    for (const link of links) {
+      const h = link.href;
+      if (!h || seen.has(h)) continue;
+      const rels = link.rel ?? [];
+      const type = link.type ?? "";
+      if (type.startsWith("video/")) {
+        seen.add(h);
+        slides.push({ url: h, is_video: true });
+      } else if (
+        type.startsWith("image/") &&
+        (rels.includes("image") || rels.includes("thumbnail"))
+      ) {
+        seen.add(h);
+        slides.push({ url: h });
+      }
+    }
+    return slides;
+  } catch {
+    return [];
+  }
+}
+
 async function fetchMicrolinkImage(href: string): Promise<string | null> {
   try {
     // Microlink's free tier (no key) returns proper Instagram media
@@ -332,20 +384,25 @@ const MAX_INSTAGRAM_SLIDES = 20;
 
 // Layered fallback returning every slide, with video flag preserved.
 //
-//   1. Public web-app GraphQL — structured edge_sidecar_to_children
-//      walk, the only path that reliably yields every slide of a
-//      carousel + the per-node is_video flag.
-//   2. Re-fetch the post page with a browser UA and grep all
-//      `display_url` values from the inline JSON, in order. Catches
-//      cases where the GraphQL endpoint is rate-limited or has
-//      rotated its doc_id; carousel coverage may be partial.
-//   3. Microlink free tier — single image, no carousel, no video flag.
+//   1. Iframely — when IFRAMELY_KEY is set. Their resolver runs from
+//      residential infra so it survives Instagram's anti-bot, returns
+//      structured carousel slides + video media at original aspect.
+//   2. Public web-app GraphQL — structured edge_sidecar_to_children
+//      walk. Often 401's from cloud egress IPs but cheap to try.
+//   3. Re-fetch the post page with a browser UA and grep all
+//      `display_url` values from the inline JSON, in order. Logged-out
+//      HTML usually only carries the first slide.
+//   4. Microlink free tier — single image, no carousel, no video flag.
 //
 // First non-empty list wins.
 export async function fetchInstagramOriginalImages(
   href: string,
   shortcode: string,
 ): Promise<InstagramSlide[]> {
+  const fromIframely = await fetchInstagramIframely(href);
+  if (fromIframely.length > 0)
+    return fromIframely.slice(0, MAX_INSTAGRAM_SLIDES);
+
   const fromGraph = await fetchInstagramGraphQL(shortcode);
   if (fromGraph.length > 0) return fromGraph.slice(0, MAX_INSTAGRAM_SLIDES);
 
