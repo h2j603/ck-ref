@@ -46,7 +46,7 @@ type RefRow = Ref & {
 const REF_COLUMNS = `
   id, title, year, source_url,
   image_path, image_width, image_height,
-  genre, medium, languages, tags,
+  genres, medium, languages, tags,
   color_hex, color_hue, ocr_text,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) ),
@@ -169,7 +169,7 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
 
   if (searchIds) query = query.in("id", [...searchIds]);
   if (filter.userKey) query = query.eq("created_by", filter.userKey);
-  if (filter.genre) query = query.eq("genre", filter.genre);
+  if (filter.genre) query = query.contains("genres", [filter.genre]);
   if (filter.medium) query = query.eq("medium", filter.medium);
   if (filter.language) query = query.contains("languages", [filter.language]);
   if (filter.tags && filter.tags.length > 0) {
@@ -818,7 +818,7 @@ export async function fetchSimilarRefs(
   const { data: current, error } = await supabase
     .from("refs")
     .select(
-      "id, tags, color_hue, genre, medium, ref_designers(designer_id), embedding",
+      "id, tags, color_hue, genres, medium, ref_designers(designer_id), embedding",
     )
     .eq("id", refId)
     .maybeSingle();
@@ -827,7 +827,7 @@ export async function fetchSimilarRefs(
     id: string;
     tags: string[] | null;
     color_hue: number | null;
-    genre: string | null;
+    genres: string[] | null;
     medium: string | null;
     ref_designers: { designer_id: string }[] | null;
     embedding: number[] | string | null;
@@ -885,7 +885,10 @@ export async function fetchSimilarRefs(
       score += sharedDesigners * 5;
       const sharedTags = r.tags.filter((t) => tags.includes(t)).length;
       score += sharedTags * 2;
-      if (r.genre && r.genre === cur.genre) score += 1;
+      const sharedGenres = r.genres.filter((g) =>
+        (cur.genres ?? []).includes(g),
+      ).length;
+      score += sharedGenres;
       if (r.medium && r.medium === cur.medium) score += 1;
       if (
         cur.color_hue !== null &&
@@ -967,7 +970,7 @@ export async function fetchRefRatings(refId: string) {
 const REF_COLUMNS_FOR_BOARD = `
   id, title, year, source_url,
   image_path, image_width, image_height,
-  genre, medium, languages, tags,
+  genres, medium, languages, tags,
   color_hex, color_hue, ocr_text,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) ),
