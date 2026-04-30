@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   FETCH_TIMEOUT_MS,
   OG_USER_AGENT,
-  fetchInstagramOriginalImage,
+  fetchInstagramOriginalImages,
   instagramShortcode,
   parseOg,
   safeUrl,
@@ -51,18 +51,27 @@ export async function GET(request: Request) {
   const html = await res.text();
   const meta = parseOg(html, res.url || target.href);
 
-  // Instagram's og:image is a center-cropped square. Try a layered
-  // fallback (page HTML scrape → GraphQL → Microlink) to recover the
-  // original-aspect image. Silent fall-through if all of them fail —
-  // we keep whatever cropped og:image we already had.
+  // Instagram's og:image is a center-cropped square AND only the cover.
+  // Run our layered fallback to recover the original-aspect images,
+  // including every slide of a carousel post. First entry overrides
+  // `image` (the cover); the full list goes back as `images` so the
+  // upload form can populate the DropZone with all slides.
+  let images: string[] | undefined;
   const shortcode = instagramShortcode(target.href);
   if (shortcode) {
-    const original = await fetchInstagramOriginalImage(
+    const originals = await fetchInstagramOriginalImages(
       target.href,
       shortcode,
     );
-    if (original) meta.image = original;
+    if (originals.length > 0) {
+      meta.image = originals[0];
+      if (originals.length > 1) images = originals;
+    }
   }
 
-  return NextResponse.json({ ...meta, sourceUrl: target.href });
+  return NextResponse.json({
+    ...meta,
+    images,
+    sourceUrl: target.href,
+  });
 }
