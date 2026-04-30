@@ -40,7 +40,6 @@ export function InspirationRefs({
   const [linked, setLinked] = useState<RefLite[]>(initial);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [candidates, setCandidates] = useState<RefLite[]>([]);
   const [searching, setSearching] = useState(false);
   const [pending, setPending] = useState<RefLite | null>(null);
@@ -53,18 +52,15 @@ export function InspirationRefs({
     [linked],
   );
 
-  // Debounce so we don't fan out 7 supabase requests per keystroke once
-  // the broad search picks up — same pattern as the positioning map dialog.
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedQuery(query), 250);
-    return () => window.clearTimeout(id);
-  }, [query]);
-
+  // Pre-OCR this dialog fired a single ilike(title) on every keystroke
+  // and that's the responsiveness the user remembers. Keep the broader
+  // search dimensions but skip the debounce indirection so each
+  // keystroke flows straight into the search.
   useEffect(() => {
     if (!open || pending) return;
     let cancelled = false;
     void (async () => {
-      const q = debouncedQuery.trim();
+      const q = query.trim();
       // Empty query — show recent refs as baseline candidates.
       if (!q) {
         const { data, error } = await supabase
@@ -108,7 +104,7 @@ export function InspirationRefs({
     return () => {
       cancelled = true;
     };
-  }, [supabase, open, debouncedQuery, linkedIds, pending]);
+  }, [supabase, open, query, linkedIds, pending]);
 
   function startAdd(ref: RefLite) {
     setReason("");
@@ -238,20 +234,27 @@ export function InspirationRefs({
                     <Input
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      // iOS holds onChange while the IME (Korean) or
-                      // autocorrect (English) is mid-composition.
-                      // compositionupdate fires per keystroke during
-                      // composition so we can mirror the live value
-                      // without waiting for an explicit commit.
+                      // iOS Safari has a long-standing bug where the
+                      // React onChange synthetic doesn't fire reliably
+                      // during IME / autocorrect composition. Mirroring
+                      // the live input value on every other event we
+                      // can reach (composition updates, key release,
+                      // blur) is the documented workaround.
                       onCompositionUpdate={(e) =>
                         setQuery((e.target as HTMLInputElement).value)
                       }
                       onCompositionEnd={(e) =>
                         setQuery((e.target as HTMLInputElement).value)
                       }
+                      onKeyUp={(e) =>
+                        setQuery((e.currentTarget as HTMLInputElement).value)
+                      }
+                      onBlur={(e) =>
+                        setQuery((e.currentTarget as HTMLInputElement).value)
+                      }
                       placeholder="제목·태그·OCR·디자이너로 검색…"
                     />
-                    {searching || (query.trim() && query !== debouncedQuery) ? (
+                    {searching ? (
                       <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
                         <div className="size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
                       </div>
