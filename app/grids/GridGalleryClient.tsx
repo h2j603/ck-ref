@@ -281,7 +281,7 @@ function GridCard({
           onClick={onDelete}
           disabled={deleting}
           aria-label="delete"
-          className="absolute right-2 top-2 z-10 rounded-full bg-background/90 p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:text-destructive disabled:opacity-50"
+          className="absolute right-2 top-2 z-10 rounded-full bg-background/90 p-1.5 text-muted-foreground shadow-sm hover:text-destructive disabled:opacity-50"
         >
           <Trash2 className="size-3.5" />
         </button>
