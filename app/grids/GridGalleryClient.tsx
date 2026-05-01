@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -252,6 +252,88 @@ function Chip({
   );
 }
 
+// Render the grid lines alone (no image, no overlay) onto a canvas and
+// trigger a PNG download. Background stays transparent so the export is
+// useful as an overlay; stroke follows the grid's own light/dark color.
+function downloadGridPng(g: RefGrid, w: number, h: number) {
+  const targetW = 1600;
+  const targetH = Math.max(1, Math.round(targetW * (h / w)));
+  const canvas = document.createElement("canvas");
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const stroke = g.color === "light" ? "#ffffff" : "#000000";
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2;
+
+  const left = Number(g.margin_left) * targetW;
+  const right = Number(g.margin_right) * targetW;
+  const top = Number(g.margin_top) * targetH;
+  const bottom = Number(g.margin_bottom) * targetH;
+  const innerW = targetW - left - right;
+  const innerH = targetH - top - bottom;
+
+  ctx.strokeRect(left, top, innerW, innerH);
+
+  let vLines: number[] = [];
+  if (g.grid_type === "columnar" || g.grid_type === "modular") {
+    const gx = Number(g.gutter_x) * targetW;
+    const colW = (innerW - (g.cols - 1) * gx) / g.cols;
+    for (let i = 1; i < g.cols; i += 1) {
+      const x = left + i * colW + (i - 1) * gx;
+      vLines.push(x);
+      if (gx > 0) vLines.push(x + gx);
+    }
+  }
+  if (g.grid_type === "custom")
+    vLines = g.custom_v.map((p) => Number(p) * targetW);
+
+  let hLines: number[] = [];
+  if (g.grid_type === "modular") {
+    const gy = Number(g.gutter_y) * targetH;
+    const rowH = (innerH - (g.rowscount - 1) * gy) / g.rowscount;
+    for (let i = 1; i < g.rowscount; i += 1) {
+      const y = top + i * rowH + (i - 1) * gy;
+      hLines.push(y);
+      if (gy > 0) hLines.push(y + gy);
+    }
+  }
+  if (g.grid_type === "custom")
+    hLines = g.custom_h.map((p) => Number(p) * targetH);
+
+  for (const x of vLines) {
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, targetH - bottom);
+    ctx.stroke();
+  }
+  for (const y of hLines) {
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(targetW - right, y);
+    ctx.stroke();
+  }
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const slug = (g.label ?? g.grid_type)
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+    a.href = url;
+    a.download = `grid-${slug || g.id.slice(0, 8)}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, "image/png");
+}
+
 function GridCard({
   entry,
   canDelete,
@@ -310,17 +392,28 @@ function GridCard({
 
   return (
     <div className="group relative flex flex-col gap-2">
-      {canDelete ? (
+      <div className="absolute right-2 top-2 z-10 flex gap-1">
         <button
           type="button"
-          onClick={onDelete}
-          disabled={deleting}
-          aria-label="delete"
-          className="absolute right-2 top-2 z-10 rounded-full bg-background/90 p-1.5 text-muted-foreground shadow-sm hover:text-destructive disabled:opacity-50"
+          onClick={() => downloadGridPng(g, w, h)}
+          aria-label="download grid as png"
+          title="PNG로 저장"
+          className="rounded-full bg-background/90 p-1.5 text-muted-foreground shadow-sm hover:text-foreground"
         >
-          <Trash2 className="size-3.5" />
+          <Download className="size-3.5" />
         </button>
-      ) : null}
+        {canDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            aria-label="delete"
+            className="rounded-full bg-background/90 p-1.5 text-muted-foreground shadow-sm hover:text-destructive disabled:opacity-50"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
       <Link
         href={source_ref ? `/ref/${source_ref.id}` : "#"}
         className="relative block w-full overflow-hidden rounded-md bg-muted"
