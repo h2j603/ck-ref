@@ -36,6 +36,11 @@ type SearchParams = Promise<{
   grid?: string;
 }>;
 
+// Index page size — small enough that initial render is fast (one
+// supabase round trip with a generous limit), big enough that the user
+// rarely needs to click "더 보기" on a typical session.
+const REFS_PAGE_SIZE = 80;
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -75,7 +80,7 @@ export default async function HomePage({
     todayEvents,
     projects,
   ] = await Promise.all([
-    fetchRefs(filter).catch(() => []),
+    fetchRefs(filter, REFS_PAGE_SIZE).catch(() => []),
     fetchAllTags().catch(() => []),
     me && isProfileKey(me)
       ? countRefsByUserSince(me, startOfThisWeekUtcIso()).catch(() => 1)
@@ -114,7 +119,12 @@ export default async function HomePage({
       <Suspense fallback={null}>
         <FilterBar allTags={tags} />
       </Suspense>
-      <MasonryGrid refs={refs} sort={sort ?? "latest"} />
+      <MasonryGrid
+        refs={refs}
+        sort={sort ?? "latest"}
+        filter={filter}
+        pageSize={REFS_PAGE_SIZE}
+      />
     </div>
   );
 }
