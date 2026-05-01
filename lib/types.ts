@@ -31,6 +31,7 @@ export const REF_SORTS = [
   "rating",
   "year_desc",
   "year_asc",
+  "shuffle",
 ] as const;
 export type RefSort = (typeof REF_SORTS)[number];
 
