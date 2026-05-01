@@ -957,16 +957,30 @@ function FieldGroup({
 function NoteContent({ note }: { note: Note }) {
   return (
     <div className="flex flex-col gap-3">
+      {note.facet ? (
+        // 분석 측면 pill — 헤더 라인 외에도 본문 위에 한 번 더 노출해서
+        // 노트 카드를 훑을 때 어떤 측면 얘기인지 즉시 보이게.
+        <div className="flex flex-wrap gap-1.5">
+          <FacetBadge facet={note.facet} label={note.facet_label} />
+        </div>
+      ) : null}
       {note.pros ? (
         <Section label="장점" accent="text-emerald-600" content={note.pros} />
       ) : null}
       {note.cons ? (
-        <Section label="단점" accent="text-rose-600" content={note.cons} />
+        <Section
+          label="단점·개선 아이디어"
+          accent="text-rose-600"
+          content={note.cons}
+        />
       ) : null}
       {note.body ? (
-        <div className="prose prose-sm prose-neutral max-w-none text-sm leading-relaxed">
-          <MarkdownWithMentions text={note.body} />
-        </div>
+        // 메모도 라벨을 달아서 위 단점 섹션과 시각적으로 구분.
+        <Section
+          label="메모"
+          accent="text-muted-foreground"
+          content={note.body}
+        />
       ) : null}
       {note.image_paths && note.image_paths.length > 0 ? (
         <NoteImageStrip paths={note.image_paths} />
