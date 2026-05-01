@@ -82,6 +82,35 @@ export type RefWithDesigners = Ref & {
   extra_image_count: number;
 };
 
+export const REF_GRID_TYPES = [
+  "columnar",
+  "modular",
+  "manuscript",
+  "custom",
+] as const;
+export type RefGridType = (typeof REF_GRID_TYPES)[number];
+
+export type RefGrid = {
+  id: string;
+  ref_id: string;
+  grid_type: RefGridType;
+  cols: number;
+  rowscount: number;
+  margin_top: number;
+  margin_right: number;
+  margin_bottom: number;
+  margin_left: number;
+  gutter_x: number;
+  gutter_y: number;
+  baseline: number | null;
+  custom_v: number[];
+  custom_h: number[];
+  label: string | null;
+  notes: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
 export type RefRating = {
   ref_id: string;
   user_key: string;
