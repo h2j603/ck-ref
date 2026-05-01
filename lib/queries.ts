@@ -869,6 +869,15 @@ export type GridGalleryEntry = {
     image_height: number | null;
     genres: string[];
   } | null;
+  // The image the grid was actually drawn over — cover when
+  // grid.image_path is null/the cover, otherwise the matching extra
+  // image. The gallery should preview against this so the structure
+  // visibly aligns with what the analyzer captured.
+  preview_image: {
+    path: string;
+    width: number | null;
+    height: number | null;
+  } | null;
   applied_to_refs: number;
   applied_to_projects: number;
   applied_refs: { id: string; title: string | null; image_path: string }[];
@@ -887,12 +896,27 @@ export async function fetchGridGallery(): Promise<GridGalleryEntry[]> {
 
   const refIds = [...new Set(originals.map((g) => g.ref_id as string))];
   const ids = originals.map((g) => g.id as string);
+  // Distinct extra-image paths used by these grids — only the ones
+  // pointing somewhere other than the cover.
+  const extraImagePaths = [
+    ...new Set(
+      originals
+        .map((g) => g.image_path as string | null)
+        .filter((p): p is string => Boolean(p)),
+    ),
+  ];
 
-  const [refsRes, copiesRes, projectCopiesRes] = await Promise.all([
+  const [refsRes, refImagesRes, copiesRes, projectCopiesRes] = await Promise.all([
     supabase
       .from("refs")
       .select("id, title, image_path, image_width, image_height, genres")
       .in("id", refIds),
+    extraImagePaths.length > 0
+      ? supabase
+          .from("ref_images")
+          .select("image_path, image_width, image_height")
+          .in("image_path", extraImagePaths)
+      : Promise.resolve({ data: [] as RefImageMeta[] }),
     supabase
       .from("ref_grids")
       .select("id, source_grid_id, ref_id, refs!inner(id, title, image_path)")
@@ -911,8 +935,17 @@ export async function fetchGridGallery(): Promise<GridGalleryEntry[]> {
     image_height: number | null;
     genres: string[];
   };
+  type RefImageMeta = {
+    image_path: string;
+    image_width: number | null;
+    image_height: number | null;
+  };
   const refsById = new Map<string, RefRow>();
   for (const r of (refsRes.data ?? []) as RefRow[]) refsById.set(r.id, r);
+  const extraImagesByPath = new Map<string, RefImageMeta>();
+  for (const m of (refImagesRes.data ?? []) as RefImageMeta[]) {
+    extraImagesByPath.set(m.image_path, m);
+  }
 
   type RefCopy = {
     source_grid_id: string;
@@ -952,9 +985,32 @@ export async function fetchGridGallery(): Promise<GridGalleryEntry[]> {
   return (originals as RefGrid[]).map((g) => {
     const appliedRefs = refsBySource.get(g.id) ?? [];
     const appliedProjects = projsBySource.get(g.id) ?? [];
+    const refRow = refsById.get(g.ref_id) ?? null;
+    // Resolve the actual image the grid was drawn against. Prefer the
+    // ref_grids.image_path → ref_images lookup; fall back to the
+    // ref's cover when image_path is null OR equals the cover path
+    // (analyzer stamps both interchangeably).
+    let previewImage: GridGalleryEntry["preview_image"] = null;
+    if (g.image_path && g.image_path !== refRow?.image_path) {
+      const extra = extraImagesByPath.get(g.image_path);
+      previewImage = extra
+        ? {
+            path: extra.image_path,
+            width: extra.image_width,
+            height: extra.image_height,
+          }
+        : { path: g.image_path, width: null, height: null };
+    } else if (refRow) {
+      previewImage = {
+        path: refRow.image_path,
+        width: refRow.image_width,
+        height: refRow.image_height,
+      };
+    }
     return {
       grid: g,
-      source_ref: refsById.get(g.ref_id) ?? null,
+      source_ref: refRow,
+      preview_image: previewImage,
       applied_to_refs: appliedRefs.length,
       applied_to_projects: appliedProjects.length,
       applied_refs: appliedRefs,
