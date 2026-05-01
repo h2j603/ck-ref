@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2 } from "lucide-react";
@@ -279,11 +280,12 @@ function GridPreviewCard({ grid: g }: { grid: ProjectGrid }) {
       style={{ aspectRatio: aspect }}
     >
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={url}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          fill
+          sizes="180px"
+          className="object-cover"
         />
       ) : null}
       <div className={cn("absolute inset-0", url ? "bg-background/35" : "")} />

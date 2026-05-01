@@ -1,10 +1,8 @@
 "use client";
 
-import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import FullCalendar from "@fullcalendar/react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 
 import { EventDialog } from "./EventDialog";
 import { Button } from "@/components/ui/button";
@@ -15,6 +13,18 @@ import type { CalendarEvent } from "@/lib/types";
 
 import type { EventClickArg } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
+
+// FullCalendar core + plugins is ~250 KB gzipped. Defer it until the
+// /calendar route mounts in the browser; the surrounding header/buttons
+// render with no JS-heavy dependency, and the placeholder reserves the
+// month grid's height to avoid layout shift.
+const FullCalendarMonthGrid = dynamic(
+  () => import("./FullCalendarMonthGrid"),
+  {
+    ssr: false,
+    loading: () => <div className="min-h-[640px]" aria-hidden />,
+  },
+);
 
 type ProjectLite = { id: string; title: string; status: string };
 
@@ -93,7 +103,6 @@ export function CalendarClient({
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [composing, setComposing] = useState(false);
-  const calendarRef = useRef<FullCalendar | null>(null);
 
   // Refetch when the user pages outside the prefetched buffer. Includes
   // events whose ends_at is inside the window even if starts_at is before.
@@ -115,14 +124,6 @@ export function CalendarClient({
       cancelled = true;
     };
   }, [supabase, year, month]);
-
-  // Keep FullCalendar's view in sync with the year/month state. Driven
-  // by our own header buttons rather than FC's headerToolbar.
-  useEffect(() => {
-    const api = calendarRef.current?.getApi?.();
-    if (!api) return;
-    api.gotoDate(new Date(year, month, 1));
-  }, [year, month]);
 
   const today = new Date();
   const monthLabel = `${year}.${String(month + 1).padStart(2, "0")}`;
@@ -234,25 +235,12 @@ export function CalendarClient({
         rest of the app's typography / borders.
       */}
       <div className="ck-calendar text-xs">
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, interactionPlugin]}
-          initialView="dayGridMonth"
-          initialDate={new Date(year, month, 1)}
-          locale="ko"
-          firstDay={0}
-          headerToolbar={false}
-          height="auto"
-          fixedWeekCount
-          dayMaxEvents={3}
-          moreLinkText={(n) => `+${n}`}
-          dayHeaderFormat={{ weekday: "narrow" }}
-          dayHeaderClassNames="ck-cal-dayhead"
-          dayCellClassNames="ck-cal-daycell"
-          eventClassNames="ck-cal-event"
+        <FullCalendarMonthGrid
+          initialDate={new Date(initialYear, initialMonth, 1)}
+          visibleDate={new Date(year, month, 1)}
           events={fcEvents}
-          dateClick={handleDateClick}
-          eventClick={handleEventClick}
+          onDateClick={handleDateClick}
+          onEventClick={handleEventClick}
         />
       </div>
 

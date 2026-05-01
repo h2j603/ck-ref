@@ -1,6 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -292,11 +293,12 @@ function GridCard({
         style={{ aspectRatio: aspect }}
       >
         {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={url}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover"
           />
         ) : null}
         <div className="absolute inset-0 bg-background/30" />

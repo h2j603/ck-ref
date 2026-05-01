@@ -2,6 +2,7 @@
 
 import { Plus, Trash2, X } from "lucide-react";
 import nextDynamic from "next/dynamic";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -852,11 +853,12 @@ function GridPreview({
       style={{ aspectRatio: aspect }}
     >
       {showImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           src={imageUrl}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          fill
+          sizes="(max-width: 768px) 100vw, 768px"
+          className="object-cover"
         />
       ) : (
         <div className="absolute inset-0 bg-foreground/[0.03]" />

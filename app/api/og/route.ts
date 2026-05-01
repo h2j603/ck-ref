@@ -66,9 +66,16 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({
-    ...meta,
-    images,
-    sourceUrl: target.href,
-  });
+  return NextResponse.json(
+    {
+      ...meta,
+      images,
+      sourceUrl: target.href,
+    },
+    {
+      headers: {
+        "Cache-Control": "public, max-age=3600, s-maxage=3600",
+      },
+    },
+  );
 }

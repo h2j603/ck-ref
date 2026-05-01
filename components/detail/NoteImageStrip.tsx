@@ -131,12 +131,14 @@ function Lightbox({
           </button>
         </>
       ) : null}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src={publicImageUrl(paths[index])}
         alt=""
+        fill
+        sizes="100vw"
+        priority
         onClick={(e) => e.stopPropagation()}
-        className="max-h-full max-w-full object-contain"
+        className="object-contain"
       />
       {paths.length > 1 ? (
         <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-white">
