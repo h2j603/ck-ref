@@ -7,6 +7,7 @@ import { AddUpdateForm } from "@/components/wip/AddUpdateForm";
 import { InspirationRefs } from "@/components/wip/InspirationRefs";
 import { PlanningSections } from "@/components/wip/PlanningSections";
 import { PositioningMaps } from "@/components/wip/PositioningMaps";
+import { ProjectGrids } from "@/components/wip/ProjectGrids";
 import { ProjectOwnerActions } from "@/components/wip/ProjectOwnerActions";
 import { StatusBadge } from "@/components/wip/StatusBadge";
 import { UpdateCard } from "@/components/wip/UpdateCard";
@@ -14,6 +15,7 @@ import {
   fetchNotesFor,
   fetchProfiles,
   fetchProject,
+  fetchProjectGrids,
   fetchProjectInspirationRefs,
   fetchProjectMilestones,
   fetchProjectPositioningMaps,
@@ -38,6 +40,7 @@ export default async function WipDetailPage({
     profiles,
     positioningMaps,
     milestones,
+    projectGrids,
   ] = await Promise.all([
     fetchProjectUpdates(id).catch(() => []),
     fetchNotesFor({ kind: "project", id }).catch(() => []),
@@ -45,6 +48,7 @@ export default async function WipDetailPage({
     fetchProfiles().catch(() => []),
     fetchProjectPositioningMaps(id).catch(() => []),
     fetchProjectMilestones(id).catch(() => []),
+    fetchProjectGrids(id).catch(() => []),
   ]);
   const reactionsByUpdate = await fetchUpdateReactions(
     updates.map((u) => u.id),
@@ -158,6 +162,8 @@ export default async function WipDetailPage({
           added_by: r.added_by,
         }))}
       />
+
+      <ProjectGrids projectId={project.id} initial={projectGrids} />
 
       <section className="flex flex-col gap-4">
         <header className="border-b border-border/60 pb-2">

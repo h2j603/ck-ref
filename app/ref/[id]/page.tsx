@@ -218,6 +218,7 @@ export default async function RefDetailPage({
           <GridAnalyzer
             refId={ref.id}
             imageUrl={url}
+            imagePath={ref.image_path}
             width={w}
             height={h}
             initial={grids}

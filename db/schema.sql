@@ -822,6 +822,43 @@ drop policy if exists "anon all" on ref_grids;
 create policy "anon all" on ref_grids
   for all to anon, authenticated using (true) with check (true);
 
+-- PROJECT GRIDS -------------------------------------------------------------
+-- A grid copied from a ref (or authored directly) onto a WIP project, used
+-- as a starting structure for the team's own design work. We keep the
+-- source ref's image_path/width/height so the grid can still be previewed
+-- against the original reference even after the project evolves.
+create table if not exists project_grids (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid not null references projects(id) on delete cascade,
+  source_ref_id     uuid references refs(id) on delete set null,
+  source_image_path text,
+  source_width      int,
+  source_height     int,
+  grid_type         text not null default 'columnar'
+    check (grid_type in ('columnar','modular','manuscript','custom')),
+  cols              int  not null default 6  check (cols  between 1 and 24),
+  rowscount         int  not null default 1  check (rowscount between 1 and 24),
+  margin_top        numeric not null default 0.05,
+  margin_right      numeric not null default 0.05,
+  margin_bottom     numeric not null default 0.05,
+  margin_left       numeric not null default 0.05,
+  gutter_x          numeric not null default 0.02,
+  gutter_y          numeric not null default 0.02,
+  baseline          numeric,
+  custom_v          numeric[] not null default '{}',
+  custom_h          numeric[] not null default '{}',
+  label             text,
+  notes             text,
+  created_at        timestamptz not null default now(),
+  created_by        text
+);
+create index if not exists project_grids_project_idx on project_grids (project_id, created_at);
+
+alter table project_grids enable row level security;
+drop policy if exists "anon all" on project_grids;
+create policy "anon all" on project_grids
+  for all to anon, authenticated using (true) with check (true);
+
 -- STORAGE BUCKET ------------------------------------------------------------
 -- Create the bucket via Supabase dashboard or:
 --   insert into storage.buckets (id, name, public) values ('refs', 'refs', true)
