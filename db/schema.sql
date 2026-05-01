@@ -798,8 +798,8 @@ create table if not exists ref_grids (
   -- custom   = user-drawn vertical/horizontal lines (positions in custom_lines)
   grid_type     text not null default 'columnar'
     check (grid_type in ('columnar', 'modular', 'manuscript', 'custom')),
-  cols          int  not null default 6 check (cols  >= 1 and cols  <= 24),
-  rowscount     int  not null default 1 check (rowscount >= 1 and rowscount <= 24),
+  cols          int  not null default 6 check (cols  >= 1 and cols  <= 32),
+  rowscount     int  not null default 1 check (rowscount >= 1 and rowscount <= 32),
   margin_top    numeric not null default 0.05,
   margin_right  numeric not null default 0.05,
   margin_bottom numeric not null default 0.05,
@@ -824,6 +824,30 @@ create index if not exists ref_grids_ref_idx on ref_grids (ref_id, created_at);
 -- ref_images.image_path. Lets a ref with multiple images carry separate
 -- grids per slide.
 alter table ref_grids add column if not exists image_path text;
+
+-- Bump cols/rowscount caps from 24 → 32 (Müller-Brockmann's largest
+-- common modular grid). Idempotent — drops the old check then adds the
+-- new one.
+do $$
+begin
+  alter table ref_grids drop constraint if exists ref_grids_cols_check;
+  alter table ref_grids drop constraint if exists ref_grids_rowscount_check;
+  alter table ref_grids add constraint ref_grids_cols_check
+    check (cols >= 1 and cols <= 32);
+  alter table ref_grids add constraint ref_grids_rowscount_check
+    check (rowscount >= 1 and rowscount <= 32);
+exception when others then null;
+end $$;
+do $$
+begin
+  alter table project_grids drop constraint if exists project_grids_cols_check;
+  alter table project_grids drop constraint if exists project_grids_rowscount_check;
+  alter table project_grids add constraint project_grids_cols_check
+    check (cols >= 1 and cols <= 32);
+  alter table project_grids add constraint project_grids_rowscount_check
+    check (rowscount >= 1 and rowscount <= 32);
+exception when others then null;
+end $$;
 
 -- Stroke color for the grid overlay. Some refs (dark posters) need a
 -- light stroke to be readable. Default 'dark' keeps existing rows on
@@ -856,8 +880,8 @@ create table if not exists project_grids (
   source_height     int,
   grid_type         text not null default 'columnar'
     check (grid_type in ('columnar','modular','manuscript','custom')),
-  cols              int  not null default 6  check (cols  between 1 and 24),
-  rowscount         int  not null default 1  check (rowscount between 1 and 24),
+  cols              int  not null default 6  check (cols  between 1 and 32),
+  rowscount         int  not null default 1  check (rowscount between 1 and 32),
   margin_top        numeric not null default 0.05,
   margin_right      numeric not null default 0.05,
   margin_bottom     numeric not null default 0.05,

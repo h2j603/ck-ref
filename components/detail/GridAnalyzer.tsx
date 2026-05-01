@@ -19,8 +19,10 @@ import { cn } from "@/lib/utils";
 
 // Most poster grids in the wild are 4–12 columns; clamp the steppers
 // here so a stray click can't make a 24-column wall.
-const MAX_COLS = 18;
-const MAX_ROWS = 12;
+// Müller-Brockmann goes up to 32-field modular grids. Higher than that
+// gets unreadable in our typical preview size, so cap there.
+const MAX_COLS = 32;
+const MAX_ROWS = 32;
 
 const TYPE_LABEL: Record<RefGridType, string> = {
   columnar: "단순 칼럼",
