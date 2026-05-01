@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { isVideoPath } from "@/lib/media";
 import { publicImageUrl } from "@/lib/storage";
 import type { RefWithDesigners } from "@/lib/types";
 
@@ -27,13 +28,27 @@ export function SimilarRefs({ refs }: { refs: RefWithDesigners[] }) {
                   aspectRatio: `${r.image_width ?? 4} / ${r.image_height ?? 5}`,
                 }}
               >
-                <Image
-                  src={publicImageUrl(r.image_path)}
-                  alt={r.title ?? "similar ref"}
-                  fill
-                  sizes="120px"
-                  className="object-cover"
-                />
+                {isVideoPath(r.image_path) ? (
+                  // Mirror RefCard: looping muted preview keeps the
+                  // similar grid quiet but alive without forcing a click.
+                  <video
+                    src={publicImageUrl(r.image_path)}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  <Image
+                    src={publicImageUrl(r.image_path)}
+                    alt={r.title ?? "similar ref"}
+                    fill
+                    sizes="120px"
+                    className="object-cover"
+                  />
+                )}
               </div>
             </Link>
           </li>
