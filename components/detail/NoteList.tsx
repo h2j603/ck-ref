@@ -103,9 +103,9 @@ const EMPTY: Draft = { body: "", pros: "", cons: "", facet: null };
 // note body when clicked so the writer doesn't have to type the
 // vocabulary from scratch. The list isn't exhaustive; it's a starter
 // kit for the most common observations our team makes. Grid-specific
-// composition chips are only shown for poster genre — that's where
+// composition chips only show for poster / editorial — that's where
 // the formal grid system actually applies.
-const POSTER_GRID_CHIPS = [
+const GRID_COMPOSITION_CHIPS = [
   "1단",
   "2단 그리드",
   "3단 그리드",
@@ -119,9 +119,9 @@ const COMMON_COMPOSITION_CHIPS = [
   "넉넉한 여백",
   "꽉 찬 레이아웃",
 ];
-function compositionPresets(forPoster: boolean): string[] {
-  return forPoster
-    ? [...POSTER_GRID_CHIPS, ...COMMON_COMPOSITION_CHIPS]
+function compositionPresets(gridApplicable: boolean): string[] {
+  return gridApplicable
+    ? [...GRID_COMPOSITION_CHIPS, ...COMMON_COMPOSITION_CHIPS]
     : COMMON_COMPOSITION_CHIPS;
 }
 const FACET_PRESETS: Record<Exclude<NoteFacet, "composition">, string[]> = {
@@ -207,14 +207,14 @@ export function NoteList({
   target,
   initialNotes,
   profiles = FALLBACK_PROFILES,
-  isPoster = false,
+  gridApplicable = false,
 }: {
   target: NoteTarget;
   initialNotes: Note[];
   profiles?: Profile[];
   // When the parent ref's genres include "poster", expose the
   // grid-specific composition presets in the facet picker.
-  isPoster?: boolean;
+  gridApplicable?: boolean;
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
@@ -502,7 +502,7 @@ export function NoteList({
                   disabled={busy}
                   profiles={profiles}
                   showFacet={target.kind === "ref"}
-                  isPoster={isPoster}
+                  gridApplicable={gridApplicable}
                 />
               ) : (
                 <NoteContent note={note} />
@@ -667,7 +667,7 @@ export function NoteList({
           images={draftImages}
           onImagesChange={setDraftImages}
           showFacet={target.kind === "ref"}
-          isPoster={isPoster}
+          gridApplicable={gridApplicable}
         />
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <div className="flex justify-end">
@@ -777,7 +777,7 @@ function NoteFields({
   images,
   onImagesChange,
   showFacet,
-  isPoster,
+  gridApplicable,
 }: {
   draft: Draft;
   onChange: (d: Draft) => void;
@@ -788,7 +788,7 @@ function NoteFields({
   // Only ref notes carry a formal-analysis facet — project / project
   // update threads stay free-form.
   showFacet?: boolean;
-  isPoster?: boolean;
+  gridApplicable?: boolean;
 }) {
   function appendToBody(snippet: string) {
     const sep = draft.body && !draft.body.endsWith("\n") ? "\n" : "";
@@ -842,7 +842,7 @@ function NoteFields({
             {draft.facet ? (
               <div className="flex flex-wrap gap-1.5">
                 {(draft.facet === "composition"
-                  ? compositionPresets(Boolean(isPoster))
+                  ? compositionPresets(Boolean(gridApplicable))
                   : FACET_PRESETS[draft.facet]
                 ).map((preset) => (
                   <button
