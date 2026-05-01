@@ -396,13 +396,15 @@ alter table notes alter column ref_id drop not null;
 -- being about a specific dimension of the design (typography, layout, …)
 -- so the detail page can group / filter by facet without forcing a
 -- structured form. Nullable: notes that don't fit a facet (general
--- discussion) leave it as NULL.
+-- discussion) leave it as NULL. `etc` is the catch-all facet — pairs
+-- with `facet_label` for the user-entered label.
 alter table notes add column if not exists facet text;
+alter table notes add column if not exists facet_label text;
 do $$
 begin
   alter table notes drop constraint if exists notes_facet_check;
   alter table notes add constraint notes_facet_check
-    check (facet is null or facet in ('composition', 'type', 'material'));
+    check (facet is null or facet in ('composition', 'type', 'material', 'etc'));
 exception when others then null;
 end $$;
 create index if not exists notes_facet_idx on notes (facet);

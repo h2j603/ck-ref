@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownWithMentions } from "@/components/mentioned-text";
 import { MentionInput } from "@/components/mention-input";
+import { Input } from "@/components/ui/input";
 import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -96,8 +97,16 @@ type Draft = {
   pros: string;
   cons: string;
   facet: NoteFacet | null;
+  // User-entered label when facet === "etc". Empty otherwise.
+  facetLabel: string;
 };
-const EMPTY: Draft = { body: "", pros: "", cons: "", facet: null };
+const EMPTY: Draft = {
+  body: "",
+  pros: "",
+  cons: "",
+  facet: null,
+  facetLabel: "",
+};
 
 // Quick-fill chips for the formal-analysis facets — pasted into the
 // note body when clicked so the writer doesn't have to type the
@@ -124,7 +133,7 @@ function compositionPresets(gridApplicable: boolean): string[] {
     ? [...GRID_COMPOSITION_CHIPS, ...COMMON_COMPOSITION_CHIPS]
     : COMMON_COMPOSITION_CHIPS;
 }
-const FACET_PRESETS: Record<Exclude<NoteFacet, "composition">, string[]> = {
+const FACET_PRESETS: Record<"type" | "material", string[]> = {
   type: [
     "고대비",
     "단일 굵기",
@@ -151,6 +160,10 @@ const FACET_LABEL: Record<NoteFacet, string> = {
   composition: "구성",
   type: "활자",
   material: "재료/이미지",
+  // Generic catch-all — paired with note.facet_label for the actual
+  // user-entered axis name. The chip in the picker shows "+ 기타" so
+  // it reads as an "add custom" affordance.
+  etc: "기타",
 };
 
 // Three "shapes" of note. Default `discussion` is the existing free-form
@@ -200,6 +213,7 @@ function noteToDraft(note: Note): Draft {
     pros: note.pros ?? "",
     cons: note.cons ?? "",
     facet: note.facet,
+    facetLabel: note.facet_label ?? "",
   };
 }
 
@@ -338,6 +352,10 @@ export function NoteList({
         image_paths: imagePaths,
         kind: draftKind,
         facet: target.kind === "ref" ? draft.facet : null,
+        facet_label:
+          target.kind === "ref" && draft.facet === "etc"
+            ? trimToNull(draft.facetLabel)
+            : null,
         author: nickname,
       })
       .select("*")
@@ -412,6 +430,10 @@ export function NoteList({
           cons: trimToNull(editingDraft.cons),
           facet:
             target.kind === "ref" ? editingDraft.facet : null,
+          facet_label:
+            target.kind === "ref" && editingDraft.facet === "etc"
+              ? trimToNull(editingDraft.facetLabel)
+              : null,
         };
     const { data, error } = await supabase
       .from("notes")
@@ -541,6 +563,7 @@ export function NoteList({
                               pros: "",
                               cons: "",
                               facet: null,
+                              facetLabel: "",
                             });
                           }}
                           onDelete={() => void deleteNote(reply.id)}
@@ -714,7 +737,9 @@ function NoteHead({
         {showKind && note.kind && note.kind !== "discussion" ? (
           <KindBadge kind={note.kind} />
         ) : null}
-        {note.facet ? <FacetBadge facet={note.facet} /> : null}
+        {note.facet ? (
+          <FacetBadge facet={note.facet} label={note.facet_label} />
+        ) : null}
         <span>{formatDate(note.created_at)}</span>
         {note.created_at !== note.updated_at ? <span>· edited</span> : null}
       </div>
@@ -820,13 +845,20 @@ function NoteFields({
             <div className="flex flex-wrap gap-1.5">
               {NOTE_FACETS.map((f) => {
                 const active = draft.facet === f;
+                const label = f === "etc" ? "+ 기타" : FACET_LABEL[f];
                 return (
                   <button
                     key={f}
                     type="button"
                     disabled={disabled}
                     onClick={() =>
-                      onChange({ ...draft, facet: active ? null : f })
+                      onChange({
+                        ...draft,
+                        facet: active ? null : f,
+                        // Drop the custom label when leaving etc.
+                        facetLabel:
+                          active || f !== "etc" ? "" : draft.facetLabel,
+                      })
                     }
                     className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors ${
                       active
@@ -834,12 +866,24 @@ function NoteFields({
                         : INACTIVE_CHIP
                     }`}
                   >
-                    {FACET_LABEL[f]}
+                    {label}
                   </button>
                 );
               })}
             </div>
-            {draft.facet ? (
+            {draft.facet === "etc" ? (
+              <Input
+                value={draft.facetLabel}
+                onChange={(e) =>
+                  onChange({ ...draft, facetLabel: e.target.value })
+                }
+                disabled={disabled}
+                placeholder="측면 이름 (예: 색·재료·장식)"
+                maxLength={40}
+              />
+            ) : draft.facet === "composition" ||
+              draft.facet === "type" ||
+              draft.facet === "material" ? (
               <div className="flex flex-wrap gap-1.5">
                 {(draft.facet === "composition"
                   ? compositionPresets(Boolean(gridApplicable))
@@ -1046,10 +1090,19 @@ function KindBadge({ kind, label }: { kind: NoteKind; label?: string }) {
   );
 }
 
-function FacetBadge({ facet }: { facet: NoteFacet }) {
+function FacetBadge({
+  facet,
+  label,
+}: {
+  facet: NoteFacet;
+  label?: string | null;
+}) {
+  // For "etc" use the user-entered label; fall back to the generic
+  // "기타" if it's missing.
+  const text = facet === "etc" ? (label || "기타") : FACET_LABEL[facet];
   return (
     <span className="inline-flex items-center rounded-full border border-input px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider leading-none text-muted-foreground">
-      {FACET_LABEL[facet]}
+      {text}
     </span>
   );
 }
