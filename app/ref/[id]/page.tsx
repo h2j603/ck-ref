@@ -1,6 +1,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 
 import { AddToBoardDialog } from "@/components/board/AddToBoardDialog";
 import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
@@ -44,20 +45,29 @@ export default async function RefDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const ref = await fetchRef(id).catch(() => null);
+  // Above-the-fold parallel batch — only the queries needed to paint
+  // the cover, metadata, and immediate sidebar actions. Slower stuff
+  // (similar refs via vector search, full notes thread) streams in
+  // below via Suspense boundaries so the user sees the page right
+  // after the fast queries resolve.
+  const [
+    ref,
+    linked,
+    ratings,
+    annotations,
+    profiles,
+    extras,
+    grids,
+  ] = await Promise.all([
+    fetchRef(id).catch(() => null),
+    fetchLinkedRefs(id).catch(() => []),
+    fetchRefRatings(id).catch(() => []),
+    fetchRefAnnotations(id).catch(() => []),
+    fetchProfiles().catch(() => []),
+    fetchRefExtraImages(id).catch(() => []),
+    fetchRefGrids(id).catch(() => []),
+  ]);
   if (!ref) notFound();
-
-  const [notes, linked, ratings, similar, annotations, profiles, extras, grids] =
-    await Promise.all([
-      fetchNotes(id).catch(() => []),
-      fetchLinkedRefs(id).catch(() => []),
-      fetchRefRatings(id).catch(() => []),
-      fetchSimilarRefs(id).catch(() => []),
-      fetchRefAnnotations(id).catch(() => []),
-      fetchProfiles().catch(() => []),
-      fetchRefExtraImages(id).catch(() => []),
-      fetchRefGrids(id).catch(() => []),
-    ]);
   const extraAnnotations = await fetchRefImageAnnotations(
     extras.map((e) => e.id),
   ).catch(() => ({}) as Record<string, never>);
@@ -263,13 +273,16 @@ export default async function RefDetailPage({
             initial={grids}
           />
         ) : null}
-        <SimilarRefs refs={similar} />
-        <NoteList
-          target={{ kind: "ref", id: ref.id }}
-          initialNotes={notes}
-          profiles={profiles}
-          gridApplicable={gridApplicable}
-        />
+        <Suspense fallback={<SectionSkeleton label="Similar" />}>
+          <SimilarSection refId={ref.id} />
+        </Suspense>
+        <Suspense fallback={<SectionSkeleton label="Notes" />}>
+          <NotesSection
+            refId={ref.id}
+            profiles={profiles}
+            gridApplicable={gridApplicable}
+          />
+        </Suspense>
       </aside>
     </div>
   );
@@ -287,5 +300,46 @@ function Meta({
       <dt>{term}</dt>
       <dd className="normal-case tracking-normal text-foreground">{children}</dd>
     </>
+  );
+}
+
+// Async server-component wrappers for the slow sections. Each fetches
+// its own data so the parent can render while these stream in. Wrapped
+// in Suspense at the call site.
+async function SimilarSection({ refId }: { refId: string }) {
+  const similar = await fetchSimilarRefs(refId).catch(() => []);
+  return <SimilarRefs refs={similar} />;
+}
+
+async function NotesSection({
+  refId,
+  profiles,
+  gridApplicable,
+}: {
+  refId: string;
+  profiles: Awaited<ReturnType<typeof fetchProfiles>>;
+  gridApplicable: boolean;
+}) {
+  const notes = await fetchNotes(refId).catch(() => []);
+  return (
+    <NoteList
+      target={{ kind: "ref", id: refId }}
+      initialNotes={notes}
+      profiles={profiles}
+      gridApplicable={gridApplicable}
+    />
+  );
+}
+
+function SectionSkeleton({ label }: { label: string }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <header className="border-b border-border/60 pb-2">
+        <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          {label} — …
+        </h2>
+      </header>
+      <div className="h-24 animate-pulse rounded-md bg-muted/40" />
+    </section>
   );
 }
