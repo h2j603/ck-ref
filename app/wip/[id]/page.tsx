@@ -1,4 +1,5 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 
 import { NoteList } from "@/components/detail/NoteList";
@@ -7,10 +8,18 @@ import { AddUpdateForm } from "@/components/wip/AddUpdateForm";
 import { InspirationRefs } from "@/components/wip/InspirationRefs";
 import { PlanningSections } from "@/components/wip/PlanningSections";
 import { PositioningMaps } from "@/components/wip/PositioningMaps";
-import { ProjectGrids } from "@/components/wip/ProjectGrids";
 import { ProjectOwnerActions } from "@/components/wip/ProjectOwnerActions";
 import { StatusBadge } from "@/components/wip/StatusBadge";
 import { UpdateCard } from "@/components/wip/UpdateCard";
+
+// ProjectGrids carries its own grid preview render + a useSearchParams
+// for the apply-from-ref banner. Lazy-load so projects without grids
+// don't pay the cost.
+const ProjectGrids = dynamic(() =>
+  import("@/components/wip/ProjectGrids").then((m) => ({
+    default: m.ProjectGrids,
+  })),
+);
 import {
   fetchNotesFor,
   fetchProfiles,
