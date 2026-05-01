@@ -54,10 +54,12 @@ export default async function RefDetailPage({
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
   const coverIsVideo = isVideoPath(ref.image_path);
-  // Both poster and editorial design lean heavily on structural grids,
-  // so the grid analyzer + composition grid presets surface for either.
+  // poster / editorial / web 모두 그리드 시스템이 핵심 도구라
+  // 그리드 분석기 + composition 그리드 프리셋을 함께 노출.
   const gridApplicable =
-    ref.genres.includes("poster") || ref.genres.includes("editorial");
+    ref.genres.includes("poster") ||
+    ref.genres.includes("editorial") ||
+    ref.genres.includes("web");
   // Source list for GridAnalyzer — cover (if not video) plus any extras
   // that aren't videos. We need at least one to render the analyzer.
   const gridImages = [
