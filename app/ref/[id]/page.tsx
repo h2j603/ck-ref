@@ -54,7 +54,10 @@ export default async function RefDetailPage({
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
   const coverIsVideo = isVideoPath(ref.image_path);
-  const isPoster = ref.genres.includes("poster");
+  // Both poster and editorial design lean heavily on structural grids,
+  // so the grid analyzer + composition grid presets surface for either.
+  const gridApplicable =
+    ref.genres.includes("poster") || ref.genres.includes("editorial");
   // Source list for GridAnalyzer — cover (if not video) plus any extras
   // that aren't videos. We need at least one to render the analyzer.
   const gridImages = [
@@ -240,7 +243,7 @@ export default async function RefDetailPage({
         </section>
 
         <RefLinks refId={ref.id} initial={linked} />
-        {isPoster && gridImages.length > 0 ? (
+        {gridApplicable && gridImages.length > 0 ? (
           <GridAnalyzer
             refId={ref.id}
             images={gridImages}
@@ -252,7 +255,7 @@ export default async function RefDetailPage({
           target={{ kind: "ref", id: ref.id }}
           initialNotes={notes}
           profiles={profiles}
-          isPoster={isPoster}
+          gridApplicable={gridApplicable}
         />
       </aside>
     </div>
