@@ -840,7 +840,7 @@ function NoteFields({
         />
       </FieldGroup>
       {showFacet ? (
-        <FieldGroup label="분석 측면 (선택)">
+        <FieldGroup label="분석 측면">
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap gap-1.5">
               {NOTE_FACETS.map((f) => {
@@ -884,7 +884,7 @@ function NoteFields({
             ) : draft.facet === "composition" ||
               draft.facet === "type" ||
               draft.facet === "material" ? (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {(draft.facet === "composition"
                   ? compositionPresets(Boolean(gridApplicable))
                   : FACET_PRESETS[draft.facet]
@@ -899,6 +899,10 @@ function NoteFields({
                     + {preset}
                   </button>
                 ))}
+                <CustomPresetInput
+                  disabled={disabled}
+                  onAdd={(value) => appendToBody(value)}
+                />
               </div>
             ) : null}
           </div>
@@ -1086,6 +1090,87 @@ function KindBadge({ kind, label }: { kind: NoteKind; label?: string }) {
     >
       <Icon className="size-3" />
       {label ?? meta.label}
+    </span>
+  );
+}
+
+// Inline "+기타" affordance inside a facet's preset row. Clicking
+// expands a small input where the user can type any custom text and
+// commit it (Enter or arrow button) to append into the note body the
+// same way the canned presets do. Collapses back when blurred empty.
+function CustomPresetInput({
+  disabled,
+  onAdd,
+}: {
+  disabled?: boolean;
+  onAdd: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function commit() {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setOpen(false);
+      return;
+    }
+    onAdd(trimmed);
+    setValue("");
+    // Stay open for rapid entry of multiple custom presets.
+    inputRef.current?.focus();
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setOpen(true);
+          // Defer focus so the input renders first.
+          queueMicrotask(() => inputRef.current?.focus());
+        }}
+        className="rounded-full border border-input px-2 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground hover:text-foreground"
+      >
+        + 기타
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-foreground bg-background pl-2.5 pr-1 py-0.5">
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setValue("");
+            setOpen(false);
+          }
+        }}
+        onBlur={() => {
+          if (!value.trim()) setOpen(false);
+        }}
+        disabled={disabled}
+        className="w-32 bg-transparent font-mono text-[10px] tracking-wide outline-none"
+        placeholder="직접 입력"
+        maxLength={40}
+      />
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={commit}
+        disabled={disabled || !value.trim()}
+        className="rounded-full px-1.5 py-0.5 font-mono text-[10px] text-foreground disabled:opacity-30"
+        aria-label="추가"
+      >
+        ↵
+      </button>
     </span>
   );
 }
