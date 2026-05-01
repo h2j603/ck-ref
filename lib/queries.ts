@@ -21,6 +21,7 @@ import {
   type ProjectStatus,
   type ProjectUpdate,
   type Ref,
+  type ProjectGrid,
   type RefAnnotation,
   type RefGrid,
   type RefImage,
@@ -814,6 +815,19 @@ export async function fetchRefGrids(refId: string): Promise<RefGrid[]> {
     .order("created_at", { ascending: true });
   if (error) return [];
   return (data ?? []) as RefGrid[];
+}
+
+export async function fetchProjectGrids(
+  projectId: string,
+): Promise<ProjectGrid[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("project_grids")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as ProjectGrid[];
 }
 
 // Visual-similarity weight for the hybrid score. Cosine similarity is in

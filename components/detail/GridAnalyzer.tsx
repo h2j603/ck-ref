@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { ApplyGridDialog } from "@/components/detail/ApplyGridDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNickname } from "@/lib/nickname";
@@ -94,12 +95,16 @@ function gridToDraft(g: RefGrid): Draft {
 export function GridAnalyzer({
   refId,
   imageUrl,
+  imagePath,
   width,
   height,
   initial,
 }: {
   refId: string;
   imageUrl: string;
+  // Storage path used when copying a grid onto a project — lets the
+  // project page render the grid against the original ref image.
+  imagePath: string;
   width: number;
   height: number;
   initial: RefGrid[];
@@ -231,15 +236,24 @@ export function GridAnalyzer({
                     </p>
                   ) : null}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void remove(g.id)}
-                  className="rounded-md p-1 text-muted-foreground hover:text-destructive"
-                  aria-label="delete"
-                  disabled={busy}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                <div className="flex flex-col items-end gap-1.5">
+                  <ApplyGridDialog
+                    grid={g}
+                    sourceRefId={refId}
+                    sourceImagePath={imagePath}
+                    sourceWidth={width}
+                    sourceHeight={height}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void remove(g.id)}
+                    className="rounded-md p-1 text-muted-foreground hover:text-destructive"
+                    aria-label="delete"
+                    disabled={busy}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

@@ -90,9 +90,9 @@ export const REF_GRID_TYPES = [
 ] as const;
 export type RefGridType = (typeof REF_GRID_TYPES)[number];
 
-export type RefGrid = {
-  id: string;
-  ref_id: string;
+// Shared spec fields between RefGrid and ProjectGrid — when a grid moves
+// from one to the other, these are what carries over.
+export type GridSpec = {
   grid_type: RefGridType;
   cols: number;
   rowscount: number;
@@ -107,6 +107,22 @@ export type RefGrid = {
   custom_h: number[];
   label: string | null;
   notes: string | null;
+};
+
+export type RefGrid = GridSpec & {
+  id: string;
+  ref_id: string;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ProjectGrid = GridSpec & {
+  id: string;
+  project_id: string;
+  source_ref_id: string | null;
+  source_image_path: string | null;
+  source_width: number | null;
+  source_height: number | null;
   created_at: string;
   created_by: string | null;
 };
