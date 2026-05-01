@@ -590,9 +590,9 @@ function GridEditor({
 
       {draft.grid_type === "custom" ? (
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          이미지를 길게 누르거나 클릭하면 가로/세로선이 추가돼요. 선을
-          한번 더 누르면 제거됩니다. (좌/우 마진 영역 클릭 시 가로선,
-          상/하 마진 영역 클릭 시 세로선이 들어감)
+          이미지 클릭으로 가로/세로선 추가, 같은 위치 다시 누르면 제거.
+          기존 선은 잡고 드래그해서 위치 옮길 수 있어요. (좌/우 마진
+          영역 클릭 시 가로선, 상/하 마진 영역 클릭 시 세로선)
         </p>
       ) : null}
 
@@ -644,17 +644,31 @@ function GridPreview({
   showImage: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Tracks an in-progress drag of an existing custom line so we can:
+  // (a) update its position on pointermove, (b) suppress the wrap's
+  // click handler (which would otherwise interpret the pointer up as
+  // "add/remove a line"), (c) sort the array on release so subsequent
+  // edits remain stable.
+  const dragRef = useRef<{
+    kind: "v" | "h";
+    idx: number;
+    moved: boolean;
+  } | null>(null);
+  // After a drag ends we set this to ignore the synthetic click that
+  // fires immediately afterward on most browsers.
+  const suppressClickRef = useRef(false);
   const aspect = `${width} / ${height}`;
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     if (draft.grid_type !== "custom") return;
     const box = wrapRef.current?.getBoundingClientRect();
     if (!box) return;
     const x = (e.clientX - box.left) / box.width;
     const y = (e.clientY - box.top) / box.height;
-    // Decide vertical vs horizontal by which border the click is closer
-    // to. Edge clicks (within margin band) add lines aligned with that
-    // axis; center clicks add whichever axis is currently sparser.
     const inLeftRight = x < draft.margin_left || x > 1 - draft.margin_right;
     const inTopBottom = y < draft.margin_top || y > 1 - draft.margin_bottom;
     const wantsHorizontal = inLeftRight && !inTopBottom;
@@ -668,8 +682,6 @@ function GridPreview({
           : "h";
 
     if (decision === "v") {
-      // Toggle: if any existing v-line is within 1.5% of the click, remove
-      // it; otherwise add a new one.
       const idx = draft.custom_v.findIndex((p) => Math.abs(p - x) < 0.015);
       const next =
         idx >= 0
@@ -686,11 +698,68 @@ function GridPreview({
     }
   }
 
+  function startLineDrag(
+    kind: "v" | "h",
+    idx: number,
+    e: React.PointerEvent<HTMLDivElement>,
+  ) {
+    if (draft.grid_type !== "custom") return;
+    e.stopPropagation();
+    e.preventDefault();
+    dragRef.current = { kind, idx, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onWrapPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const box = wrapRef.current?.getBoundingClientRect();
+    if (!box) return;
+    const fracX = Math.max(0, Math.min(1, (e.clientX - box.left) / box.width));
+    const fracY = Math.max(0, Math.min(1, (e.clientY - box.top) / box.height));
+    drag.moved = true;
+    if (drag.kind === "v") {
+      const next = [...draft.custom_v];
+      next[drag.idx] = fracX;
+      onChange({ ...draft, custom_v: next });
+    } else {
+      const next = [...draft.custom_h];
+      next[drag.idx] = fracY;
+      onChange({ ...draft, custom_h: next });
+    }
+  }
+
+  function endLineDrag() {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    if (drag.moved) {
+      // Suppress the click that follows a real drag.
+      suppressClickRef.current = true;
+      // Re-sort so subsequent operations remain in left→right /
+      // top→bottom order (matches click-add behavior).
+      if (drag.kind === "v") {
+        onChange({
+          ...draft,
+          custom_v: [...draft.custom_v].sort((a, b) => a - b),
+        });
+      } else {
+        onChange({
+          ...draft,
+          custom_h: [...draft.custom_h].sort((a, b) => a - b),
+        });
+      }
+    }
+  }
+
   return (
     <div
       ref={wrapRef}
       onClick={handleClick}
-      className="relative w-full overflow-hidden rounded-md bg-muted"
+      onPointerMove={onWrapPointerMove}
+      onPointerUp={endLineDrag}
+      onPointerCancel={endLineDrag}
+      className="relative w-full overflow-hidden rounded-md bg-muted touch-none"
       style={{ aspectRatio: aspect }}
     >
       {showImage ? (
@@ -709,12 +778,25 @@ function GridPreview({
           showImage ? "bg-background/30" : "",
         )}
       />
-      <GridLines draft={draft} />
+      <GridLines draft={draft} onLineDrag={startLineDrag} />
     </div>
   );
 }
 
-function GridLines({ draft }: { draft: Draft }) {
+function GridLines({
+  draft,
+  onLineDrag,
+}: {
+  draft: Draft;
+  // When set + grid_type === "custom", each custom line picks up
+  // pointerdown drag handlers + a wider invisible hit zone for grab.
+  onLineDrag?: (
+    kind: "v" | "h",
+    idx: number,
+    e: React.PointerEvent<HTMLDivElement>,
+  ) => void;
+}) {
+  const isCustom = draft.grid_type === "custom";
   // Content rect edges as percentages
   const left = draft.margin_left * 100;
   const right = draft.margin_right * 100;
@@ -798,32 +880,83 @@ function GridLines({ draft }: { draft: Draft }) {
   return (
     <>
       {frame}
-      {vLines.map((x, i) => (
-        <div
-          key={`v${i}`}
-          className="pointer-events-none absolute"
-          style={{
-            left: `${x}%`,
-            top: `${top}%`,
-            bottom: `${bottom}%`,
-            width: 1,
-            background: lineColor,
-          }}
-        />
-      ))}
-      {hLines.map((y, i) => (
-        <div
-          key={`h${i}`}
-          className="pointer-events-none absolute"
-          style={{
-            top: `${y}%`,
-            left: `${left}%`,
-            right: `${right}%`,
-            height: 1,
-            background: lineColor,
-          }}
-        />
-      ))}
+      {vLines.map((x, i) => {
+        // Custom lines get a wider invisible hit zone (10px) so finger
+        // / cursor drags work; the visible 1px line is centered inside
+        // it via translateX(-50%).
+        if (isCustom && onLineDrag) {
+          return (
+            <div
+              key={`v${i}`}
+              onPointerDown={(e) => onLineDrag("v", i, e)}
+              className="absolute -translate-x-1/2"
+              style={{
+                left: `${x}%`,
+                top: `${top}%`,
+                bottom: `${bottom}%`,
+                width: 10,
+                cursor: "ew-resize",
+                touchAction: "none",
+              }}
+            >
+              <div
+                className="pointer-events-none absolute left-1/2 top-0 h-full -translate-x-1/2"
+                style={{ width: 1, background: lineColor }}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            key={`v${i}`}
+            className="pointer-events-none absolute"
+            style={{
+              left: `${x}%`,
+              top: `${top}%`,
+              bottom: `${bottom}%`,
+              width: 1,
+              background: lineColor,
+            }}
+          />
+        );
+      })}
+      {hLines.map((y, i) => {
+        if (isCustom && onLineDrag) {
+          return (
+            <div
+              key={`h${i}`}
+              onPointerDown={(e) => onLineDrag("h", i, e)}
+              className="absolute -translate-y-1/2"
+              style={{
+                top: `${y}%`,
+                left: `${left}%`,
+                right: `${right}%`,
+                height: 10,
+                cursor: "ns-resize",
+                touchAction: "none",
+              }}
+            >
+              <div
+                className="pointer-events-none absolute top-1/2 left-0 w-full -translate-y-1/2"
+                style={{ height: 1, background: lineColor }}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            key={`h${i}`}
+            className="pointer-events-none absolute"
+            style={{
+              top: `${y}%`,
+              left: `${left}%`,
+              right: `${right}%`,
+              height: 1,
+              background: lineColor,
+            }}
+          />
+        );
+      })}
       {baselines.map((y, i) => (
         <div
           key={`bl${i}`}

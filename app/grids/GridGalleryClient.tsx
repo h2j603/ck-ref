@@ -1,9 +1,12 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { useNickname } from "@/lib/nickname";
 import { publicImageUrl } from "@/lib/storage";
+import { createClient } from "@/lib/supabase/client";
 import type { GridGalleryEntry } from "@/lib/queries";
 import { type RefGrid, type RefGridType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,13 +43,31 @@ const COLS_BUCKETS: Exclude<ColsBucket, "all">[] = [
 // viewport changes. Filter / sort runs client-side over the entire
 // fetched list.
 export function GridGalleryClient({
-  entries,
+  entries: initial,
 }: {
   entries: GridGalleryEntry[];
 }) {
+  const supabase = createClient();
+  const { nickname } = useNickname();
+  const [entries, setEntries] = useState(initial);
   const [type, setType] = useState<TypeFilter>("all");
   const [cols, setCols] = useState<ColsBucket>("all");
   const [sort, setSort] = useState<SortKey>("recent");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function deleteGrid(id: string) {
+    if (!confirm("이 그리드를 삭제할까요? 적용된 사본들은 그대로 유지돼요.")) {
+      return;
+    }
+    setBusyId(id);
+    const { error } = await supabase.from("ref_grids").delete().eq("id", id);
+    setBusyId(null);
+    if (error) {
+      alert(`삭제 실패: ${error.message}`);
+      return;
+    }
+    setEntries((prev) => prev.filter((e) => e.grid.id !== id));
+  }
 
   // Bucket counts let chips show "(N)" so the user knows what's
   // populated before clicking.
@@ -140,7 +161,13 @@ export function GridGalleryClient({
       ) : (
         <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
           {filtered.map((e) => (
-            <GridCard key={e.grid.id} entry={e} />
+            <GridCard
+              key={e.grid.id}
+              entry={e}
+              canDelete={!!nickname && nickname === e.grid.created_by}
+              onDelete={() => void deleteGrid(e.grid.id)}
+              deleting={busyId === e.grid.id}
+            />
           ))}
         </div>
       )}
@@ -190,11 +217,25 @@ function Chip({
   );
 }
 
-function GridCard({ entry }: { entry: GridGalleryEntry }) {
-  const { grid: g, source_ref, applied_refs, applied_projects } = entry;
-  const w = source_ref?.image_width ?? 4;
-  const h = source_ref?.image_height ?? 5;
-  const url = source_ref ? publicImageUrl(source_ref.image_path) : null;
+function GridCard({
+  entry,
+  canDelete,
+  onDelete,
+  deleting,
+}: {
+  entry: GridGalleryEntry;
+  canDelete: boolean;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const { grid: g, source_ref, preview_image, applied_refs, applied_projects } =
+    entry;
+  // Prefer the actual image the grid was drawn against; fall back to
+  // cover when missing (e.g. a stale path).
+  const previewPath = preview_image?.path ?? source_ref?.image_path ?? null;
+  const w = preview_image?.width ?? source_ref?.image_width ?? 4;
+  const h = preview_image?.height ?? source_ref?.image_height ?? 5;
+  const url = previewPath ? publicImageUrl(previewPath) : null;
   const aspect = `${w} / ${h}`;
   const stroke = g.color === "light" ? "rgb(255 255 255)" : "rgb(0 0 0)";
   const lineColor =
@@ -233,7 +274,18 @@ function GridCard({ entry }: { entry: GridGalleryEntry }) {
   const appliedTotal = applied_refs.length + applied_projects.length;
 
   return (
-    <div className="group flex flex-col gap-2">
+    <div className="group relative flex flex-col gap-2">
+      {canDelete ? (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          aria-label="delete"
+          className="absolute right-2 top-2 z-10 rounded-full bg-background/90 p-1.5 text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:text-destructive disabled:opacity-50"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      ) : null}
       <Link
         href={source_ref ? `/ref/${source_ref.id}` : "#"}
         className="relative block w-full overflow-hidden rounded-md bg-muted"
