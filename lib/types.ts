@@ -112,6 +112,9 @@ export type GridSpec = {
 export type RefGrid = GridSpec & {
   id: string;
   ref_id: string;
+  // Which specific image this grid is for. NULL = the ref's cover.
+  // Otherwise a storage path matching one of the extra images.
+  image_path: string | null;
   created_at: string;
   created_by: string | null;
 };

@@ -817,6 +817,12 @@ create table if not exists ref_grids (
 );
 create index if not exists ref_grids_ref_idx on ref_grids (ref_id, created_at);
 
+-- Optional: which specific image of the ref the grid was drawn against.
+-- NULL = the cover (refs.image_path). Otherwise a path matching one of
+-- ref_images.image_path. Lets a ref with multiple images carry separate
+-- grids per slide.
+alter table ref_grids add column if not exists image_path text;
+
 alter table ref_grids enable row level security;
 drop policy if exists "anon all" on ref_grids;
 create policy "anon all" on ref_grids

@@ -55,6 +55,32 @@ export default async function RefDetailPage({
   const h = ref.image_height ?? 5;
   const coverIsVideo = isVideoPath(ref.image_path);
   const isPoster = ref.genres.includes("poster");
+  // Source list for GridAnalyzer — cover (if not video) plus any extras
+  // that aren't videos. We need at least one to render the analyzer.
+  const gridImages = [
+    ...(coverIsVideo
+      ? []
+      : [
+          {
+            path: null as string | null,
+            storagePath: ref.image_path,
+            url,
+            width: w,
+            height: h,
+            label: "커버",
+          },
+        ]),
+    ...extras
+      .filter((e) => !isVideoPath(e.image_path))
+      .map((e, i) => ({
+        path: e.image_path as string | null,
+        storagePath: e.image_path,
+        url: publicImageUrl(e.image_path),
+        width: e.image_width ?? 4,
+        height: e.image_height ?? 5,
+        label: `이미지 ${i + 2}`,
+      })),
+  ];
 
   return (
     <div className="mx-auto grid max-w-[1400px] gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -214,13 +240,10 @@ export default async function RefDetailPage({
         </section>
 
         <RefLinks refId={ref.id} initial={linked} />
-        {isPoster && !coverIsVideo ? (
+        {isPoster && gridImages.length > 0 ? (
           <GridAnalyzer
             refId={ref.id}
-            imageUrl={url}
-            imagePath={ref.image_path}
-            width={w}
-            height={h}
+            images={gridImages}
             initial={grids}
           />
         ) : null}

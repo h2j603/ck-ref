@@ -92,21 +92,28 @@ function gridToDraft(g: RefGrid): Draft {
   };
 }
 
+export type GridSourceImage = {
+  // null = the ref's cover; non-null = an extra image's storage path
+  path: string | null;
+  // canonical storage path used for ref_grids.image_path / project_grids
+  // .source_image_path (always non-null)
+  storagePath: string;
+  url: string;
+  width: number;
+  height: number;
+  label: string;
+};
+
 export function GridAnalyzer({
   refId,
-  imageUrl,
-  imagePath,
-  width,
-  height,
+  images,
   initial,
 }: {
   refId: string;
-  imageUrl: string;
-  // Storage path used when copying a grid onto a project — lets the
-  // project page render the grid against the original ref image.
-  imagePath: string;
-  width: number;
-  height: number;
+  // Cover (if non-video) plus any extra images that aren't videos.
+  // Empty array means there's nothing to analyze (rare — caller should
+  // not render this component in that case).
+  images: GridSourceImage[];
   initial: RefGrid[];
 }) {
   const supabase = createClient();
@@ -116,13 +123,31 @@ export function GridAnalyzer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showImage, setShowImage] = useState(true);
+  // Which image the user is currently analyzing. Defaults to the first
+  // (cover or first extra if cover is video). Saving / showing grids is
+  // scoped to this selection.
+  const [activeIdx, setActiveIdx] = useState(0);
+  const active = images[activeIdx] ?? images[0];
+
+  // Match a saved grid to the currently selected image. Cover grids
+  // were stored with image_path = NULL historically — surface those
+  // alongside grids stamped explicitly with the cover's path.
+  const visibleGrids = grids.filter((g) => {
+    if (!active) return false;
+    if (active.path === null) {
+      // Selected image is the cover. Show NULL or matching cover path.
+      return g.image_path == null || g.image_path === active.storagePath;
+    }
+    return g.image_path === active.storagePath;
+  });
 
   async function save() {
-    if (!editing) return;
+    if (!editing || !active) return;
     setBusy(true);
     setError(null);
     const payload = {
       ref_id: refId,
+      image_path: active.storagePath,
       grid_type: editing.grid_type,
       cols: editing.cols,
       rowscount: editing.rowscount,
@@ -204,15 +229,39 @@ export function GridAnalyzer({
         ) : null}
       </div>
 
+      {images.length > 1 && !editing ? (
+        <div className="flex flex-wrap gap-1.5">
+          {images.map((img, i) => (
+            <button
+              key={img.storagePath}
+              type="button"
+              onClick={() => setActiveIdx(i)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors",
+                i === activeIdx
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-input text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {img.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {!editing ? (
-        grids.length === 0 ? (
+        !active ? (
           <p className="text-sm text-muted-foreground">
-            아직 등록된 그리드가 없어요. 새 그리드를 추가하면 포스터 위에
+            분석 가능한 이미지가 없어요. (커버와 추가 이미지가 모두 비디오)
+          </p>
+        ) : visibleGrids.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            이 이미지에는 아직 등록된 그리드가 없어요. 새 그리드를 추가하면
             칼럼·행·여백·거터를 직접 맞춰볼 수 있어요.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {grids.map((g) => (
+            {visibleGrids.map((g) => (
               <li
                 key={g.id}
                 className="flex items-start justify-between gap-3 rounded-md border border-input p-3"
@@ -240,9 +289,9 @@ export function GridAnalyzer({
                   <ApplyGridDialog
                     grid={g}
                     sourceRefId={refId}
-                    sourceImagePath={imagePath}
-                    sourceWidth={width}
-                    sourceHeight={height}
+                    sourceImagePath={active.storagePath}
+                    sourceWidth={active.width}
+                    sourceHeight={active.height}
                   />
                   <button
                     type="button"
@@ -258,17 +307,17 @@ export function GridAnalyzer({
             ))}
           </ul>
         )
-      ) : (
+      ) : active ? (
         <GridEditor
           draft={editing}
           onChange={setEditing}
-          imageUrl={imageUrl}
-          width={width}
-          height={height}
+          imageUrl={active.url}
+          width={active.width}
+          height={active.height}
           showImage={showImage}
           onShowImageChange={setShowImage}
         />
-      )}
+      ) : null}
 
       {editing ? (
         <div className="flex items-center justify-end gap-2">
