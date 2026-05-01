@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AddToBoardDialog } from "@/components/board/AddToBoardDialog";
 import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
+import { GridAnalyzer } from "@/components/detail/GridAnalyzer";
 import { NoteList } from "@/components/detail/NoteList";
 import { OwnerActions } from "@/components/detail/OwnerActions";
 import { RatingControl } from "@/components/detail/RatingControl";
@@ -18,6 +19,7 @@ import {
   fetchRef,
   fetchRefAnnotations,
   fetchRefExtraImages,
+  fetchRefGrids,
   fetchRefImageAnnotations,
   fetchRefRatings,
   fetchSimilarRefs,
@@ -34,7 +36,7 @@ export default async function RefDetailPage({
   const ref = await fetchRef(id).catch(() => null);
   if (!ref) notFound();
 
-  const [notes, linked, ratings, similar, annotations, profiles, extras] =
+  const [notes, linked, ratings, similar, annotations, profiles, extras, grids] =
     await Promise.all([
       fetchNotes(id).catch(() => []),
       fetchLinkedRefs(id).catch(() => []),
@@ -43,6 +45,7 @@ export default async function RefDetailPage({
       fetchRefAnnotations(id).catch(() => []),
       fetchProfiles().catch(() => []),
       fetchRefExtraImages(id).catch(() => []),
+      fetchRefGrids(id).catch(() => []),
     ]);
   const extraAnnotations = await fetchRefImageAnnotations(
     extras.map((e) => e.id),
@@ -51,6 +54,7 @@ export default async function RefDetailPage({
   const w = ref.image_width ?? 4;
   const h = ref.image_height ?? 5;
   const coverIsVideo = isVideoPath(ref.image_path);
+  const isPoster = ref.genres.includes("poster");
 
   return (
     <div className="mx-auto grid max-w-[1400px] gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -210,11 +214,21 @@ export default async function RefDetailPage({
         </section>
 
         <RefLinks refId={ref.id} initial={linked} />
+        {isPoster && !coverIsVideo ? (
+          <GridAnalyzer
+            refId={ref.id}
+            imageUrl={url}
+            width={w}
+            height={h}
+            initial={grids}
+          />
+        ) : null}
         <SimilarRefs refs={similar} />
         <NoteList
           target={{ kind: "ref", id: ref.id }}
           initialNotes={notes}
           profiles={profiles}
+          isPoster={isPoster}
         />
       </aside>
     </div>

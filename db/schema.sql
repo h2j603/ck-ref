@@ -779,6 +779,49 @@ drop policy if exists "anon all" on events;
 create policy "anon all" on events
   for all to anon, authenticated using (true) with check (true);
 
+-- REF GRIDS -----------------------------------------------------------------
+-- Müller-Brockmann-style structural grids overlaid on poster refs. A ref
+-- can have multiple named grids (e.g. one for typography blocks, one for
+-- image modules) so saving doesn't force destructive overwrite when the
+-- analysis evolves.
+--
+-- All margins/gutters are stored as fractions of image width / height so
+-- they scale cleanly with display size and survive image swaps.
+create table if not exists ref_grids (
+  id            uuid primary key default gen_random_uuid(),
+  ref_id        uuid not null references refs(id) on delete cascade,
+  -- columnar = uniform vertical columns
+  -- modular  = cols × rows of cells
+  -- manuscript = single text block (margins only)
+  -- custom   = user-drawn vertical/horizontal lines (positions in custom_lines)
+  grid_type     text not null default 'columnar'
+    check (grid_type in ('columnar', 'modular', 'manuscript', 'custom')),
+  cols          int  not null default 6 check (cols  >= 1 and cols  <= 24),
+  rowscount     int  not null default 1 check (rowscount >= 1 and rowscount <= 24),
+  margin_top    numeric not null default 0.05,
+  margin_right  numeric not null default 0.05,
+  margin_bottom numeric not null default 0.05,
+  margin_left   numeric not null default 0.05,
+  gutter_x      numeric not null default 0.02,
+  gutter_y      numeric not null default 0.02,
+  -- Optional baseline grid spacing as fraction of image height. NULL = off.
+  baseline      numeric,
+  -- Custom grid only: arrays of fractional positions (0-1) within the
+  -- content area for vertical / horizontal lines.
+  custom_v      numeric[] not null default '{}',
+  custom_h      numeric[] not null default '{}',
+  label         text,
+  notes         text,
+  created_at    timestamptz not null default now(),
+  created_by    text
+);
+create index if not exists ref_grids_ref_idx on ref_grids (ref_id, created_at);
+
+alter table ref_grids enable row level security;
+drop policy if exists "anon all" on ref_grids;
+create policy "anon all" on ref_grids
+  for all to anon, authenticated using (true) with check (true);
+
 -- STORAGE BUCKET ------------------------------------------------------------
 -- Create the bucket via Supabase dashboard or:
 --   insert into storage.buckets (id, name, public) values ('refs', 'refs', true)

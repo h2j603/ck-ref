@@ -22,6 +22,7 @@ import {
   type ProjectUpdate,
   type Ref,
   type RefAnnotation,
+  type RefGrid,
   type RefImage,
   type RefSort,
   type RefWithDesigners,
@@ -802,6 +803,17 @@ export async function fetchRefExtraImages(refId: string): Promise<RefImage[]> {
     .order("position", { ascending: true });
   if (error) return [];
   return (data ?? []) as RefImage[];
+}
+
+export async function fetchRefGrids(refId: string): Promise<RefGrid[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ref_grids")
+    .select("*")
+    .eq("ref_id", refId)
+    .order("created_at", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as RefGrid[];
 }
 
 // Visual-similarity weight for the hybrid score. Cosine similarity is in
