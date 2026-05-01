@@ -92,6 +92,12 @@ export type RefRating = {
 export const NOTE_KINDS = ["discussion", "decision", "open_question"] as const;
 export type NoteKind = (typeof NOTE_KINDS)[number];
 
+// Optional analysis facet for ref notes. When set, it labels what
+// dimension of the design the note is about so the detail view can
+// group by facet. NULL means general discussion.
+export const NOTE_FACETS = ["composition", "type", "material"] as const;
+export type NoteFacet = (typeof NOTE_FACETS)[number];
+
 export type Note = {
   id: string;
   ref_id: string | null;
@@ -103,6 +109,7 @@ export type Note = {
   cons: string | null;
   image_paths: string[];
   kind: NoteKind;
+  facet: NoteFacet | null;
   author: string;
   created_at: string;
   updated_at: string;

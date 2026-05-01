@@ -24,7 +24,7 @@ import { FALLBACK_PROFILES, type Profile } from "@/lib/profiles";
 import { STORAGE_BUCKET } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { Note, NoteKind, NoteTarget } from "@/lib/types";
+import { NOTE_FACETS, type Note, type NoteFacet, type NoteKind, type NoteTarget } from "@/lib/types";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -91,8 +91,58 @@ function formatDate(iso: string) {
   });
 }
 
-type Draft = { body: string; pros: string; cons: string };
-const EMPTY: Draft = { body: "", pros: "", cons: "" };
+type Draft = {
+  body: string;
+  pros: string;
+  cons: string;
+  facet: NoteFacet | null;
+};
+const EMPTY: Draft = { body: "", pros: "", cons: "", facet: null };
+
+// Quick-fill chips for the formal-analysis facets — pasted into the
+// note body when clicked so the writer doesn't have to type the
+// vocabulary from scratch. The list isn't exhaustive; it's a starter
+// kit for the most common observations our team makes.
+const FACET_PRESETS: Record<NoteFacet, string[]> = {
+  composition: [
+    "1단",
+    "2단 그리드",
+    "3단 그리드",
+    "모듈러",
+    "비대칭",
+    "가운데 정렬",
+    "좌측 정렬",
+    "그리드 파괴",
+    "넉넉한 여백",
+    "꽉 찬 레이아웃",
+  ],
+  type: [
+    "고대비",
+    "단일 굵기",
+    "다중 굵기",
+    "세리프/산세리프 혼용",
+    "전체 대문자",
+    "와이드 트래킹",
+    "좁은 행간",
+    "모노스페이스",
+    "적층",
+    "큰 본문",
+  ],
+  material: [
+    "사진 중심",
+    "일러스트 중심",
+    "텍스처/패턴",
+    "리소그래프",
+    "특수 인쇄 (포일/박)",
+    "재료 노출 (종이결, 천 등)",
+  ],
+};
+
+const FACET_LABEL: Record<NoteFacet, string> = {
+  composition: "구성",
+  type: "활자",
+  material: "재료/이미지",
+};
 
 // Three "shapes" of note. Default `discussion` is the existing free-form
 // thread; the other two surface in the project header summary so threads
@@ -140,6 +190,7 @@ function noteToDraft(note: Note): Draft {
     body: note.body ?? "",
     pros: note.pros ?? "",
     cons: note.cons ?? "",
+    facet: note.facet,
   };
 }
 
@@ -273,6 +324,7 @@ export function NoteList({
         cons: trimToNull(draft.cons),
         image_paths: imagePaths,
         kind: draftKind,
+        facet: target.kind === "ref" ? draft.facet : null,
         author: nickname,
       })
       .select("*")
@@ -345,6 +397,8 @@ export function NoteList({
           body: trimToNull(editingDraft.body),
           pros: trimToNull(editingDraft.pros),
           cons: trimToNull(editingDraft.cons),
+          facet:
+            target.kind === "ref" ? editingDraft.facet : null,
         };
     const { data, error } = await supabase
       .from("notes")
@@ -434,6 +488,7 @@ export function NoteList({
                   onChange={setEditingDraft}
                   disabled={busy}
                   profiles={profiles}
+                  showFacet={target.kind === "ref"}
                 />
               ) : (
                 <NoteContent note={note} />
@@ -471,6 +526,7 @@ export function NoteList({
                               body: reply.body ?? "",
                               pros: "",
                               cons: "",
+                              facet: null,
                             });
                           }}
                           onDelete={() => void deleteNote(reply.id)}
@@ -596,6 +652,7 @@ export function NoteList({
           profiles={profiles}
           images={draftImages}
           onImagesChange={setDraftImages}
+          showFacet={target.kind === "ref"}
         />
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <div className="flex justify-end">
@@ -642,6 +699,7 @@ function NoteHead({
         {showKind && note.kind && note.kind !== "discussion" ? (
           <KindBadge kind={note.kind} />
         ) : null}
+        {note.facet ? <FacetBadge facet={note.facet} /> : null}
         <span>{formatDate(note.created_at)}</span>
         {note.created_at !== note.updated_at ? <span>· edited</span> : null}
       </div>
@@ -703,6 +761,7 @@ function NoteFields({
   profiles,
   images,
   onImagesChange,
+  showFacet,
 }: {
   draft: Draft;
   onChange: (d: Draft) => void;
@@ -710,7 +769,14 @@ function NoteFields({
   profiles: Profile[];
   images?: File[];
   onImagesChange?: (next: File[]) => void;
+  // Only ref notes carry a formal-analysis facet — project / project
+  // update threads stay free-form.
+  showFacet?: boolean;
 }) {
+  function appendToBody(snippet: string) {
+    const sep = draft.body && !draft.body.endsWith("\n") ? "\n" : "";
+    onChange({ ...draft, body: `${draft.body}${sep}${snippet}` });
+  }
   return (
     <div className="flex flex-col gap-3">
       <FieldGroup label="장점" accent="text-emerald-600">
@@ -722,15 +788,58 @@ function NoteFields({
           placeholder="좋았던 점"
         />
       </FieldGroup>
-      <FieldGroup label="단점" accent="text-rose-600">
+      <FieldGroup label="단점·개선 아이디어" accent="text-rose-600">
         <Textarea
           value={draft.cons}
           onChange={(e) => onChange({ ...draft, cons: e.target.value })}
           rows={2}
           disabled={disabled}
-          placeholder="아쉬운 점"
+          placeholder="아쉬운 점 + 어떻게 고치면 좋을지"
         />
       </FieldGroup>
+      {showFacet ? (
+        <FieldGroup label="분석 측면 (선택)">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {NOTE_FACETS.map((f) => {
+                const active = draft.facet === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() =>
+                      onChange({ ...draft, facet: active ? null : f })
+                    }
+                    className={`rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors ${
+                      active
+                        ? "border-foreground bg-foreground text-background"
+                        : INACTIVE_CHIP
+                    }`}
+                  >
+                    {FACET_LABEL[f]}
+                  </button>
+                );
+              })}
+            </div>
+            {draft.facet ? (
+              <div className="flex flex-wrap gap-1.5">
+                {FACET_PRESETS[draft.facet].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => appendToBody(preset)}
+                    className="rounded-full border border-input px-2 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground hover:text-foreground"
+                  >
+                    + {preset}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </FieldGroup>
+      ) : null}
       <FieldGroup label="메모">
         <MentionInput
           value={draft.body}
@@ -913,6 +1022,14 @@ function KindBadge({ kind, label }: { kind: NoteKind; label?: string }) {
     >
       <Icon className="size-3" />
       {label ?? meta.label}
+    </span>
+  );
+}
+
+function FacetBadge({ facet }: { facet: NoteFacet }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-input px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider leading-none text-muted-foreground">
+      {FACET_LABEL[facet]}
     </span>
   );
 }

@@ -392,6 +392,21 @@ create index if not exists notes_kind_idx on notes (kind);
 alter table notes alter column body drop not null;
 alter table notes alter column ref_id drop not null;
 
+-- Optional analysis facet for ref-targeted notes. Lets us tag a note as
+-- being about a specific dimension of the design (typography, layout, …)
+-- so the detail page can group / filter by facet without forcing a
+-- structured form. Nullable: notes that don't fit a facet (general
+-- discussion) leave it as NULL.
+alter table notes add column if not exists facet text;
+do $$
+begin
+  alter table notes drop constraint if exists notes_facet_check;
+  alter table notes add constraint notes_facet_check
+    check (facet is null or facet in ('composition', 'type', 'material'));
+exception when others then null;
+end $$;
+create index if not exists notes_facet_idx on notes (facet);
+
 -- Exactly one of (ref_id, project_id, project_update_id) must be set so we
 -- always know what the note is "about". The fkey + this check together act
 -- as a discriminated target.
