@@ -118,6 +118,9 @@ export type RefFilter = {
   // When true, restrict to refs that have at least one ref_grids row
   // — useful for browsing the "analyzed" subset.
   hasGrid?: boolean;
+  // Cursor pagination. Refs strictly older than this ISO timestamp.
+  // Used by "더 보기" to fetch the next page without offset.
+  before?: string;
 };
 
 // Searches title, tags (exact), designer name, and note bodies (body / pros /
@@ -196,6 +199,7 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
 
   if (searchIds) query = query.in("id", [...searchIds]);
   if (filter.userKey) query = query.eq("created_by", filter.userKey);
+  if (filter.before) query = query.lt("created_at", filter.before);
   if (filter.genre) query = query.contains("genres", [filter.genre]);
   if (filter.medium) query = query.eq("medium", filter.medium);
   if (filter.language) query = query.contains("languages", [filter.language]);
