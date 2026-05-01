@@ -92,6 +92,13 @@ export default async function RootLayout({
                 <span className="sm:hidden">WIP</span>
                 <span className="hidden sm:inline">WIP</span>
               </Link>
+              <Link
+                href="/grids"
+                className="transition-colors hover:text-foreground"
+              >
+                <span className="sm:hidden">GRD</span>
+                <span className="hidden sm:inline">Grids</span>
+              </Link>
             </div>
             <span aria-hidden className="h-3 w-px bg-border/60" />
             <div className="flex items-center gap-2 sm:gap-3">

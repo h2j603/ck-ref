@@ -823,6 +823,18 @@ create index if not exists ref_grids_ref_idx on ref_grids (ref_id, created_at);
 -- grids per slide.
 alter table ref_grids add column if not exists image_path text;
 
+-- Stroke color for the grid overlay. Some refs (dark posters) need a
+-- light stroke to be readable. Default 'dark' keeps existing rows on
+-- the prior look.
+alter table ref_grids add column if not exists color text not null
+  default 'dark' check (color in ('dark','light'));
+
+-- When a grid was created by copying an existing ref_grid, this tracks
+-- the origin so the gallery can show "applied to N refs / N projects".
+alter table ref_grids add column if not exists source_grid_id uuid
+  references ref_grids(id) on delete set null;
+create index if not exists ref_grids_source_idx on ref_grids (source_grid_id);
+
 alter table ref_grids enable row level security;
 drop policy if exists "anon all" on ref_grids;
 create policy "anon all" on ref_grids
@@ -859,6 +871,12 @@ create table if not exists project_grids (
   created_by        text
 );
 create index if not exists project_grids_project_idx on project_grids (project_id, created_at);
+
+alter table project_grids add column if not exists color text not null
+  default 'dark' check (color in ('dark','light'));
+alter table project_grids add column if not exists source_grid_id uuid
+  references ref_grids(id) on delete set null;
+create index if not exists project_grids_source_idx on project_grids (source_grid_id);
 
 alter table project_grids enable row level security;
 drop policy if exists "anon all" on project_grids;

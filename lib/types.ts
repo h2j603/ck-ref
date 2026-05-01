@@ -92,6 +92,9 @@ export type RefGridType = (typeof REF_GRID_TYPES)[number];
 
 // Shared spec fields between RefGrid and ProjectGrid — when a grid moves
 // from one to the other, these are what carries over.
+export const GRID_COLORS = ["dark", "light"] as const;
+export type GridColor = (typeof GRID_COLORS)[number];
+
 export type GridSpec = {
   grid_type: RefGridType;
   cols: number;
@@ -107,6 +110,7 @@ export type GridSpec = {
   custom_h: number[];
   label: string | null;
   notes: string | null;
+  color: GridColor;
 };
 
 export type RefGrid = GridSpec & {
@@ -115,6 +119,7 @@ export type RefGrid = GridSpec & {
   // Which specific image this grid is for. NULL = the ref's cover.
   // Otherwise a storage path matching one of the extra images.
   image_path: string | null;
+  source_grid_id: string | null;
   created_at: string;
   created_by: string | null;
 };
@@ -126,6 +131,7 @@ export type ProjectGrid = GridSpec & {
   source_image_path: string | null;
   source_width: number | null;
   source_height: number | null;
+  source_grid_id: string | null;
   created_at: string;
   created_by: string | null;
 };

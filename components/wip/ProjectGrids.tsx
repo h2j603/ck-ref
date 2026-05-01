@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { useNickname } from "@/lib/nickname";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
-import type { ProjectGrid } from "@/lib/types";
+import type { ProjectGrid, RefGrid } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TYPE_LABEL: Record<ProjectGrid["grid_type"], string> = {
@@ -21,14 +24,95 @@ const TYPE_LABEL: Record<ProjectGrid["grid_type"], string> = {
 // ref's cover so the structural intent is still visible. A later PR could
 // add project-native authoring; for now this is the consumption side.
 export function ProjectGrids({
+  projectId,
   initial,
 }: {
   projectId: string;
   initial: ProjectGrid[];
 }) {
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { nickname } = useNickname();
   const [grids, setGrids] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // ?from_grid=<id> arrives from "다른 곳에 적용" on a ref. We fetch
+  // the source spec and show a confirmation banner above the list so
+  // the user sees a preview against the source ref's image before
+  // committing to add it.
+  const prefillId = searchParams.get("from_grid");
+  const [pending, setPending] = useState<RefGrid | null>(null);
+  useEffect(() => {
+    if (!prefillId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("ref_grids")
+        .select("*")
+        .eq("id", prefillId)
+        .maybeSingle();
+      if (!cancelled && data) setPending(data as RefGrid);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [prefillId, supabase]);
+  function clearPrefill() {
+    setPending(null);
+    router.replace(window.location.pathname);
+  }
+
+  async function confirmPrefill() {
+    if (!pending) return;
+    setBusy("__prefill__");
+    // Pull source ref's image meta so the preview keeps working.
+    const { data: srcRef } = await supabase
+      .from("refs")
+      .select("id, image_path, image_width, image_height")
+      .eq("id", pending.ref_id)
+      .maybeSingle();
+    type SrcRef = {
+      id: string;
+      image_path: string;
+      image_width: number | null;
+      image_height: number | null;
+    };
+    const sr = srcRef as SrcRef | null;
+    const { data, error } = await supabase
+      .from("project_grids")
+      .insert({
+        project_id: projectId,
+        source_ref_id: pending.ref_id,
+        source_image_path:
+          pending.image_path ?? sr?.image_path ?? null,
+        source_width: sr?.image_width ?? null,
+        source_height: sr?.image_height ?? null,
+        source_grid_id: pending.id,
+        grid_type: pending.grid_type,
+        cols: pending.cols,
+        rowscount: pending.rowscount,
+        margin_top: pending.margin_top,
+        margin_right: pending.margin_right,
+        margin_bottom: pending.margin_bottom,
+        margin_left: pending.margin_left,
+        gutter_x: pending.gutter_x,
+        gutter_y: pending.gutter_y,
+        baseline: pending.baseline,
+        custom_v: pending.custom_v,
+        custom_h: pending.custom_h,
+        label: pending.label,
+        notes: pending.notes,
+        color: pending.color,
+        created_by: nickname,
+      })
+      .select("*")
+      .single();
+    setBusy(null);
+    if (error) return;
+    setGrids((prev) => [...prev, data as ProjectGrid]);
+    clearPrefill();
+  }
 
   async function remove(id: string) {
     if (!confirm("이 그리드를 프로젝트에서 제거할까요?")) return;
@@ -42,13 +126,44 @@ export function ProjectGrids({
     setGrids((prev) => prev.filter((g) => g.id !== id));
   }
 
-  if (grids.length === 0) return null;
+  if (grids.length === 0 && !pending) return null;
 
   return (
     <section className="flex flex-col gap-3">
       <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
         참고 그리드
       </h2>
+      {pending ? (
+        <div className="flex flex-col gap-3 rounded-md border border-foreground/40 bg-muted/40 p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm">
+              <span className="font-medium">
+                {pending.label ?? TYPE_LABEL[pending.grid_type]}
+              </span>{" "}
+              그리드를 이 프로젝트에 추가할까요?
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearPrefill}
+                disabled={busy === "__prefill__"}
+              >
+                취소
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void confirmPrefill()}
+                disabled={busy === "__prefill__"}
+              >
+                {busy === "__prefill__" ? "추가 중…" : "추가"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <ul className="flex flex-col gap-3">
         {grids.map((g) => (
           <li
@@ -117,6 +232,9 @@ function GridPreviewCard({ grid: g }: { grid: ProjectGrid }) {
   const h = g.source_height ?? 5;
   const url = g.source_image_path ? publicImageUrl(g.source_image_path) : null;
   const aspect = `${w} / ${h}`;
+  const stroke = g.color === "light" ? "rgb(255 255 255)" : "rgb(0 0 0)";
+  const lineColor =
+    g.color === "light" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.65)";
 
   const left = Number(g.margin_left) * 100;
   const right = Number(g.margin_right) * 100;
@@ -170,35 +288,39 @@ function GridPreviewCard({ grid: g }: { grid: ProjectGrid }) {
       ) : null}
       <div className={cn("absolute inset-0", url ? "bg-background/35" : "")} />
       <div
-        className="absolute border border-foreground/70"
+        className="absolute"
         style={{
           left: `${left}%`,
           top: `${top}%`,
           right: `${right}%`,
           bottom: `${bottom}%`,
+          border: `1px solid ${stroke}`,
+          opacity: 0.75,
         }}
       />
       {vLines.map((x, i) => (
         <div
           key={`v${i}`}
-          className="pointer-events-none absolute bg-foreground/65"
+          className="pointer-events-none absolute"
           style={{
             left: `${x}%`,
             top: `${top}%`,
             bottom: `${bottom}%`,
             width: 1,
+            background: lineColor,
           }}
         />
       ))}
       {hLines.map((y, i) => (
         <div
           key={`h${i}`}
-          className="pointer-events-none absolute bg-foreground/65"
+          className="pointer-events-none absolute"
           style={{
             top: `${y}%`,
             left: `${left}%`,
             right: `${right}%`,
             height: 1,
+            background: lineColor,
           }}
         />
       ))}
