@@ -1,15 +1,26 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 
 import { AddToBoardDialog } from "@/components/board/AddToBoardDialog";
 import { AnnotationLayer } from "@/components/detail/AnnotationLayer";
-import { GridAnalyzer } from "@/components/detail/GridAnalyzer";
 import { NoteList } from "@/components/detail/NoteList";
 import { OwnerActions } from "@/components/detail/OwnerActions";
 import { RatingControl } from "@/components/detail/RatingControl";
 import { RefLinks } from "@/components/detail/RefLinks";
 import { SimilarRefs } from "@/components/detail/SimilarRefs";
 import { NicknamePill } from "@/components/nickname-pill";
+
+// GridAnalyzer is heavy (overlay + many control widgets) and only
+// relevant for poster/editorial/web genres. Lazy-load so detail pages
+// of other genres don't ship its JS upfront. Without `ssr: false`
+// (server-component-friendly) Next.js still code-splits the chunk so
+// it loads only when the component actually renders.
+const GridAnalyzer = dynamic(() =>
+  import("@/components/detail/GridAnalyzer").then((m) => ({
+    default: m.GridAnalyzer,
+  })),
+);
 import { Badge } from "@/components/ui/badge";
 
 import {

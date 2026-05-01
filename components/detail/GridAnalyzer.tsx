@@ -1,10 +1,10 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import nextDynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { ApplyGridDialog } from "@/components/detail/ApplyGridDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNickname } from "@/lib/nickname";
@@ -16,6 +16,16 @@ import {
   type RefGridType,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+// Apply-to-other dialog is shown only when the user opens it; defer
+// loading the search/list UI until then.
+const ApplyGridDialog = nextDynamic(
+  () =>
+    import("@/components/detail/ApplyGridDialog").then((m) => ({
+      default: m.ApplyGridDialog,
+    })),
+  { ssr: false },
+);
 
 // Most poster grids in the wild are 4–12 columns; clamp the steppers
 // here so a stray click can't make a 24-column wall.
