@@ -148,8 +148,9 @@ export type NoteKind = (typeof NOTE_KINDS)[number];
 
 // Optional analysis facet for ref notes. When set, it labels what
 // dimension of the design the note is about so the detail view can
-// group by facet. NULL means general discussion.
-export const NOTE_FACETS = ["composition", "type", "material"] as const;
+// group by facet. NULL means general discussion. `etc` pairs with a
+// user-entered `facet_label` so unusual axes still get tagged.
+export const NOTE_FACETS = ["composition", "type", "material", "etc"] as const;
 export type NoteFacet = (typeof NOTE_FACETS)[number];
 
 export type Note = {
@@ -164,6 +165,7 @@ export type Note = {
   image_paths: string[];
   kind: NoteKind;
   facet: NoteFacet | null;
+  facet_label: string | null;
   author: string;
   created_at: string;
   updated_at: string;
