@@ -115,6 +115,9 @@ export type RefFilter = {
   userKey?: string;
   sort?: RefSort;
   q?: string;
+  // When true, restrict to refs that have at least one ref_grids row
+  // — useful for browsing the "analyzed" subset.
+  hasGrid?: boolean;
 };
 
 // Searches title, tags (exact), designer name, and note bodies (body / pros /
@@ -161,6 +164,28 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
   if (filter.q && filter.q.trim()) {
     searchIds = await searchRefIds(filter.q.trim());
     if (searchIds.size === 0) return [];
+  }
+
+  // Restrict to refs that have at least one analyzed grid. Loaded as a
+  // small id list and intersected with the text-search set if both
+  // filters are active.
+  if (filter.hasGrid) {
+    const { data } = await supabase
+      .from("ref_grids")
+      .select("ref_id")
+      .limit(2000);
+    const gridIds = new Set(
+      ((data ?? []) as { ref_id: string }[]).map((r) => r.ref_id),
+    );
+    if (gridIds.size === 0) return [];
+    if (searchIds) {
+      for (const id of [...searchIds]) {
+        if (!gridIds.has(id)) searchIds.delete(id);
+      }
+      if (searchIds.size === 0) return [];
+    } else {
+      searchIds = gridIds;
+    }
   }
 
   let query = supabase

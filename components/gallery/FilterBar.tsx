@@ -34,6 +34,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
   const medium = params.get("medium") ?? ALL;
   const language = params.get("language") ?? ALL;
   const hue = params.get("hue") as HueBucket | null;
+  const hasGrid = params.get("grid") === "1";
   const sortParam = params.get("sort");
   const sort: RefSort = (REF_SORTS as readonly string[]).includes(sortParam ?? "")
     ? (sortParam as RefSort)
@@ -117,7 +118,8 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
     language !== ALL ||
     hue !== null ||
     qParam !== "" ||
-    activeTags.length > 0;
+    activeTags.length > 0 ||
+    hasGrid;
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -224,6 +226,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
                 hue: null,
                 q: null,
                 tag: [],
+                grid: null,
               });
             }}
             className="ml-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
@@ -260,6 +263,21 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() =>
+            update({ grid: hasGrid ? null : "1" })
+          }
+          aria-pressed={hasGrid}
+          className={cn(
+            "ml-2 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+            hasGrid
+              ? "border-foreground bg-foreground text-background"
+              : "border-input text-muted-foreground hover:text-foreground",
+          )}
+        >
+          그리드 있는 것만
+        </button>
       </div>
       {allTags.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">

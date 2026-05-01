@@ -32,6 +32,8 @@ type SearchParams = Promise<{
   sort?: string;
   q?: string;
   tag?: string | string[];
+  // "1" → 그리드 분석된 ref만 노출. 빈 값/없음이면 전체.
+  grid?: string;
 }>;
 
 export default async function HomePage({
@@ -54,6 +56,7 @@ export default async function HomePage({
     sort,
     q: sp.q,
     tags: sp.tag ? (Array.isArray(sp.tag) ? sp.tag : [sp.tag]) : undefined,
+    hasGrid: sp.grid === "1",
   };
 
   const store = await cookies();
