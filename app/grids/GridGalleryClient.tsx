@@ -8,7 +8,7 @@ import { useNickname } from "@/lib/nickname";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
 import type { GridGalleryEntry } from "@/lib/queries";
-import { type RefGrid, type RefGridType } from "@/lib/types";
+import { GENRES, type Genre, type RefGrid, type RefGridType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TYPE_LABEL: Record<RefGridType, string> = {
@@ -19,6 +19,7 @@ const TYPE_LABEL: Record<RefGridType, string> = {
 };
 
 type TypeFilter = RefGridType | "all";
+type GenreFilter = Genre | "all";
 type ColsBucket = "all" | "1-2" | "3" | "4" | "5-6" | "7+";
 type SortKey = "recent" | "applied";
 
@@ -51,6 +52,7 @@ export function GridGalleryClient({
   const { nickname } = useNickname();
   const [entries, setEntries] = useState(initial);
   const [type, setType] = useState<TypeFilter>("all");
+  const [genre, setGenre] = useState<GenreFilter>("all");
   const [cols, setCols] = useState<ColsBucket>("all");
   const [sort, setSort] = useState<SortKey>("recent");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -80,6 +82,19 @@ export function GridGalleryClient({
     return m;
   }, [entries]);
 
+  // A grid's genres come from its source ref — same ref can carry
+  // several, so a single entry contributes to every genre it lists.
+  const genreCounts = useMemo(() => {
+    const m = new Map<GenreFilter, number>();
+    m.set("all", entries.length);
+    for (const e of entries) {
+      for (const g of e.source_ref?.genres ?? []) {
+        m.set(g as Genre, (m.get(g as Genre) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [entries]);
+
   const colsCounts = useMemo(() => {
     const m = new Map<ColsBucket, number>();
     m.set("all", entries.length);
@@ -94,6 +109,11 @@ export function GridGalleryClient({
     const base = entries.filter((e) => {
       if (type !== "all" && e.grid.grid_type !== type) return false;
       if (cols !== "all" && bucketFor(e.grid.cols) !== cols) return false;
+      if (
+        genre !== "all" &&
+        !(e.source_ref?.genres ?? []).includes(genre)
+      )
+        return false;
       return true;
     });
     if (sort === "applied") {
@@ -107,7 +127,7 @@ export function GridGalleryClient({
     // 'recent' — entries already arrive desc by created_at from the
     // server query.
     return base;
-  }, [entries, type, cols, sort]);
+  }, [entries, type, genre, cols, sort]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -124,6 +144,21 @@ export function GridGalleryClient({
               active={type === t}
               onClick={() => setType(t)}
               label={`${TYPE_LABEL[t]} (${typeCounts.get(t) ?? 0})`}
+            />
+          ))}
+        </Row>
+        <Row label="Genre">
+          <Chip
+            active={genre === "all"}
+            onClick={() => setGenre("all")}
+            label={`all (${genreCounts.get("all") ?? 0})`}
+          />
+          {GENRES.map((g) => (
+            <Chip
+              key={g}
+              active={genre === g}
+              onClick={() => setGenre(g)}
+              label={`${g} (${genreCounts.get(g) ?? 0})`}
             />
           ))}
         </Row>
