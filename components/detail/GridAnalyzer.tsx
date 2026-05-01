@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import nextDynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -423,6 +423,52 @@ function summarizeGrid(g: RefGrid): string {
 // Editing UI: live preview overlay above the controls. Margins/gutters
 // live in fractional space so the preview just multiplies by the
 // rendered box size.
+// When switching INTO custom from columnar/modular, compute the
+// existing structural lines as fractions and seed custom_v / custom_h.
+// Lets the user start from "the columnar grid I just made" instead of
+// a blank canvas. Only seeds when the current arrays are empty so we
+// don't clobber a custom-in-progress.
+function seedCustomFromDraft(d: Draft): Draft {
+  if (d.grid_type === "custom") return d;
+  const left = d.margin_left;
+  const top = d.margin_top;
+  const innerW = 1 - d.margin_left - d.margin_right;
+  const innerH = 1 - d.margin_top - d.margin_bottom;
+
+  const v: number[] = [];
+  if (d.grid_type === "columnar" || d.grid_type === "modular") {
+    const cols = d.cols;
+    if (cols >= 1) {
+      const totalGutters = (cols - 1) * d.gutter_x;
+      const colW = (innerW - totalGutters) / cols;
+      for (let i = 1; i < cols; i += 1) {
+        const x = left + i * colW + (i - 1) * d.gutter_x;
+        v.push(x);
+        if (d.gutter_x > 0) v.push(x + d.gutter_x);
+      }
+    }
+  }
+  const h: number[] = [];
+  if (d.grid_type === "modular") {
+    const rows = d.rowscount;
+    if (rows >= 1) {
+      const totalGutters = (rows - 1) * d.gutter_y;
+      const rowH = (innerH - totalGutters) / rows;
+      for (let i = 1; i < rows; i += 1) {
+        const y = top + i * rowH + (i - 1) * d.gutter_y;
+        h.push(y);
+        if (d.gutter_y > 0) h.push(y + d.gutter_y);
+      }
+    }
+  }
+  return {
+    ...d,
+    grid_type: "custom",
+    custom_v: d.custom_v.length > 0 ? d.custom_v : v,
+    custom_h: d.custom_h.length > 0 ? d.custom_h : h,
+  };
+}
+
 function GridEditor({
   draft,
   onChange,
@@ -440,6 +486,10 @@ function GridEditor({
   showImage: boolean;
   onShowImageChange: (b: boolean) => void;
 }) {
+  // In custom mode, the user picks an axis (v / h) before clicking the
+  // preview to add a line. Replaces the older "guess by margin band"
+  // heuristic which was confusing when clicking near the center.
+  const [customAxis, setCustomAxis] = useState<"v" | "h">("v");
   return (
     <div className="flex flex-col gap-4">
       <GridPreview
@@ -449,6 +499,7 @@ function GridEditor({
         width={width}
         height={height}
         showImage={showImage}
+        customAxis={customAxis}
       />
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -458,7 +509,13 @@ function GridEditor({
             <button
               key={t}
               type="button"
-              onClick={() => onChange({ ...draft, grid_type: t })}
+              onClick={() => {
+                if (t === "custom" && draft.grid_type !== "custom") {
+                  onChange(seedCustomFromDraft(draft));
+                } else {
+                  onChange({ ...draft, grid_type: t });
+                }
+              }}
               className={cn(
                 "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors",
                 active
@@ -589,11 +646,41 @@ function GridEditor({
       </div>
 
       {draft.grid_type === "custom" ? (
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          이미지 클릭으로 가로/세로선 추가, 같은 위치 다시 누르면 제거.
-          기존 선은 잡고 드래그해서 위치 옮길 수 있어요. (좌/우 마진
-          영역 클릭 시 가로선, 상/하 마진 영역 클릭 시 세로선)
-        </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="mr-1 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+              추가할 축
+            </span>
+            <button
+              type="button"
+              onClick={() => setCustomAxis("v")}
+              className={cn(
+                "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide",
+                customAxis === "v"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-input text-muted-foreground hover:text-foreground",
+              )}
+            >
+              | 세로선
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomAxis("h")}
+              className={cn(
+                "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide",
+                customAxis === "h"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-input text-muted-foreground hover:text-foreground",
+              )}
+            >
+              ─ 가로선
+            </button>
+          </div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            클릭으로 선택한 축의 선 추가, 기존 선은 ① 잡고 드래그로 이동
+            ② 끝의 × 버튼으로 삭제
+          </p>
+        </div>
       ) : null}
 
       <div className="grid grid-cols-1 gap-3">
@@ -635,6 +722,7 @@ function GridPreview({
   width,
   height,
   showImage,
+  customAxis,
 }: {
   draft: Draft;
   onChange: (d: Draft) => void;
@@ -642,6 +730,8 @@ function GridPreview({
   width: number;
   height: number;
   showImage: boolean;
+  // Only used in custom mode — picks which axis a click adds.
+  customAxis?: "v" | "h";
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   // Tracks an in-progress drag of an existing custom line so we can:
@@ -669,32 +759,31 @@ function GridPreview({
     if (!box) return;
     const x = (e.clientX - box.left) / box.width;
     const y = (e.clientY - box.top) / box.height;
-    const inLeftRight = x < draft.margin_left || x > 1 - draft.margin_right;
-    const inTopBottom = y < draft.margin_top || y > 1 - draft.margin_bottom;
-    const wantsHorizontal = inLeftRight && !inTopBottom;
-    const wantsVertical = inTopBottom && !inLeftRight;
-    const decision = wantsHorizontal
-      ? "h"
-      : wantsVertical
-        ? "v"
-        : draft.custom_v.length <= draft.custom_h.length
-          ? "v"
-          : "h";
-
-    if (decision === "v") {
-      const idx = draft.custom_v.findIndex((p) => Math.abs(p - x) < 0.015);
-      const next =
-        idx >= 0
-          ? draft.custom_v.filter((_, i) => i !== idx)
-          : [...draft.custom_v, x].sort((a, b) => a - b);
+    // Axis is picked explicitly by the toolbar above the preview;
+    // clicks always add a line of that axis. Existing-line interaction
+    // (move / delete) is handled by drag handles + × buttons rather
+    // than overloading the click.
+    const axis = customAxis ?? "v";
+    if (axis === "v") {
+      const next = [...draft.custom_v, x].sort((a, b) => a - b);
       onChange({ ...draft, custom_v: next });
     } else {
-      const idx = draft.custom_h.findIndex((p) => Math.abs(p - y) < 0.015);
-      const next =
-        idx >= 0
-          ? draft.custom_h.filter((_, i) => i !== idx)
-          : [...draft.custom_h, y].sort((a, b) => a - b);
+      const next = [...draft.custom_h, y].sort((a, b) => a - b);
       onChange({ ...draft, custom_h: next });
+    }
+  }
+
+  function deleteLine(kind: "v" | "h", idx: number) {
+    if (kind === "v") {
+      onChange({
+        ...draft,
+        custom_v: draft.custom_v.filter((_, i) => i !== idx),
+      });
+    } else {
+      onChange({
+        ...draft,
+        custom_h: draft.custom_h.filter((_, i) => i !== idx),
+      });
     }
   }
 
@@ -778,7 +867,11 @@ function GridPreview({
           showImage ? "bg-background/30" : "",
         )}
       />
-      <GridLines draft={draft} onLineDrag={startLineDrag} />
+      <GridLines
+        draft={draft}
+        onLineDrag={startLineDrag}
+        onLineDelete={deleteLine}
+      />
     </div>
   );
 }
@@ -786,6 +879,7 @@ function GridPreview({
 function GridLines({
   draft,
   onLineDrag,
+  onLineDelete,
 }: {
   draft: Draft;
   // When set + grid_type === "custom", each custom line picks up
@@ -795,6 +889,8 @@ function GridLines({
     idx: number,
     e: React.PointerEvent<HTMLDivElement>,
   ) => void;
+  // × button at the line's start removes the line.
+  onLineDelete?: (kind: "v" | "h", idx: number) => void;
 }) {
   const isCustom = draft.grid_type === "custom";
   // Content rect edges as percentages
@@ -883,7 +979,8 @@ function GridLines({
       {vLines.map((x, i) => {
         // Custom lines get a wider invisible hit zone (10px) so finger
         // / cursor drags work; the visible 1px line is centered inside
-        // it via translateX(-50%).
+        // it via translateX(-50%). A small × button at the top of the
+        // line removes it explicitly (avoids overloading wrap clicks).
         if (isCustom && onLineDrag) {
           return (
             <div
@@ -903,6 +1000,21 @@ function GridLines({
                 className="pointer-events-none absolute left-1/2 top-0 h-full -translate-x-1/2"
                 style={{ width: 1, background: lineColor }}
               />
+              {onLineDelete ? (
+                <button
+                  type="button"
+                  aria-label="delete line"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLineDelete("v", i);
+                  }}
+                  className="absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-foreground bg-background p-0.5 leading-none text-foreground hover:bg-destructive hover:text-destructive-foreground"
+                  style={{ touchAction: "manipulation" }}
+                >
+                  <X className="size-2.5" />
+                </button>
+              ) : null}
             </div>
           );
         }
@@ -940,6 +1052,21 @@ function GridLines({
                 className="pointer-events-none absolute top-1/2 left-0 w-full -translate-y-1/2"
                 style={{ height: 1, background: lineColor }}
               />
+              {onLineDelete ? (
+                <button
+                  type="button"
+                  aria-label="delete line"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLineDelete("h", i);
+                  }}
+                  className="absolute left-0 top-1/2 z-20 -translate-y-1/2 -translate-x-1/2 rounded-full border border-foreground bg-background p-0.5 leading-none text-foreground hover:bg-destructive hover:text-destructive-foreground"
+                  style={{ touchAction: "manipulation" }}
+                >
+                  <X className="size-2.5" />
+                </button>
+              ) : null}
             </div>
           );
         }
