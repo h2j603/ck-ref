@@ -352,10 +352,13 @@ export function NoteList({
         image_paths: imagePaths,
         kind: draftKind,
         facet: target.kind === "ref" ? draft.facet : null,
-        facet_label:
-          target.kind === "ref" && draft.facet === "etc"
-            ? trimToNull(draft.facetLabel)
-            : null,
+        // Spread conditionally so the key is OMITTED when not needed.
+        // Supabase rejects any insert that names a missing column even
+        // with a null value, so this also covers envs that haven't run
+        // the facet_label migration yet.
+        ...(target.kind === "ref" && draft.facet === "etc"
+          ? { facet_label: trimToNull(draft.facetLabel) }
+          : {}),
         author: nickname,
       })
       .select("*")
@@ -430,10 +433,9 @@ export function NoteList({
           cons: trimToNull(editingDraft.cons),
           facet:
             target.kind === "ref" ? editingDraft.facet : null,
-          facet_label:
-            target.kind === "ref" && editingDraft.facet === "etc"
-              ? trimToNull(editingDraft.facetLabel)
-              : null,
+          ...(target.kind === "ref" && editingDraft.facet === "etc"
+            ? { facet_label: trimToNull(editingDraft.facetLabel) }
+            : {}),
         };
     const { data, error } = await supabase
       .from("notes")
