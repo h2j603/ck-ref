@@ -1,7 +1,8 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { ApplyGridDialog } from "@/components/detail/ApplyGridDialog";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
 import {
   REF_GRID_TYPES,
+  type GridColor,
   type RefGrid,
   type RefGridType,
 } from "@/lib/types";
@@ -36,6 +38,10 @@ const TYPE_HINT: Record<RefGridType, string> = {
 
 type Draft = {
   id: string | null;
+  // Origin grid id when the draft was prefilled from another grid via
+  // "다른 곳에 적용". Persisted on save so the gallery can show
+  // applied-to lineage.
+  source_grid_id: string | null;
   grid_type: RefGridType;
   cols: number;
   rowscount: number;
@@ -50,11 +56,13 @@ type Draft = {
   custom_h: number[];
   label: string;
   notes: string;
+  color: GridColor;
 };
 
 function emptyDraft(): Draft {
   return {
     id: null,
+    source_grid_id: null,
     grid_type: "columnar",
     cols: 6,
     rowscount: 1,
@@ -69,12 +77,14 @@ function emptyDraft(): Draft {
     custom_h: [],
     label: "",
     notes: "",
+    color: "dark",
   };
 }
 
 function gridToDraft(g: RefGrid): Draft {
   return {
     id: g.id,
+    source_grid_id: g.source_grid_id,
     grid_type: g.grid_type,
     cols: g.cols,
     rowscount: g.rowscount,
@@ -89,7 +99,16 @@ function gridToDraft(g: RefGrid): Draft {
     custom_h: g.custom_h.map(Number),
     label: g.label ?? "",
     notes: g.notes ?? "",
+    color: g.color,
   };
+}
+
+// Convert a fetched RefGrid into a Draft for prefill purposes — like
+// `gridToDraft` but resets `id` (so save creates new) and sets
+// `source_grid_id` to the original id.
+export function prefillDraftFromGrid(g: RefGrid): Draft {
+  const d = gridToDraft(g);
+  return { ...d, id: null, source_grid_id: g.id };
 }
 
 export type GridSourceImage = {
@@ -117,6 +136,8 @@ export function GridAnalyzer({
   initial: RefGrid[];
 }) {
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { nickname } = useNickname();
   const [grids, setGrids] = useState<RefGrid[]>(initial);
   const [editing, setEditing] = useState<Draft | null>(null);
@@ -128,6 +149,31 @@ export function GridAnalyzer({
   // scoped to this selection.
   const [activeIdx, setActiveIdx] = useState(0);
   const active = images[activeIdx] ?? images[0];
+
+  // Honor ?from_grid=<id> — fetch the source grid spec and open the
+  // editor pre-filled with it. Lets "다른 곳에 적용" land users in the
+  // analyzer with the grid ready to adjust against the new image.
+  const prefillId = searchParams.get("from_grid");
+  useEffect(() => {
+    if (!prefillId || editing) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("ref_grids")
+        .select("*")
+        .eq("id", prefillId)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      setEditing(prefillDraftFromGrid(data as RefGrid));
+      // Strip the param so refreshes don't re-trigger.
+      router.replace(window.location.pathname);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // editing intentionally excluded — we only want to act on first mount with the param
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillId]);
 
   // Match a saved grid to the currently selected image. Cover grids
   // were stored with image_path = NULL historically — surface those
@@ -162,6 +208,8 @@ export function GridAnalyzer({
       custom_h: editing.custom_h,
       label: editing.label.trim() || null,
       notes: editing.notes.trim() || null,
+      color: editing.color,
+      source_grid_id: editing.source_grid_id,
       created_by: nickname,
     };
     if (editing.id) {
@@ -500,6 +548,24 @@ function GridEditor({
             compact
           />
         ) : null}
+        <button
+          type="button"
+          onClick={() =>
+            onChange({
+              ...draft,
+              color: draft.color === "light" ? "dark" : "light",
+            })
+          }
+          className={cn(
+            "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors",
+            draft.color === "light"
+              ? "border-input bg-foreground text-background"
+              : "border-input text-muted-foreground hover:text-foreground",
+          )}
+          title="그리드 라인 색상"
+        >
+          {draft.color === "light" ? "흰색 라인" : "검은색 라인"}
+        </button>
         <label className="ml-auto flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
           <input
             type="checkbox"
@@ -646,15 +712,26 @@ function GridLines({ draft }: { draft: Draft }) {
   const innerW = 100 - left - right;
   const innerH = 100 - top - bottom;
 
+  // Stroke color resolves at render time so the same GridLines is reused
+  // across light / dark grids on the same image.
+  const stroke =
+    draft.color === "light" ? "rgb(255 255 255)" : "rgb(0 0 0)";
+  const lineColor =
+    draft.color === "light" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.65)";
+  const baselineColor =
+    draft.color === "light" ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.2)";
+
   // Margin frame stroke (always shown)
   const frame = (
     <div
-      className="absolute border border-foreground/70 ring-1 ring-foreground/10"
+      className="absolute"
       style={{
         left: `${left}%`,
         top: `${top}%`,
         right: `${right}%`,
         bottom: `${bottom}%`,
+        border: `1px solid ${stroke}`,
+        opacity: 0.75,
       }}
     />
   );
@@ -713,36 +790,39 @@ function GridLines({ draft }: { draft: Draft }) {
       {vLines.map((x, i) => (
         <div
           key={`v${i}`}
-          className="pointer-events-none absolute bg-foreground/65"
+          className="pointer-events-none absolute"
           style={{
             left: `${x}%`,
             top: `${top}%`,
             bottom: `${bottom}%`,
             width: 1,
+            background: lineColor,
           }}
         />
       ))}
       {hLines.map((y, i) => (
         <div
           key={`h${i}`}
-          className="pointer-events-none absolute bg-foreground/65"
+          className="pointer-events-none absolute"
           style={{
             top: `${y}%`,
             left: `${left}%`,
             right: `${right}%`,
             height: 1,
+            background: lineColor,
           }}
         />
       ))}
       {baselines.map((y, i) => (
         <div
           key={`bl${i}`}
-          className="pointer-events-none absolute bg-foreground/20"
+          className="pointer-events-none absolute"
           style={{
             top: `${y}%`,
             left: `${left}%`,
             right: `${right}%`,
             height: 1,
+            background: baselineColor,
           }}
         />
       ))}

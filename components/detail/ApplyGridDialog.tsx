@@ -1,9 +1,9 @@
 "use client";
 
 import { Loader2, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,11 +12,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useNickname } from "@/lib/nickname";
 import { searchRefIdsClient } from "@/lib/refSearch";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
-import type { GridSpec, Project, RefGrid } from "@/lib/types";
+import type { Project, RefGrid } from "@/lib/types";
 
 // Reusable: copies the spec of a saved RefGrid onto another ref or onto
 // a WIP project. Source ref's image metadata is also stashed on the
@@ -32,25 +31,29 @@ type RefRow = {
 
 type Mode = "ref" | "project";
 
+// Apply behaviour: pick a target → navigate to that target's grid
+// editor with `?from_grid=<id>` in the URL. The destination opens its
+// analyzer pre-populated with the source spec, lets the user adjust to
+// the new image's proportions, then save explicitly. We deliberately
+// don't insert a copy here — too easy to end up with grids that don't
+// match the target image's aspect.
 export function ApplyGridDialog({
   grid,
   sourceRefId,
-  sourceImagePath,
-  sourceWidth,
-  sourceHeight,
 }: {
   grid: RefGrid;
+  // Kept for prop-stability with earlier callers; image meta is only
+  // used by the project apply flow which has been moved to
+  // navigation-then-confirm and reads source metadata server-side.
   sourceRefId: string;
-  sourceImagePath: string;
-  sourceWidth: number;
-  sourceHeight: number;
+  sourceImagePath?: string;
+  sourceWidth?: number;
+  sourceHeight?: number;
 }) {
   const supabase = useMemo(() => createClient(), []);
-  const { nickname } = useNickname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("ref");
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Ref search
@@ -108,57 +111,17 @@ export function ApplyGridDialog({
     })();
   }, [open, mode, refQuery, sourceRefId, supabase]);
 
-  function specPayload(): GridSpec & { created_by: string | null } {
-    return {
-      grid_type: grid.grid_type,
-      cols: grid.cols,
-      rowscount: grid.rowscount,
-      margin_top: grid.margin_top,
-      margin_right: grid.margin_right,
-      margin_bottom: grid.margin_bottom,
-      margin_left: grid.margin_left,
-      gutter_x: grid.gutter_x,
-      gutter_y: grid.gutter_y,
-      baseline: grid.baseline,
-      custom_v: grid.custom_v,
-      custom_h: grid.custom_h,
-      label: grid.label,
-      notes: grid.notes,
-      created_by: nickname,
-    };
+  function applyToRef(target: RefRow) {
+    setError(null);
+    setOpen(false);
+    if (target.id === sourceRefId) return;
+    router.push(`/ref/${target.id}?from_grid=${grid.id}`);
   }
 
-  async function applyToRef(target: RefRow) {
-    setBusy(true);
+  function applyToProject(project: { id: string }) {
     setError(null);
-    const { error: err } = await supabase
-      .from("ref_grids")
-      .insert({ ref_id: target.id, ...specPayload() });
-    setBusy(false);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    setDone(`레퍼 "${target.title ?? "untitled"}" 에 적용됨`);
-  }
-
-  async function applyToProject(project: { id: string; title: string }) {
-    setBusy(true);
-    setError(null);
-    const { error: err } = await supabase.from("project_grids").insert({
-      project_id: project.id,
-      source_ref_id: sourceRefId,
-      source_image_path: sourceImagePath,
-      source_width: sourceWidth,
-      source_height: sourceHeight,
-      ...specPayload(),
-    });
-    setBusy(false);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    setDone(`프로젝트 "${project.title}" 에 적용됨`);
+    setOpen(false);
+    router.push(`/wip/${project.id}?from_grid=${grid.id}`);
   }
 
   return (
@@ -167,7 +130,6 @@ export function ApplyGridDialog({
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) {
-          setDone(null);
           setError(null);
           setRefQuery("");
         }
@@ -211,8 +173,7 @@ export function ApplyGridDialog({
                   <li key={r.id}>
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={() => void applyToRef(r)}
+                      onClick={() => applyToRef(r)}
                       className="flex w-full items-center gap-2 rounded-md border border-transparent p-1.5 text-left hover:border-input"
                     >
                       <div
@@ -240,8 +201,7 @@ export function ApplyGridDialog({
                 <li key={p.id}>
                   <button
                     type="button"
-                    disabled={busy}
-                    onClick={() => void applyToProject(p)}
+                    onClick={() => applyToProject(p)}
                     className="flex w-full items-center justify-between gap-2 rounded-md border border-transparent p-2 text-left hover:border-input"
                   >
                     <span className="truncate text-sm">{p.title}</span>
@@ -264,19 +224,10 @@ export function ApplyGridDialog({
             </ul>
           )}
 
-          {done ? (
-            <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-300/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100">
-              <span>{done}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setDone(null)}
-              >
-                또 적용
-              </Button>
-            </div>
-          ) : null}
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            대상을 고르면 그쪽 그리드 분석기로 이동해 미리채워진 상태로
+            확인·조정 후 저장할 수 있어요.
+          </p>
           {error ? (
             <p className="text-xs text-destructive">{error}</p>
           ) : null}

@@ -830,6 +830,114 @@ export async function fetchProjectGrids(
   return (data ?? []) as ProjectGrid[];
 }
 
+// Grid gallery: every "original" ref grid (source_grid_id IS NULL) with
+// the source ref's metadata + counts of refs/projects that descended
+// from it. Originals are the natural unit because copies always trace
+// back; we surface them and let users drill in to see the lineage.
+export type GridGalleryEntry = {
+  grid: RefGrid;
+  source_ref: {
+    id: string;
+    title: string | null;
+    image_path: string;
+    image_width: number | null;
+    image_height: number | null;
+    genres: string[];
+  } | null;
+  applied_to_refs: number;
+  applied_to_projects: number;
+  applied_refs: { id: string; title: string | null; image_path: string }[];
+  applied_projects: { id: string; title: string }[];
+};
+
+export async function fetchGridGallery(): Promise<GridGalleryEntry[]> {
+  const supabase = await createClient();
+  const { data: originals } = await supabase
+    .from("ref_grids")
+    .select("*")
+    .is("source_grid_id", null)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (!originals || originals.length === 0) return [];
+
+  const refIds = [...new Set(originals.map((g) => g.ref_id as string))];
+  const ids = originals.map((g) => g.id as string);
+
+  const [refsRes, copiesRes, projectCopiesRes] = await Promise.all([
+    supabase
+      .from("refs")
+      .select("id, title, image_path, image_width, image_height, genres")
+      .in("id", refIds),
+    supabase
+      .from("ref_grids")
+      .select("id, source_grid_id, ref_id, refs!inner(id, title, image_path)")
+      .in("source_grid_id", ids),
+    supabase
+      .from("project_grids")
+      .select("id, source_grid_id, project_id, projects!inner(id, title)")
+      .in("source_grid_id", ids),
+  ]);
+
+  type RefRow = {
+    id: string;
+    title: string | null;
+    image_path: string;
+    image_width: number | null;
+    image_height: number | null;
+    genres: string[];
+  };
+  const refsById = new Map<string, RefRow>();
+  for (const r of (refsRes.data ?? []) as RefRow[]) refsById.set(r.id, r);
+
+  type RefCopy = {
+    source_grid_id: string;
+    refs:
+      | { id: string; title: string | null; image_path: string }
+      | { id: string; title: string | null; image_path: string }[]
+      | null;
+  };
+  const refsBySource = new Map<
+    string,
+    { id: string; title: string | null; image_path: string }[]
+  >();
+  for (const c of (copiesRes.data ?? []) as unknown as RefCopy[]) {
+    const ref = Array.isArray(c.refs) ? c.refs[0] : c.refs;
+    if (!ref) continue;
+    if (!refsBySource.has(c.source_grid_id))
+      refsBySource.set(c.source_grid_id, []);
+    refsBySource.get(c.source_grid_id)!.push(ref);
+  }
+
+  type ProjCopy = {
+    source_grid_id: string;
+    projects:
+      | { id: string; title: string }
+      | { id: string; title: string }[]
+      | null;
+  };
+  const projsBySource = new Map<string, { id: string; title: string }[]>();
+  for (const c of (projectCopiesRes.data ?? []) as unknown as ProjCopy[]) {
+    const proj = Array.isArray(c.projects) ? c.projects[0] : c.projects;
+    if (!proj) continue;
+    if (!projsBySource.has(c.source_grid_id))
+      projsBySource.set(c.source_grid_id, []);
+    projsBySource.get(c.source_grid_id)!.push(proj);
+  }
+
+  return (originals as RefGrid[]).map((g) => {
+    const appliedRefs = refsBySource.get(g.id) ?? [];
+    const appliedProjects = projsBySource.get(g.id) ?? [];
+    return {
+      grid: g,
+      source_ref: refsById.get(g.ref_id) ?? null,
+      applied_to_refs: appliedRefs.length,
+      applied_to_projects: appliedProjects.length,
+      applied_refs: appliedRefs,
+      applied_projects: appliedProjects,
+    };
+  });
+}
+
 // Visual-similarity weight for the hybrid score. Cosine similarity is in
 // [-1, 1] but in practice CLIP image-image scores live in [0.5, 1]. Using
 // 8 puts a perfect visual match worth roughly the same as a ~4-tag overlap,
