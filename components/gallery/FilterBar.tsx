@@ -276,7 +276,7 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
               : "border-input text-muted-foreground hover:text-foreground",
           )}
         >
-          그리드 있는 것만
+          GRID
         </button>
       </div>
       {allTags.length > 0 ? (
