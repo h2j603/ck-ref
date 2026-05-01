@@ -243,6 +243,14 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
       }
       return b.created_at.localeCompare(a.created_at);
     });
+  } else if (filter.sort === "shuffle") {
+    // Fisher-Yates over the fetched batch. Cursor pagination is
+    // disabled in this mode (see MasonryGrid) — re-rolling means
+    // selecting "shuffle" from the sort dropdown again.
+    for (let i = rows.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+    }
   } else if (filter.sort === "year_desc" || filter.sort === "year_asc") {
     // Year-based browsing isn't useful for refs that don't have a year on
     // them — they'd just clump at the bottom in a meaningless order — so

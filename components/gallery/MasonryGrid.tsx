@@ -33,8 +33,12 @@ export function MasonryGrid({
 }) {
   const { columns } = useColumnPref();
   const [refs, setRefs] = useState(initial);
+  // Shuffle returns a randomized slice — appending more pages by
+  // created_at cursor would be meaningless and could even surface dupes
+  // already in the shuffled set, so pagination is suppressed in that
+  // mode. Re-rolling is done by selecting shuffle in the sort UI.
   const [hasMore, setHasMore] = useState(
-    pageSize != null && initial.length >= pageSize,
+    sort !== "shuffle" && pageSize != null && initial.length >= pageSize,
   );
   const [pending, startTransition] = useTransition();
 

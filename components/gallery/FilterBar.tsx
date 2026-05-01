@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { RefreshCw, Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -24,6 +24,7 @@ const SORT_LABELS: Record<RefSort, string> = {
   rating: "별점",
   year_desc: "작업연도 ↓",
   year_asc: "작업연도 ↑",
+  shuffle: "섞기",
 };
 
 export function FilterBar({ allTags }: { allTags: string[] }) {
@@ -214,6 +215,20 @@ export function FilterBar({ allTags }: { allTags: string[] }) {
             ))}
           </SelectContent>
         </Select>
+        {sort === "shuffle" ? (
+          // Re-roll. router.refresh() re-runs the server component so
+          // fetchRefs picks a new random order, even on the same URL.
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            aria-label="다시 섞기"
+            title="다시 섞기"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-dashed border-input px-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className="size-3" />
+            다시 섞기
+          </button>
+        ) : null}
         {hasFilter ? (
           <button
             type="button"
