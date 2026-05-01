@@ -550,24 +550,23 @@ function GridEditor({
             compact
           />
         ) : null}
-        <button
-          type="button"
-          onClick={() =>
-            onChange({
-              ...draft,
-              color: draft.color === "light" ? "dark" : "light",
-            })
-          }
-          className={cn(
-            "rounded-full border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors",
-            draft.color === "light"
-              ? "border-input bg-foreground text-background"
-              : "border-input text-muted-foreground hover:text-foreground",
-          )}
-          title="그리드 라인 색상"
+        <label
+          className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground"
+          title="그리드 라인 색상 반전 (어두운 작업에서 잘 보이게)"
         >
-          {draft.color === "light" ? "흰색 라인" : "검은색 라인"}
-        </button>
+          <input
+            type="checkbox"
+            checked={draft.color === "light"}
+            onChange={(e) =>
+              onChange({
+                ...draft,
+                color: e.target.checked ? "light" : "dark",
+              })
+            }
+            className="size-3"
+          />
+          invert
+        </label>
         <label className="ml-auto flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
           <input
             type="checkbox"
