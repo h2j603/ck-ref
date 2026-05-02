@@ -41,9 +41,9 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         kind: "spotify",
         src: `https://open.spotify.com/embed/${parts[0]}/${parts[1]}`,
         href: trimmed,
-        // Spotify's recommended sizes: 80 for compact, 352 for full.
-        // Full-card reads better in a moodboard.
-        height: parts[0] === "track" ? 152 : 352,
+        // Compact heights — full-card (352) dominated the page; the
+        // shorter row form still scrolls the queue and shows album art.
+        height: parts[0] === "track" ? 80 : 152,
       };
     }
   }
@@ -54,7 +54,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
       kind: "apple",
       src: `https://embed.music.apple.com${u.pathname}${u.search}`,
       href: trimmed,
-      height: 450,
+      height: 175,
     };
   }
 
@@ -67,7 +67,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
           kind: "youtube",
           src: `https://www.youtube.com/embed/videoseries?list=${list}`,
           href: trimmed,
-          height: 380,
+          height: 240,
         };
       }
     }
@@ -78,7 +78,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
           kind: "youtube",
           src: `https://www.youtube.com/embed/${v}`,
           href: trimmed,
-          height: 380,
+          height: 240,
         };
       }
     }
@@ -90,7 +90,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         kind: "youtube",
         src: `https://www.youtube.com/embed/${id}`,
         href: trimmed,
-        height: 380,
+        height: 240,
       };
     }
   }
@@ -103,7 +103,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         trimmed,
       )}&color=%23000000&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`,
       href: trimmed,
-      height: 166,
+      height: 120,
     };
   }
 
