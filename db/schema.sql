@@ -256,6 +256,10 @@ create table if not exists board_items (
   board_id  uuid not null references boards(id) on delete cascade,
   ref_id    uuid not null references refs(id) on delete cascade,
   position  int not null default 0,
+  -- 0 = unrated, 1..5 = how well this ref fits the brief. The card
+  -- border in the moodboard tints based on this so the curator can
+  -- read fit at a glance without opening anything.
+  fit       smallint not null default 0 check (fit between 0 and 5),
   added_at  timestamptz not null default now(),
   added_by  text,
   primary key (board_id, ref_id)
@@ -263,6 +267,18 @@ create table if not exists board_items (
 
 create index if not exists board_items_board_idx on board_items (board_id, position);
 create index if not exists board_items_ref_idx on board_items (ref_id);
+
+alter table board_items add column if not exists fit smallint not null default 0;
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.constraint_column_usage
+    where table_name = 'board_items' and column_name = 'fit'
+  ) then
+    alter table board_items add constraint board_items_fit_check
+      check (fit between 0 and 5);
+  end if;
+end $$;
 
 -- DESIGNERS -----------------------------------------------------------------
 
