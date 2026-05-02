@@ -18,6 +18,7 @@ export default function NewBoardForm() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [playlistUrl, setPlaylistUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +45,7 @@ export default function NewBoardForm() {
         title: title.trim(),
         description: description.trim() || null,
         keywords,
+        playlist_url: playlistUrl.trim() || null,
         created_by: nickname || null,
       })
       .select("id")
@@ -79,6 +81,14 @@ export default function NewBoardForm() {
           items={TAG_PRESETS}
           active={keywords}
           onToggle={toggleKeyword}
+        />
+      </Field>
+      <Field label="플레이리스트 (선택)">
+        <Input
+          value={playlistUrl}
+          onChange={(e) => setPlaylistUrl(e.target.value)}
+          placeholder="Spotify / Apple Music / YouTube / SoundCloud URL"
+          inputMode="url"
         />
       </Field>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

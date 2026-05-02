@@ -139,6 +139,7 @@ export function UpdateRefs({
       let req = supabase
         .from("refs")
         .select("id, title, image_path, image_width, image_height")
+        .eq("board_only", false)
         .order("created_at", { ascending: false })
         .limit(12);
       if (q) req = req.ilike("title", `%${q}%`);

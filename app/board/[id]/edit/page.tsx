@@ -37,6 +37,7 @@ export default async function EditBoardPage({
           title: board.title,
           description: board.description,
           keywords: board.keywords,
+          playlist_url: board.playlist_url,
         }}
       />
     </div>

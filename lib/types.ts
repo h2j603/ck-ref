@@ -64,6 +64,7 @@ export type Ref = {
   color_hex: string | null;
   color_hue: number | null;
   ocr_text: string | null;
+  board_only: boolean;
 };
 
 export type RefImage = {
@@ -341,6 +342,7 @@ export type Board = {
   title: string;
   description: string | null;
   keywords: string[];
+  playlist_url: string | null;
   created_at: string;
   created_by: string | null;
 };

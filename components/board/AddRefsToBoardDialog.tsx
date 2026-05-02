@@ -83,6 +83,7 @@ export function AddRefsToBoardDialog({
           const { data } = await supabase
             .from("refs")
             .select(REF_LITE_COLUMNS)
+            .eq("board_only", false)
             .order("created_at", { ascending: false })
             .limit(36);
           if (cancelled) return;
@@ -100,6 +101,7 @@ export function AddRefsToBoardDialog({
         const { data } = await supabase
           .from("refs")
           .select(REF_LITE_COLUMNS)
+          .eq("board_only", false)
           .in("id", usable.slice(0, 60));
         if (cancelled) return;
         setCandidates((data ?? []) as RefLite[]);

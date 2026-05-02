@@ -22,6 +22,7 @@ export function EditBoardForm({
     title: string;
     description: string | null;
     keywords: string[];
+    playlist_url: string | null;
   };
 }) {
   const supabase = createClient();
@@ -29,6 +30,7 @@ export function EditBoardForm({
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
   const [keywords, setKeywords] = useState<string[]>(initial.keywords ?? []);
+  const [playlistUrl, setPlaylistUrl] = useState(initial.playlist_url ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +72,7 @@ export function EditBoardForm({
         title: title.trim(),
         description: description.trim() || null,
         keywords,
+        playlist_url: playlistUrl.trim() || null,
       })
       .eq("id", boardId);
     if (error) {
@@ -106,6 +109,17 @@ export function EditBoardForm({
           items={TAG_PRESETS}
           active={keywords}
           onToggle={toggleKeyword}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          플레이리스트
+        </Label>
+        <Input
+          value={playlistUrl}
+          onChange={(e) => setPlaylistUrl(e.target.value)}
+          placeholder="Spotify / Apple Music / YouTube / SoundCloud URL"
+          inputMode="url"
         />
       </div>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

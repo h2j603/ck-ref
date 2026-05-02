@@ -136,8 +136,18 @@ async function searchRefIds(q: string): Promise<Set<string>> {
   const notesOr = `body.ilike.${like},pros.ilike.${like},cons.ilike.${like}`;
 
   const [refsRes, tagsRes, designerRes, notesRes] = await Promise.all([
-    supabase.from("refs").select("id").or(refsOr).limit(200),
-    supabase.from("refs").select("id").contains("tags", [q]).limit(200),
+    supabase
+      .from("refs")
+      .select("id")
+      .eq("board_only", false)
+      .or(refsOr)
+      .limit(200),
+    supabase
+      .from("refs")
+      .select("id")
+      .eq("board_only", false)
+      .contains("tags", [q])
+      .limit(200),
     supabase
       .from("designers")
       .select("ref_designers(ref_id)")
@@ -194,6 +204,7 @@ export async function fetchRefs(filter: RefFilter = {}, limit = 200) {
   let query = supabase
     .from("refs")
     .select(REF_COLUMNS)
+    .eq("board_only", false)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -755,7 +766,7 @@ export async function fetchBoards(): Promise<BoardSummary[]> {
   const { data, error } = await supabase
     .from("boards")
     .select(
-      `id, title, description, keywords, created_at, created_by,
+      `id, title, description, keywords, playlist_url, created_at, created_by,
        board_items ( position, ref:refs(id, image_path, image_width, image_height) )`,
     )
     .order("created_at", { ascending: false });
@@ -1141,6 +1152,7 @@ async function fetchRefsByIds(ids: string[]): Promise<RefWithDesigners[]> {
   const { data, error } = await supabase
     .from("refs")
     .select(REF_COLUMNS)
+    .eq("board_only", false)
     .in("id", ids);
   if (error) return [];
   const bare = flatten(data as RefRow[]);
@@ -1526,7 +1538,10 @@ export async function fetchActivityForMe(
 export async function fetchAllTags(): Promise<string[]> {
   const supabase = await createClient();
   // Pull tags from refs and dedupe in memory. For larger archives, move this to a view/RPC.
-  const { data, error } = await supabase.from("refs").select("tags");
+  const { data, error } = await supabase
+    .from("refs")
+    .select("tags")
+    .eq("board_only", false);
   if (error) throw error;
   const set = new Set<string>();
   for (const row of data ?? []) {

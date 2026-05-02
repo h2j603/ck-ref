@@ -30,8 +30,18 @@ export async function searchRefIdsClient(
   const notesOr = `body.ilike.${like},pros.ilike.${like},cons.ilike.${like}`;
 
   const [refsRes, tagsRes, designerRes, notesRes] = await Promise.all([
-    supabase.from("refs").select("id").or(refsOr).limit(200),
-    supabase.from("refs").select("id").contains("tags", [trimmed]).limit(200),
+    supabase
+      .from("refs")
+      .select("id")
+      .eq("board_only", false)
+      .or(refsOr)
+      .limit(200),
+    supabase
+      .from("refs")
+      .select("id")
+      .eq("board_only", false)
+      .contains("tags", [trimmed])
+      .limit(200),
     supabase
       .from("designers")
       .select("ref_designers(ref_id)")

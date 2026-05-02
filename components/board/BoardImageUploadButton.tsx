@@ -74,6 +74,7 @@ export function BoardImageUploadButton({
             color_hex: probed?.colorHex ?? null,
             color_hue: probed?.colorHue ?? null,
             created_by: nickname || null,
+            board_only: true,
           })
           .select("id")
           .single();
