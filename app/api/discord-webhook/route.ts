@@ -503,7 +503,11 @@ async function buildRating(
 function buildRefUpload(
   record: Record<string, unknown>,
   site: string,
-): Built {
+): Built | null {
+  // Board-only uploads are scratch images glued to a single moodboard —
+  // they aren't archive contributions worth pinging the channel for, and
+  // the in-app fanout would push them to everyone's bell too.
+  if (record.board_only === true) return null;
   const id = String(record.id);
   const title = (record.title as string | null) ?? "untitled";
   const path = `/ref/${id}`;
