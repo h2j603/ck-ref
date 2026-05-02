@@ -8,15 +8,9 @@ export type PlaylistEmbed = {
   kind: "spotify" | "apple" | "youtube" | "soundcloud" | "other";
   src: string | null;
   href: string;
-  // What height to give the <iframe> so the platform renders cleanly
-  // at its intended layout. Most platforms shrink to fit; Apple Music
-  // ignores iframe height and always draws the full ~450px card.
-  iframeHeight: number;
-  // Visible clamp on the wrapper. Equals iframeHeight when the
-  // platform respects the iframe size; smaller when we crop a card
-  // we couldn't shrink (Apple Music — hides its big "재생" / "앱에서
-  // 보기" footer buttons).
-  containerHeight: number;
+  // Natural rendered height for each platform so the whole player —
+  // header, track list, action buttons — is visible without clipping.
+  height: number;
 };
 
 const SPOTIFY_KINDS = new Set([
@@ -41,35 +35,29 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
 
   const host = u.hostname.toLowerCase();
 
-  // Spotify — open.spotify.com/<kind>/<id>. The platform respects
-  // iframe height: 152 → compact playlist row, 80 → single-line track.
+  // Spotify — open.spotify.com/<kind>/<id>. 352 is Spotify's "card"
+  // height that shows cover + track list + the bottom controls.
   if (host === "open.spotify.com") {
     const parts = u.pathname.split("/").filter(Boolean);
     if (parts.length >= 2 && SPOTIFY_KINDS.has(parts[0])) {
-      const h = parts[0] === "track" ? 80 : 152;
       return {
         kind: "spotify",
         src: `https://open.spotify.com/embed/${parts[0]}/${parts[1]}`,
         href: trimmed,
-        iframeHeight: h,
-        containerHeight: h,
+        height: parts[0] === "track" ? 152 : 352,
       };
     }
   }
 
   // Apple Music — music.apple.com → embed.music.apple.com with same
-  // path. Apple's playlist embed renders at a fixed ~450px regardless
-  // of the iframe height we pass, so we let it draw at its natural
-  // size and crop the wrapper down to a header strip — that hides the
-  // big bottom "재생" / "앱에서 보기" buttons while keeping the cover
-  // art and the first couple of track titles visible.
+  // path. Apple ignores iframe height for playlists and renders its
+  // full ~450px card; we give it that so nothing gets cut off.
   if (host === "music.apple.com") {
     return {
       kind: "apple",
       src: `https://embed.music.apple.com${u.pathname}${u.search}`,
       href: trimmed,
-      iframeHeight: 450,
-      containerHeight: 175,
+      height: 450,
     };
   }
 
@@ -82,8 +70,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
           kind: "youtube",
           src: `https://www.youtube.com/embed/videoseries?list=${list}`,
           href: trimmed,
-          iframeHeight: 240,
-          containerHeight: 240,
+          height: 340,
         };
       }
     }
@@ -94,8 +81,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
           kind: "youtube",
           src: `https://www.youtube.com/embed/${v}`,
           href: trimmed,
-          iframeHeight: 240,
-          containerHeight: 240,
+          height: 340,
         };
       }
     }
@@ -107,8 +93,7 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         kind: "youtube",
         src: `https://www.youtube.com/embed/${id}`,
         href: trimmed,
-        iframeHeight: 240,
-        containerHeight: 240,
+        height: 340,
       };
     }
   }
@@ -121,16 +106,9 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         trimmed,
       )}&color=%23000000&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`,
       href: trimmed,
-      iframeHeight: 120,
-      containerHeight: 120,
+      height: 166,
     };
   }
 
-  return {
-    kind: "other",
-    src: null,
-    href: trimmed,
-    iframeHeight: 0,
-    containerHeight: 0,
-  };
+  return { kind: "other", src: null, href: trimmed, height: 0 };
 }
