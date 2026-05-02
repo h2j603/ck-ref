@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AddRefsToBoardDialog } from "@/components/board/AddRefsToBoardDialog";
 import { BoardImageUploadButton } from "@/components/board/BoardImageUploadButton";
+import { Button } from "@/components/ui/button";
 import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
 import { isVideoPath } from "@/lib/media";
 import { useNickname } from "@/lib/nickname";
@@ -63,6 +64,10 @@ export function BoardItemsGrid({
   const [refs, setRefs] = useState<BoardRef[]>(initialRefs);
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // "관리" mode reveals per-card delete X. Off by default so the moodboard
+  // reads as a viewing surface; the toggle lives next to the upload /
+  // add-ref buttons in the action row.
+  const [manageMode, setManageMode] = useState(false);
   // Board-only refs don't have a /ref/<id> view worth navigating to
   // (no metadata, no notes, etc.) — clicking them just opens the
   // image full-size in a lightbox.
@@ -128,6 +133,16 @@ export function BoardItemsGrid({
     <div className="flex flex-col gap-3">
       {hydrated && nickname ? (
         <div className="flex flex-wrap items-start justify-end gap-2">
+          <Button
+            type="button"
+            variant={manageMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setManageMode((v) => !v)}
+            className="h-7 px-2 text-[11px]"
+          >
+            <Pencil className="size-3" />
+            {manageMode ? "완료" : "관리"}
+          </Button>
           <BoardImageUploadButton
             boardId={boardId}
             onUploaded={() => router.refresh()}
@@ -183,7 +198,7 @@ export function BoardItemsGrid({
             <div
               key={ref.id}
               className={cn(
-                "group relative block overflow-hidden rounded-md border-2 bg-muted transition-colors",
+                "group relative block overflow-hidden border-2 bg-muted transition-colors",
                 FIT_BORDER[ref.fit] ?? FIT_BORDER[0],
               )}
             >
@@ -206,12 +221,12 @@ export function BoardItemsGrid({
                 editable={Boolean(hydrated && nickname)}
                 onSet={(n) => void setFit(ref.id, n)}
               />
-              {hydrated && nickname ? (
+              {hydrated && nickname && manageMode ? (
                 <button
                   type="button"
                   onClick={() => remove(ref.id)}
                   disabled={removing !== null}
-                  className="absolute right-1 top-1 rounded-full bg-background/90 p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-background hover:text-destructive hover:opacity-100 disabled:opacity-40"
+                  className="absolute right-1 top-1 rounded-full bg-background/95 p-1 text-muted-foreground shadow-sm hover:bg-background hover:text-destructive disabled:opacity-40"
                   aria-label="remove from board"
                 >
                   <X className="size-3" />
