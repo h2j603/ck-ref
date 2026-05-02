@@ -203,12 +203,15 @@ create table if not exists boards (
   id          uuid primary key default gen_random_uuid(),
   title       text not null,
   description text,
+  keywords    text[] not null default '{}',
   created_at  timestamptz not null default now(),
   created_by  text
 );
 
 create index if not exists boards_created_at_idx on boards (created_at desc);
 create index if not exists boards_created_by_idx on boards (created_by);
+
+alter table boards add column if not exists keywords text[] not null default '{}';
 
 create table if not exists board_items (
   board_id  uuid not null references boards(id) on delete cascade,

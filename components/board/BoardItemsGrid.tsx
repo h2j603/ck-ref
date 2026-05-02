@@ -3,9 +3,11 @@
 import { X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Masonry from "react-masonry-css";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AddRefsToBoardDialog } from "@/components/board/AddRefsToBoardDialog";
 import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
 import { isVideoPath } from "@/lib/media";
 import { useNickname } from "@/lib/nickname";
@@ -25,11 +27,25 @@ export function BoardItemsGrid({
   initialRefs: RefWithDesigners[];
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const { columns } = useColumnPref();
   const { nickname, hydrated } = useNickname();
   const [refs, setRefs] = useState<RefWithDesigners[]>(initialRefs);
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync local state with the server-rendered list. After adding new
+  // refs we router.refresh(), which re-runs the RSC and feeds a new
+  // initialRefs prop in; without this effect the state would stay
+  // pinned to the first mount's snapshot.
+  useEffect(() => {
+    setRefs(initialRefs);
+  }, [initialRefs]);
+
+  const existingIds = useMemo(
+    () => new Set(refs.map((r) => r.id)),
+    [refs],
+  );
 
   async function remove(refId: string) {
     if (!window.confirm("이 ref를 보드에서 빼낼까요?")) return;
@@ -48,17 +64,23 @@ export function BoardItemsGrid({
     setRefs((prev) => prev.filter((r) => r.id !== refId));
   }
 
-  if (refs.length === 0) {
-    return (
-      <p className="py-32 text-center font-mono text-xs text-muted-foreground">
-        아직 보드에 ref가 없습니다.
-      </p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3">
+      {hydrated && nickname ? (
+        <div className="flex justify-end">
+          <AddRefsToBoardDialog
+            boardId={boardId}
+            existingIds={existingIds}
+            onAdded={() => router.refresh()}
+          />
+        </div>
+      ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {refs.length === 0 ? (
+        <p className="py-32 text-center font-mono text-xs text-muted-foreground">
+          아직 보드에 ref가 없습니다.
+        </p>
+      ) : (
       <Masonry
         breakpointCols={breakpointsFor(columns)}
         className="masonry-grid"
@@ -113,6 +135,7 @@ export function BoardItemsGrid({
           );
         })}
       </Masonry>
+      )}
     </div>
   );
 }

@@ -340,6 +340,7 @@ export type Board = {
   id: string;
   title: string;
   description: string | null;
+  keywords: string[];
   created_at: string;
   created_by: string | null;
 };

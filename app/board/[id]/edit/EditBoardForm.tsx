@@ -3,9 +3,11 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ChipToggleRow } from "@/components/ui/chip-toggle-row";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TAG_PRESETS } from "@/components/upload/TagPresets";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
 
@@ -16,14 +18,28 @@ export function EditBoardForm({
 }: {
   boardId: string;
   createdBy: string | null;
-  initial: { title: string; description: string | null };
+  initial: {
+    title: string;
+    description: string | null;
+    keywords: string[];
+  };
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
+  const [keywords, setKeywords] = useState<string[]>(initial.keywords ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleKeyword(k: string) {
+    const lower = k.toLowerCase();
+    setKeywords((prev) =>
+      prev.some((x) => x.toLowerCase() === lower)
+        ? prev.filter((x) => x.toLowerCase() !== lower)
+        : [...prev, k],
+    );
+  }
 
   if (!hydrated) {
     return (
@@ -53,6 +69,7 @@ export function EditBoardForm({
       .update({
         title: title.trim(),
         description: description.trim() || null,
+        keywords,
       })
       .eq("id", boardId);
     if (error) {
@@ -79,6 +96,16 @@ export function EditBoardForm({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          키워드
+        </Label>
+        <ChipToggleRow
+          items={TAG_PRESETS}
+          active={keywords}
+          onToggle={toggleKeyword}
         />
       </div>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

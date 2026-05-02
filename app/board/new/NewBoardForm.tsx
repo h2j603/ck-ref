@@ -4,9 +4,11 @@ import { useState } from "react";
 
 import { NicknamePill } from "@/components/nickname-pill";
 import { Button } from "@/components/ui/button";
+import { ChipToggleRow } from "@/components/ui/chip-toggle-row";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TAG_PRESETS } from "@/components/upload/TagPresets";
 import { useNickname } from "@/lib/nickname";
 import { createClient } from "@/lib/supabase/client";
 
@@ -15,8 +17,18 @@ export default function NewBoardForm() {
   const { nickname, hydrated } = useNickname();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleKeyword(k: string) {
+    const lower = k.toLowerCase();
+    setKeywords((prev) =>
+      prev.some((x) => x.toLowerCase() === lower)
+        ? prev.filter((x) => x.toLowerCase() !== lower)
+        : [...prev, k],
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +43,7 @@ export default function NewBoardForm() {
       .insert({
         title: title.trim(),
         description: description.trim() || null,
+        keywords,
         created_by: nickname || null,
       })
       .select("id")
@@ -59,6 +72,13 @@ export default function NewBoardForm() {
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
           placeholder="이 보드의 목적을 적어주세요"
+        />
+      </Field>
+      <Field label="키워드">
+        <ChipToggleRow
+          items={TAG_PRESETS}
+          active={keywords}
+          onToggle={toggleKeyword}
         />
       </Field>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

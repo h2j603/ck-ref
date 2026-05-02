@@ -33,7 +33,11 @@ export default async function EditBoardPage({
       <EditBoardForm
         boardId={board.id}
         createdBy={board.created_by}
-        initial={{ title: board.title, description: board.description }}
+        initial={{
+          title: board.title,
+          description: board.description,
+          keywords: board.keywords,
+        }}
       />
     </div>
   );
