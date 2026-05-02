@@ -157,9 +157,21 @@ export function GridAnalyzer({
   const [error, setError] = useState<string | null>(null);
   const [showImage, setShowImage] = useState(true);
   // Which image the user is currently analyzing. Defaults to the first
-  // (cover or first extra if cover is video). Saving / showing grids is
-  // scoped to this selection.
-  const [activeIdx, setActiveIdx] = useState(0);
+  // image that already has a grid attached so the user lands on
+  // something to look at instead of an empty placeholder; falls back to
+  // the cover (index 0). Saving / showing grids is scoped to this
+  // selection.
+  const [activeIdx, setActiveIdx] = useState(() => {
+    if (initial.length === 0) return 0;
+    const idx = images.findIndex((img) =>
+      initial.some((g) =>
+        img.path === null
+          ? g.image_path == null || g.image_path === img.storagePath
+          : g.image_path === img.storagePath,
+      ),
+    );
+    return idx >= 0 ? idx : 0;
+  });
   const active = images[activeIdx] ?? images[0];
 
   // Honor ?from_grid=<id> — fetch the source grid spec and open the
@@ -558,6 +570,7 @@ function GridEditor({
           <SliderField
             label="좌·우 마진"
             value={draft.margin_left}
+            max={0.4}
             onChange={(v) =>
               onChange({ ...draft, margin_left: v, margin_right: v })
             }
@@ -565,6 +578,7 @@ function GridEditor({
           <SliderField
             label="상·하 마진"
             value={draft.margin_top}
+            max={0.4}
             onChange={(v) =>
               onChange({ ...draft, margin_top: v, margin_bottom: v })
             }

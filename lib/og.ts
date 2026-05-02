@@ -86,6 +86,26 @@ function isPinterestHost(host: string): boolean {
   return /(?:^|\.)pinterest\.[a-z.]+$/i.test(host);
 }
 
+// Instagram OG titles bundle the whole caption, often multiline, prefixed
+// with stats and the user's "on Instagram:" / "on <Date>:" attribution.
+// We want only the first line of the actual caption — a usable default
+// for the upload form's title field.
+function cleanInstagramTitle(title: string): string {
+  const attribution = title.match(
+    /\son\s+(?:Instagram|January|February|March|April|May|June|July|August|September|October|November|December)\b[^:]*:\s*/i,
+  );
+  let body = attribution
+    ? title.slice(attribution.index! + attribution[0].length)
+    : title;
+  // First line, then trim wrapping quotes — wrapping quotes can appear
+  // on either end so strip after the line is isolated.
+  body = body.split(/\r?\n/, 1)[0] ?? "";
+  body = body
+    .replace(/^["'“‘«]+/, "")
+    .replace(/["'”’»]+$/, "");
+  return body.trim();
+}
+
 function looksLikePinterestBoilerplate(title: string): boolean {
   if (/Pinterest/i.test(title)) return true;
   if (/(에서\s*발견|핀\s*on\b)/i.test(title)) return true;
@@ -720,6 +740,10 @@ export function parseOg(html: string, baseHref: string): OgMeta {
     host = new URL(baseHref).host;
   } catch {
     /* baseHref might be malformed — treat as no special handling. */
+  }
+  if (host && isInstagramHost(host) && title) {
+    const cleaned = cleanInstagramTitle(title);
+    title = cleaned.length > 0 ? cleaned : null;
   }
   if (host && isPinterestHost(host) && title && looksLikePinterestBoilerplate(title)) {
     // Prefer the pin's description if it's substantial; otherwise drop the

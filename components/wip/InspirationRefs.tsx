@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ReasonBadge } from "@/components/wip/ReasonBadge";
+import { isVideoPath } from "@/lib/media";
 import { useNickname } from "@/lib/nickname";
 import { searchRefIdsClient } from "@/lib/refSearch";
 import { publicImageUrl } from "@/lib/storage";
@@ -27,6 +28,43 @@ type RefLite = Pick<
   Ref,
   "id" | "title" | "image_path" | "image_width" | "image_height"
 > & { reason?: string | null; added_by?: string | null };
+
+// Some refs have a video as their cover (mp4 / webm / mov / m4v). A
+// plain <Image> on those paths renders broken; mirror the masonry's
+// muted-loop preview so the thumbnail still gives a sense of the work.
+function RefThumb({
+  path,
+  alt,
+  imageClassName = "object-cover",
+}: {
+  path: string;
+  alt: string;
+  imageClassName?: string;
+}) {
+  const url = publicImageUrl(path);
+  if (isVideoPath(path)) {
+    return (
+      <video
+        src={url}
+        className="absolute inset-0 h-full w-full object-cover"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+  return (
+    <Image
+      src={url}
+      alt={alt}
+      fill
+      sizes="120px"
+      className={imageClassName}
+    />
+  );
+}
 
 export function InspirationRefs({
   projectId,
@@ -221,12 +259,9 @@ export function InspirationRefs({
                         aspectRatio: `${pending.image_width ?? 4} / ${pending.image_height ?? 5}`,
                       }}
                     >
-                      <Image
-                        src={publicImageUrl(pending.image_path)}
+                      <RefThumb
+                        path={pending.image_path}
                         alt={pending.title ?? "ref"}
-                        fill
-                        sizes="120px"
-                        className="object-cover"
                       />
                     </div>
                     <Textarea
@@ -285,12 +320,10 @@ export function InspirationRefs({
                                 aspectRatio: `${r.image_width ?? 4} / ${r.image_height ?? 5}`,
                               }}
                             >
-                              <Image
-                                src={publicImageUrl(r.image_path)}
+                              <RefThumb
+                                path={r.image_path}
                                 alt={r.title ?? "ref"}
-                                fill
-                                sizes="120px"
-                                className="object-cover transition-opacity group-hover:opacity-80"
+                                imageClassName="object-cover transition-opacity group-hover:opacity-80"
                               />
                             </div>
                             <p className="truncate px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -371,13 +404,7 @@ export function InspirationRefs({
                     aspectRatio: `${r.image_width ?? 4} / ${r.image_height ?? 5}`,
                   }}
                 >
-                  <Image
-                    src={publicImageUrl(r.image_path)}
-                    alt={r.title ?? "ref"}
-                    fill
-                    sizes="120px"
-                    className="object-cover"
-                  />
+                  <RefThumb path={r.image_path} alt={r.title ?? "ref"} />
                 </div>
               </Link>
               {hydrated && nickname ? (
