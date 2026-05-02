@@ -49,7 +49,7 @@ const REF_COLUMNS = `
   id, title, year, source_url,
   image_path, image_width, image_height,
   genres, medium, languages, tags,
-  color_hex, color_hue, ocr_text,
+  color_hex, color_hue, ocr_text, board_only,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) ),
   ref_images ( count )
@@ -1210,7 +1210,7 @@ const REF_COLUMNS_FOR_BOARD = `
   id, title, year, source_url,
   image_path, image_width, image_height,
   genres, medium, languages, tags,
-  color_hex, color_hue, ocr_text,
+  color_hex, color_hue, ocr_text, board_only,
   notes_count, created_at, created_by,
   ref_designers ( designer:designers(id, slug, name) ),
   ref_images ( count )
