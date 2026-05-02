@@ -35,6 +35,18 @@ export default async function BoardDetailPage({
             {board.description}
           </p>
         ) : null}
+        {board.keywords.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {board.keywords.map((k) => (
+              <span
+                key={k}
+                className="rounded-full border border-input px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider text-muted-foreground"
+              >
+                {k}
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <NicknamePill nickname={board.created_by} />
           <BoardOwnerActions
