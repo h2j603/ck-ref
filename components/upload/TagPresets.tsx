@@ -7,9 +7,11 @@ import { parseTags } from "@/lib/slug";
 // grouped by axis (style → typography → texture → color → mood) but
 // rendered as a single flat row — the goal is glanceability, not a
 // taxonomy. Order here is the on-screen order. Exported so the WIP
-// planning keyword sections can reuse the same vocabulary.
+// planning keyword sections (positive / negative) can reuse the same
+// vocabulary; words that read naturally as either a "want" or a
+// "want-to-avoid" should land here.
 export const TAG_PRESETS = [
-  // style
+  // style / movement
   "swiss",
   "brutalist",
   "minimal",
@@ -17,6 +19,18 @@ export const TAG_PRESETS = [
   "vintage",
   "modern",
   "lofi",
+  "y2k",
+  "retro",
+  "futurist",
+  "postmodern",
+  "deconstructed",
+  "art-deco",
+  "pop",
+  "organic",
+  "geometric",
+  "conceptual",
+  "editorial",
+  "surreal",
   // layout / typography
   "grid",
   "asymmetric",
@@ -24,22 +38,64 @@ export const TAG_PRESETS = [
   "sans",
   "mono",
   "display",
+  "condensed",
+  "expanded",
+  "italic",
+  "variable",
+  "slab",
+  "script",
+  "hangul",
+  "latin",
   // texture / production
   "riso",
   "letterpress",
   "halftone",
   "noise",
   "3d",
+  "screen-print",
+  "foil",
+  "deboss",
+  "glitch",
+  "pixel",
+  "hand-drawn",
+  "photocopy",
+  "collage",
+  "ai-generated",
+  "photographic",
   // color
   "monochrome",
   "duotone",
   "gradient",
   "pastel",
+  "high-contrast",
+  "muted",
+  "neon",
+  "earthtone",
+  "fluorescent",
+  "achromatic",
+  "jewel-tone",
   // mood
   "warm",
   "gritty",
   "playful",
   "elegant",
+  "serious",
+  "soft",
+  "edgy",
+  "bold",
+  "refined",
+  "raw",
+  "intimate",
+  "mysterious",
+  "energetic",
+  "calm",
+  "nostalgic",
+  "dreamy",
+  "clinical",
+  "cozy",
+  "witty",
+  "dark",
+  "bright",
 ];
 
 export function TagPresets({

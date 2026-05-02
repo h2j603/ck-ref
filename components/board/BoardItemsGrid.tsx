@@ -7,6 +7,7 @@ import Masonry from "react-masonry-css";
 import { useState } from "react";
 
 import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
+import { isVideoPath } from "@/lib/media";
 import { useNickname } from "@/lib/nickname";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
@@ -76,13 +77,25 @@ export function BoardItemsGrid({
                   className="relative w-full"
                   style={{ aspectRatio: `${w} / ${h}` }}
                 >
-                  <Image
-                    src={publicImageUrl(ref.image_path)}
-                    alt={ref.title ?? "untitled"}
-                    fill
-                    sizes="(max-width: 480px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-                    className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
-                  />
+                  {isVideoPath(ref.image_path) ? (
+                    <video
+                      src={publicImageUrl(ref.image_path)}
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <Image
+                      src={publicImageUrl(ref.image_path)}
+                      alt={ref.title ?? "untitled"}
+                      fill
+                      sizes="(max-width: 480px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                      className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                    />
+                  )}
                 </div>
               </Link>
               {hydrated && nickname ? (
