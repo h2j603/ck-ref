@@ -258,11 +258,21 @@ export function BoardItemsGrid({
 // "fit" judgment without making the curator tap their way around.
 const FIT_STEP = 20;
 
-// Compact fit stepper pinned to the top-left of each card. Tapping the
-// minus / plus buttons clamps and persists in 20% increments; no
-// popover, no slider, no overflow — the chip stays the same width all
-// the time so it never breaks the masonry rhythm. Read-only viewers
-// see just the percentage with no buttons.
+// Tint the percentage text along a rose → emerald scale so the curator
+// reads fit at a glance even without the chrome of a colored border.
+function fitTextColor(fit: number): string {
+  if (fit === 0) return "text-muted-foreground";
+  if (fit <= 20) return "text-rose-500 dark:text-rose-400";
+  if (fit <= 40) return "text-orange-500 dark:text-orange-400";
+  if (fit <= 60) return "text-amber-500 dark:text-amber-400";
+  if (fit <= 80) return "text-lime-600 dark:text-lime-400";
+  return "text-emerald-600 dark:text-emerald-400";
+}
+
+// Fit stepper in normal flow under the image — keeps the artwork
+// uncluttered and the masonry rhythm intact (no full-width strip,
+// just a small inline row). Tapping minus / plus shifts fit in 20%
+// increments. Read-only viewers see just the percentage.
 function FitChip({
   fit,
   editable,
@@ -280,9 +290,16 @@ function FitChip({
   // Hide for read-only viewers when there's nothing to read.
   if (!editable && fit === 0) return null;
 
+  const colour = fitTextColor(fit);
+
   if (!editable) {
     return (
-      <div className="absolute left-1 top-1 z-20 rounded-full bg-background/90 px-2 py-0.5 font-mono text-[10px] tabular-nums shadow-sm">
+      <div
+        className={cn(
+          "px-1.5 py-1 font-mono text-[10px] tabular-nums",
+          colour,
+        )}
+      >
         {fit}%
       </div>
     );
@@ -290,7 +307,7 @@ function FitChip({
 
   return (
     <div
-      className="absolute left-1 top-1 z-20 flex items-center gap-0.5 rounded-full bg-background/90 px-1 py-0.5 shadow-sm"
+      className="flex items-center gap-1 px-1 py-1"
       onClick={(e) => e.stopPropagation()}
     >
       <button
@@ -306,7 +323,12 @@ function FitChip({
       >
         −
       </button>
-      <span className="w-9 text-center font-mono text-[10px] tabular-nums">
+      <span
+        className={cn(
+          "w-10 text-center font-mono text-[10px] tabular-nums",
+          colour,
+        )}
+      >
         {fit > 0 ? `${fit}%` : "fit?"}
       </span>
       <button
