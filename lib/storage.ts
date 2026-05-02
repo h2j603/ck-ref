@@ -27,3 +27,21 @@ export function transformedImageUrl(
   const qs = params.toString();
   return `${cleanBase}/storage/v1/render/image/public/${STORAGE_BUCKET}/${cleanPath}${qs ? `?${qs}` : ""}`;
 }
+
+export function fileExtension(file: File): string {
+  const dot = file.name.lastIndexOf(".");
+  if (dot >= 0) return file.name.slice(dot + 1).toLowerCase();
+  if (file.type === "image/jpeg") return "jpg";
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return "bin";
+}
+
+// `<yyyy-mm-dd>/<random>.<ext>` — same shape the upload form uses, so
+// objects from any path land in the same dated folders for easy
+// browsing in Supabase Storage.
+export function randomStoragePath(file: File): string {
+  const day = new Date().toISOString().slice(0, 10);
+  const id = Math.random().toString(36).slice(2, 10);
+  return `${day}/${id}.${fileExtension(file)}`;
+}

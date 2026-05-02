@@ -22,6 +22,7 @@ import { probeImage } from "@/lib/imageProbe";
 import { useNickname } from "@/lib/nickname";
 import { runOCR } from "@/lib/ocr";
 import { parseTags } from "@/lib/slug";
+import { randomStoragePath } from "@/lib/storage";
 import { STORAGE_BUCKET, assertSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -34,19 +35,6 @@ import {
 } from "@/lib/types";
 
 const NONE = "__none__";
-
-function fileExtension(file: File) {
-  const dot = file.name.lastIndexOf(".");
-  if (dot >= 0) return file.name.slice(dot + 1).toLowerCase();
-  if (file.type === "image/jpeg") return "jpg";
-  if (file.type === "image/png") return "png";
-  if (file.type === "image/webp") return "webp";
-  return "bin";
-}
-
-function randomId() {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 // Supabase가 던지는 PostgrestError/StorageError는 Error 인스턴스가 아닐 때가
 // 있어서 `instanceof Error` 만으로는 메시지를 못 잡는다. 가능한 모든 형태에서
@@ -273,8 +261,7 @@ export function MetadataForm() {
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setProgress(`업로드 중 ${i + 1}/${files.length} — ${f.file.name}`);
-        const ext = fileExtension(f.file);
-        const path = `${new Date().toISOString().slice(0, 10)}/${randomId()}.${ext}`;
+        const path = randomStoragePath(f.file);
         const { error: uploadErr } = await supabase.storage
           .from(STORAGE_BUCKET)
           .upload(path, f.file, {

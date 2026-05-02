@@ -8,6 +8,7 @@ import Masonry from "react-masonry-css";
 import { useEffect, useMemo, useState } from "react";
 
 import { AddRefsToBoardDialog } from "@/components/board/AddRefsToBoardDialog";
+import { BoardImageUploadButton } from "@/components/board/BoardImageUploadButton";
 import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
 import { isVideoPath } from "@/lib/media";
 import { useNickname } from "@/lib/nickname";
@@ -67,7 +68,11 @@ export function BoardItemsGrid({
   return (
     <div className="flex flex-col gap-3">
       {hydrated && nickname ? (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <BoardImageUploadButton
+            boardId={boardId}
+            onUploaded={() => router.refresh()}
+          />
           <AddRefsToBoardDialog
             boardId={boardId}
             existingIds={existingIds}
