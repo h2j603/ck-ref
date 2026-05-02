@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Masonry from "react-masonry-css";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AddRefsToBoardDialog } from "@/components/board/AddRefsToBoardDialog";
 import { BoardImageUploadButton } from "@/components/board/BoardImageUploadButton";
@@ -34,6 +34,20 @@ export function BoardItemsGrid({
   const [refs, setRefs] = useState<RefWithDesigners[]>(initialRefs);
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Board-only refs don't have a /ref/<id> view worth navigating to
+  // (no metadata, no notes, etc.) — clicking them just opens the
+  // image full-size in a lightbox.
+  const [lightbox, setLightbox] = useState<RefWithDesigners | null>(null);
+
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeLightbox();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, closeLightbox]);
 
   // Sync local state with the server-rendered list. After adding new
   // refs we router.refresh(), which re-runs the RSC and feeds a new
@@ -94,37 +108,51 @@ export function BoardItemsGrid({
         {refs.map((ref) => {
           const w = ref.image_width ?? 4;
           const h = ref.image_height ?? 5;
+          const media = (
+            <div
+              className="relative w-full"
+              style={{ aspectRatio: `${w} / ${h}` }}
+            >
+              {isVideoPath(ref.image_path) ? (
+                <video
+                  src={publicImageUrl(ref.image_path)}
+                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <Image
+                  src={publicImageUrl(ref.image_path)}
+                  alt={ref.title ?? "untitled"}
+                  fill
+                  sizes="(max-width: 480px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                  className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
+                />
+              )}
+            </div>
+          );
           return (
             <div
               key={ref.id}
               className="group relative block overflow-hidden bg-muted"
             >
-              <Link href={`/ref/${ref.id}`} className="block">
-                <div
-                  className="relative w-full"
-                  style={{ aspectRatio: `${w} / ${h}` }}
+              {ref.board_only ? (
+                <button
+                  type="button"
+                  onClick={() => setLightbox(ref)}
+                  className="block w-full"
+                  aria-label="이미지 크게 보기"
                 >
-                  {isVideoPath(ref.image_path) ? (
-                    <video
-                      src={publicImageUrl(ref.image_path)}
-                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                    />
-                  ) : (
-                    <Image
-                      src={publicImageUrl(ref.image_path)}
-                      alt={ref.title ?? "untitled"}
-                      fill
-                      sizes="(max-width: 480px) 50vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-                      className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.02]"
-                    />
-                  )}
-                </div>
-              </Link>
+                  {media}
+                </button>
+              ) : (
+                <Link href={`/ref/${ref.id}`} className="block">
+                  {media}
+                </Link>
+              )}
               {hydrated && nickname ? (
                 <button
                   type="button"
@@ -141,6 +169,43 @@ export function BoardItemsGrid({
         })}
       </Masonry>
       )}
+      {lightbox ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={closeLightbox}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 sm:p-8"
+        >
+          <button
+            type="button"
+            onClick={closeLightbox}
+            aria-label="close"
+            className="absolute right-3 top-3 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+          >
+            <X className="size-4" />
+          </button>
+          {isVideoPath(lightbox.image_path) ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video
+              src={publicImageUrl(lightbox.image_path)}
+              className="max-h-full max-w-full object-contain"
+              controls
+              autoPlay
+              loop
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={publicImageUrl(lightbox.image_path)}
+              alt={lightbox.title ?? "image"}
+              className="max-h-full max-w-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
