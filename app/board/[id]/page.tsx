@@ -7,6 +7,7 @@ import { BoardShareButton } from "@/components/board/BoardShareButton";
 import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { NicknamePill } from "@/components/nickname-pill";
 import { fetchBoard, fetchBoardRefs } from "@/lib/queries";
+import { playlistEmbed } from "@/lib/playlist";
 
 export default async function BoardDetailPage({
   params,
@@ -18,6 +19,7 @@ export default async function BoardDetailPage({
   if (!board) notFound();
 
   const refs = await fetchBoardRefs(id).catch(() => []);
+  const playlist = playlistEmbed(board.playlist_url);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-8">
@@ -66,6 +68,33 @@ export default async function BoardDetailPage({
           <ColumnSelector />
         </div>
       </header>
+      {playlist ? (
+        <section className="flex flex-col gap-2">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            playlist
+          </p>
+          {playlist.src ? (
+            <iframe
+              src={playlist.src}
+              title="board playlist"
+              loading="lazy"
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              allowFullScreen
+              className="w-full rounded-md border border-border/40"
+              style={{ height: playlist.height }}
+            />
+          ) : (
+            <a
+              href={playlist.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              {playlist.href}
+            </a>
+          )}
+        </section>
+      ) : null}
       <BoardItemsGrid boardId={board.id} initialRefs={refs} />
     </div>
   );

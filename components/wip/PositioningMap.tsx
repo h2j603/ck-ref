@@ -841,6 +841,7 @@ function AddPointDialog({
       const { data, error } = await supabase
         .from("refs")
         .select("id, title, image_path, image_width, image_height, color_hex")
+        .eq("board_only", false)
         .in("id", [...ids])
         .order("created_at", { ascending: false })
         .limit(18);

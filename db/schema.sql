@@ -200,18 +200,20 @@ create index if not exists project_update_refs_ref_idx on project_update_refs (r
 -- edit the board metadata or delete the board itself.
 
 create table if not exists boards (
-  id          uuid primary key default gen_random_uuid(),
-  title       text not null,
-  description text,
-  keywords    text[] not null default '{}',
-  created_at  timestamptz not null default now(),
-  created_by  text
+  id           uuid primary key default gen_random_uuid(),
+  title        text not null,
+  description  text,
+  keywords     text[] not null default '{}',
+  playlist_url text,
+  created_at   timestamptz not null default now(),
+  created_by   text
 );
 
 create index if not exists boards_created_at_idx on boards (created_at desc);
 create index if not exists boards_created_by_idx on boards (created_by);
 
 alter table boards add column if not exists keywords text[] not null default '{}';
+alter table boards add column if not exists playlist_url text;
 
 create table if not exists board_items (
   board_id  uuid not null references boards(id) on delete cascade,
@@ -281,7 +283,13 @@ alter table refs add column if not exists color_hue smallint;
 -- found in the image so we can search by poster copy / book title without
 -- the user having to retype it.
 alter table refs add column if not exists ocr_text text;
+-- Refs uploaded straight into a moodboard get this flag so they stay
+-- scoped to their board and don't leak into the global index, search,
+-- or other pickers. The board they belong to still surfaces them via
+-- board_items.
+alter table refs add column if not exists board_only boolean not null default false;
 create index if not exists refs_color_hue_idx on refs (color_hue);
+create index if not exists refs_board_only_idx on refs (board_only) where board_only = false;
 
 -- CLIP image embedding. Computed server-side via the embedding provider
 -- after upload; NULL until the backfill / async job catches up. Existing
