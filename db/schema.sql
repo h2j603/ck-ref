@@ -256,10 +256,10 @@ create table if not exists board_items (
   board_id  uuid not null references boards(id) on delete cascade,
   ref_id    uuid not null references refs(id) on delete cascade,
   position  int not null default 0,
-  -- 0 = unrated, 1..5 = how well this ref fits the brief. The card
-  -- border in the moodboard tints based on this so the curator can
-  -- read fit at a glance without opening anything.
-  fit       smallint not null default 0 check (fit between 0 and 5),
+  -- 0 = unrated, 1..100 = how well this ref fits the brief, expressed
+  -- as a percentage. The moodboard renders a draggable bar at the
+  -- bottom of each card so the curator can read fit at a glance.
+  fit       smallint not null default 0 check (fit between 0 and 100),
   added_at  timestamptz not null default now(),
   added_by  text,
   primary key (board_id, ref_id)
@@ -269,14 +269,26 @@ create index if not exists board_items_board_idx on board_items (board_id, posit
 create index if not exists board_items_ref_idx on board_items (ref_id);
 
 alter table board_items add column if not exists fit smallint not null default 0;
+-- Migrate the prior 0-5 scale to a 0-100 percentage. Gated by the
+-- existence of the old constraint name so re-running schema.sql is
+-- safe and won't touch already-converted rows.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint where conname = 'board_items_fit_check'
+  ) then
+    update board_items set fit = fit * 20 where fit > 0 and fit <= 5;
+    alter table board_items drop constraint board_items_fit_check;
+  end if;
+end $$;
 do $$
 begin
   if not exists (
-    select 1 from information_schema.constraint_column_usage
-    where table_name = 'board_items' and column_name = 'fit'
+    select 1 from pg_constraint
+    where conname = 'board_items_fit_pct_check'
   ) then
-    alter table board_items add constraint board_items_fit_check
-      check (fit between 0 and 5);
+    alter table board_items
+      add constraint board_items_fit_pct_check check (fit between 0 and 100);
   end if;
 end $$;
 

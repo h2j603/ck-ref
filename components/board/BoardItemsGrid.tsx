@@ -22,33 +22,9 @@ function breakpointsFor(cols: ColumnCount) {
   return { default: cols };
 }
 
-// Border tint per fit level. The card always carries border-2 so layout
-// stays consistent; only the colour shifts.
-const FIT_BORDER: Record<number, string> = {
-  0: "border-transparent",
-  1: "border-rose-400/70 dark:border-rose-500/60",
-  2: "border-orange-400/70 dark:border-orange-500/60",
-  3: "border-amber-400/70 dark:border-amber-500/60",
-  4: "border-lime-500/70 dark:border-lime-500/60",
-  5: "border-emerald-500/80 dark:border-emerald-500/70",
-};
-
-const FIT_DOT_FILL: Record<number, string> = {
-  1: "bg-rose-400",
-  2: "bg-orange-400",
-  3: "bg-amber-400",
-  4: "bg-lime-500",
-  5: "bg-emerald-500",
-};
-
-const FIT_LABEL: Record<number, string> = {
-  0: "—",
-  1: "거의 안 맞음",
-  2: "조금 맞음",
-  3: "보통",
-  4: "잘 맞음",
-  5: "딱 맞음",
-};
+// Fit is now a 0-100 percentage rendered as a draggable bar under each
+// card; the colour-coded border has been dropped in favour of the bar
+// itself doing the indicating.
 
 export function BoardItemsGrid({
   boardId,
@@ -197,10 +173,7 @@ export function BoardItemsGrid({
           return (
             <div
               key={ref.id}
-              className={cn(
-                "group relative block overflow-hidden border-2 bg-muted transition-colors",
-                FIT_BORDER[ref.fit] ?? FIT_BORDER[0],
-              )}
+              className="group relative block overflow-hidden bg-muted"
             >
               {ref.board_only ? (
                 <button
@@ -216,10 +189,10 @@ export function BoardItemsGrid({
                   {media}
                 </Link>
               )}
-              <FitDots
+              <FitBar
                 fit={ref.fit}
                 editable={Boolean(hydrated && nickname)}
-                onSet={(n) => void setFit(ref.id, n)}
+                onCommit={(n) => void setFit(ref.id, n)}
               />
               {hydrated && nickname && manageMode ? (
                 <button
@@ -281,48 +254,53 @@ export function BoardItemsGrid({
   );
 }
 
-// 5-dot fit selector pinned below the card image so it doesn't sit on
-// top of the artwork. Tapping dot N sets fit to N (1-5); tapping the
-// currently-selected dot clears to 0. Read-only when the viewer has no
-// nickname.
-function FitDots({
+// Draggable fit bar pinned below the card image. Native <input type=
+// "range"> handles drag and keyboard / accessibility for free; we keep
+// a local copy of the value so the UI tracks the thumb live during a
+// drag and only persist the final value once the user releases.
+function FitBar({
   fit,
   editable,
-  onSet,
+  onCommit,
 }: {
   fit: number;
   editable: boolean;
-  onSet: (next: number) => void;
+  onCommit: (next: number) => void;
 }) {
+  const [local, setLocal] = useState(fit);
+  // Re-sync when the server-side value changes (e.g. after a refresh
+  // or a sibling tab updates fit).
+  useEffect(() => setLocal(fit), [fit]);
+
+  function commit() {
+    if (local !== fit) onCommit(local);
+  }
+
   return (
     <div
-      className="flex items-center justify-center gap-1 border-t border-border/30 bg-background/40 py-1.5"
+      className="flex items-center gap-2 border-t border-border/30 bg-background/40 px-2 py-1.5"
       onClick={(e) => e.stopPropagation()}
     >
-      {[1, 2, 3, 4, 5].map((n) => {
-        const filled = n <= fit;
-        return (
-          <button
-            key={n}
-            type="button"
-            disabled={!editable}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onSet(fit === n ? 0 : n);
-            }}
-            aria-label={`fit ${n}/5 — ${FIT_LABEL[n]}`}
-            title={`${n}/5 · ${FIT_LABEL[n]}`}
-            className={cn(
-              "block size-2 rounded-full transition-colors",
-              filled
-                ? FIT_DOT_FILL[n]
-                : "bg-muted-foreground/25 hover:bg-muted-foreground/40",
-              editable ? "cursor-pointer" : "cursor-default",
-            )}
-          />
-        );
-      })}
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={local}
+        disabled={!editable}
+        onChange={(e) => setLocal(Number(e.target.value))}
+        onPointerUp={commit}
+        onTouchEnd={commit}
+        onKeyUp={commit}
+        aria-label={`fit ${local}%`}
+        className={cn(
+          "flex-1 accent-foreground",
+          editable ? "cursor-pointer" : "cursor-default",
+        )}
+      />
+      <span className="w-9 text-right font-mono text-[10px] tabular-nums text-muted-foreground">
+        {local}%
+      </span>
     </div>
   );
 }
