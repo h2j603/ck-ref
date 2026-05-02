@@ -68,8 +68,9 @@ export default async function BoardDetailPage({
           <ColumnSelector />
         </div>
       </header>
+      <BoardItemsGrid boardId={board.id} initialRefs={refs} />
       {playlist ? (
-        <section className="flex flex-col gap-2">
+        <section className="flex max-w-md flex-col gap-2">
           <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             playlist
           </p>
@@ -95,7 +96,6 @@ export default async function BoardDetailPage({
           )}
         </section>
       ) : null}
-      <BoardItemsGrid boardId={board.id} initialRefs={refs} />
     </div>
   );
 }
