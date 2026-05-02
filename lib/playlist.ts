@@ -8,7 +8,15 @@ export type PlaylistEmbed = {
   kind: "spotify" | "apple" | "youtube" | "soundcloud" | "other";
   src: string | null;
   href: string;
-  height: number;
+  // What height to give the <iframe> so the platform renders cleanly
+  // at its intended layout. Most platforms shrink to fit; Apple Music
+  // ignores iframe height and always draws the full ~450px card.
+  iframeHeight: number;
+  // Visible clamp on the wrapper. Equals iframeHeight when the
+  // platform respects the iframe size; smaller when we crop a card
+  // we couldn't shrink (Apple Music — hides its big "재생" / "앱에서
+  // 보기" footer buttons).
+  containerHeight: number;
 };
 
 const SPOTIFY_KINDS = new Set([
@@ -33,28 +41,35 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
 
   const host = u.hostname.toLowerCase();
 
-  // Spotify — open.spotify.com/<kind>/<id>
+  // Spotify — open.spotify.com/<kind>/<id>. The platform respects
+  // iframe height: 152 → compact playlist row, 80 → single-line track.
   if (host === "open.spotify.com") {
     const parts = u.pathname.split("/").filter(Boolean);
     if (parts.length >= 2 && SPOTIFY_KINDS.has(parts[0])) {
+      const h = parts[0] === "track" ? 80 : 152;
       return {
         kind: "spotify",
         src: `https://open.spotify.com/embed/${parts[0]}/${parts[1]}`,
         href: trimmed,
-        // Compact heights — full-card (352) dominated the page; the
-        // shorter row form still scrolls the queue and shows album art.
-        height: parts[0] === "track" ? 80 : 152,
+        iframeHeight: h,
+        containerHeight: h,
       };
     }
   }
 
-  // Apple Music — music.apple.com → embed.music.apple.com with same path.
+  // Apple Music — music.apple.com → embed.music.apple.com with same
+  // path. Apple's playlist embed renders at a fixed ~450px regardless
+  // of the iframe height we pass, so we let it draw at its natural
+  // size and crop the wrapper down to a header strip — that hides the
+  // big bottom "재생" / "앱에서 보기" buttons while keeping the cover
+  // art and the first couple of track titles visible.
   if (host === "music.apple.com") {
     return {
       kind: "apple",
       src: `https://embed.music.apple.com${u.pathname}${u.search}`,
       href: trimmed,
-      height: 175,
+      iframeHeight: 450,
+      containerHeight: 175,
     };
   }
 
@@ -67,7 +82,8 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
           kind: "youtube",
           src: `https://www.youtube.com/embed/videoseries?list=${list}`,
           href: trimmed,
-          height: 240,
+          iframeHeight: 240,
+          containerHeight: 240,
         };
       }
     }
@@ -78,7 +94,8 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
           kind: "youtube",
           src: `https://www.youtube.com/embed/${v}`,
           href: trimmed,
-          height: 240,
+          iframeHeight: 240,
+          containerHeight: 240,
         };
       }
     }
@@ -90,7 +107,8 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         kind: "youtube",
         src: `https://www.youtube.com/embed/${id}`,
         href: trimmed,
-        height: 240,
+        iframeHeight: 240,
+        containerHeight: 240,
       };
     }
   }
@@ -103,9 +121,16 @@ export function playlistEmbed(raw: string | null | undefined): PlaylistEmbed | n
         trimmed,
       )}&color=%23000000&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false`,
       href: trimmed,
-      height: 120,
+      iframeHeight: 120,
+      containerHeight: 120,
     };
   }
 
-  return { kind: "other", src: null, href: trimmed, height: 0 };
+  return {
+    kind: "other",
+    src: null,
+    href: trimmed,
+    iframeHeight: 0,
+    containerHeight: 0,
+  };
 }

@@ -75,15 +75,20 @@ export default async function BoardDetailPage({
             playlist
           </p>
           {playlist.src ? (
-            <iframe
-              src={playlist.src}
-              title="board playlist"
-              loading="lazy"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              allowFullScreen
-              className="w-full rounded-md border border-border/40"
-              style={{ height: playlist.height }}
-            />
+            <div
+              className="w-full overflow-hidden rounded-md border border-border/40"
+              style={{ height: playlist.containerHeight }}
+            >
+              <iframe
+                src={playlist.src}
+                title="board playlist"
+                loading="lazy"
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                allowFullScreen
+                className="block w-full border-0"
+                style={{ height: playlist.iframeHeight }}
+              />
+            </div>
           ) : (
             <a
               href={playlist.href}
