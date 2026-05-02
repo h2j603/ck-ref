@@ -21,27 +21,43 @@ export function EditBoardForm({
   initial: {
     title: string;
     description: string | null;
-    keywords: string[];
+    positive_keywords: string[];
+    negative_keywords: string[];
     playlist_url: string | null;
+    pairing_a: string | null;
+    pairing_b: string | null;
   };
 }) {
   const supabase = createClient();
   const { nickname, hydrated } = useNickname();
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description ?? "");
-  const [keywords, setKeywords] = useState<string[]>(initial.keywords ?? []);
+  const [positiveKeywords, setPositiveKeywords] = useState<string[]>(
+    initial.positive_keywords ?? [],
+  );
+  const [negativeKeywords, setNegativeKeywords] = useState<string[]>(
+    initial.negative_keywords ?? [],
+  );
   const [playlistUrl, setPlaylistUrl] = useState(initial.playlist_url ?? "");
+  const [pairingA, setPairingA] = useState(initial.pairing_a ?? "");
+  const [pairingB, setPairingB] = useState(initial.pairing_b ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function toggleKeyword(k: string) {
-    const lower = k.toLowerCase();
-    setKeywords((prev) =>
-      prev.some((x) => x.toLowerCase() === lower)
-        ? prev.filter((x) => x.toLowerCase() !== lower)
-        : [...prev, k],
-    );
+  function makeToggle(
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+  ) {
+    return (k: string) => {
+      const lower = k.toLowerCase();
+      setter((prev) =>
+        prev.some((x) => x.toLowerCase() === lower)
+          ? prev.filter((x) => x.toLowerCase() !== lower)
+          : [...prev, k],
+      );
+    };
   }
+  const togglePositive = makeToggle(setPositiveKeywords);
+  const toggleNegative = makeToggle(setNegativeKeywords);
 
   if (!hydrated) {
     return (
@@ -71,8 +87,11 @@ export function EditBoardForm({
       .update({
         title: title.trim(),
         description: description.trim() || null,
-        keywords,
+        positive_keywords: positiveKeywords,
+        negative_keywords: negativeKeywords,
         playlist_url: playlistUrl.trim() || null,
+        pairing_a: pairingA.trim() || null,
+        pairing_b: pairingB.trim() || null,
       })
       .eq("id", boardId);
     if (error) {
@@ -85,43 +104,57 @@ export function EditBoardForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          제목
-        </Label>
+      <Field label="제목">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          설명
-        </Label>
+      </Field>
+      <Field label="설명">
         <Textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
         />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          키워드
-        </Label>
+      </Field>
+      <Field label="포지티브 키워드">
         <ChipToggleRow
           items={TAG_PRESETS}
-          active={keywords}
-          onToggle={toggleKeyword}
+          active={positiveKeywords}
+          onToggle={togglePositive}
+          tone="positive"
         />
-      </div>
-      <div className="flex flex-col gap-2">
-        <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          플레이리스트
-        </Label>
+      </Field>
+      <Field label="네거티브 키워드">
+        <ChipToggleRow
+          items={TAG_PRESETS}
+          active={negativeKeywords}
+          onToggle={toggleNegative}
+          tone="negative"
+        />
+      </Field>
+      <Field label="페어링 (A × B)">
+        <div className="flex items-center gap-2">
+          <Input
+            value={pairingA}
+            onChange={(e) => setPairingA(e.target.value)}
+            placeholder="예: Helvetica"
+          />
+          <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            ×
+          </span>
+          <Input
+            value={pairingB}
+            onChange={(e) => setPairingB(e.target.value)}
+            placeholder="예: 보사노바"
+          />
+        </div>
+      </Field>
+      <Field label="플레이리스트">
         <Input
           value={playlistUrl}
           onChange={(e) => setPlaylistUrl(e.target.value)}
           placeholder="Spotify / Apple Music / YouTube / SoundCloud URL"
           inputMode="url"
         />
-      </div>
+      </Field>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="flex justify-end">
         <Button type="submit" disabled={busy}>
@@ -129,5 +162,22 @@ export function EditBoardForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </Label>
+      {children}
+    </div>
   );
 }

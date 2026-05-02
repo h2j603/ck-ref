@@ -766,7 +766,9 @@ export async function fetchBoards(): Promise<BoardSummary[]> {
   const { data, error } = await supabase
     .from("boards")
     .select(
-      `id, title, description, keywords, playlist_url, created_at, created_by,
+      `id, title, description, positive_keywords, negative_keywords,
+       playlist_url, oblique_card, pairing_a, pairing_b,
+       created_at, created_by,
        board_items ( position, ref:refs(id, image_path, image_width, image_height) )`,
     )
     .order("created_at", { ascending: false });

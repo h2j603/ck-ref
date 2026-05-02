@@ -341,8 +341,12 @@ export type Board = {
   id: string;
   title: string;
   description: string | null;
-  keywords: string[];
+  positive_keywords: string[];
+  negative_keywords: string[];
   playlist_url: string | null;
+  oblique_card: string | null;
+  pairing_a: string | null;
+  pairing_b: string | null;
   created_at: string;
   created_by: string | null;
 };

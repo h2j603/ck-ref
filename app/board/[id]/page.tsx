@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { BoardItemsGrid } from "@/components/board/BoardItemsGrid";
 import { BoardOwnerActions } from "@/components/board/BoardOwnerActions";
 import { BoardShareButton } from "@/components/board/BoardShareButton";
+import { ObliqueCardBlock } from "@/components/board/ObliqueCardBlock";
 import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { NicknamePill } from "@/components/nickname-pill";
 import { fetchBoard, fetchBoardRefs } from "@/lib/queries";
@@ -38,14 +39,30 @@ export default async function BoardDetailPage({
             {board.description}
           </p>
         ) : null}
-        {board.keywords.length > 0 ? (
+        {board.pairing_a || board.pairing_b ? (
+          <p className="max-w-2xl text-2xl font-medium leading-tight tracking-tight">
+            {board.pairing_a ?? "—"}
+            <span className="mx-2 text-muted-foreground">×</span>
+            {board.pairing_b ?? "—"}
+          </p>
+        ) : null}
+        {board.positive_keywords.length > 0 ||
+        board.negative_keywords.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            {board.keywords.map((k) => (
+            {board.positive_keywords.map((k) => (
               <span
-                key={k}
-                className="rounded-full border border-input px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider text-muted-foreground"
+                key={`pos-${k}`}
+                className="rounded-full border border-emerald-300/60 bg-emerald-50/60 px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100"
               >
-                {k}
+                + {k}
+              </span>
+            ))}
+            {board.negative_keywords.map((k) => (
+              <span
+                key={`neg-${k}`}
+                className="rounded-full border border-rose-300/60 bg-rose-50/60 px-2 py-0.5 font-mono text-[10px] lowercase tracking-wider text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+              >
+                − {k}
               </span>
             ))}
           </div>
@@ -68,6 +85,11 @@ export default async function BoardDetailPage({
           <ColumnSelector />
         </div>
       </header>
+      <ObliqueCardBlock
+        boardId={board.id}
+        createdBy={board.created_by}
+        initial={board.oblique_card}
+      />
       <BoardItemsGrid boardId={board.id} initialRefs={refs} />
       {playlist ? (
         <section className="flex max-w-xl flex-col gap-2">
