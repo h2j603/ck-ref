@@ -269,16 +269,17 @@ create index if not exists board_items_board_idx on board_items (board_id, posit
 create index if not exists board_items_ref_idx on board_items (ref_id);
 
 alter table board_items add column if not exists fit smallint not null default 0;
--- Migrate the prior 0-5 scale to a 0-100 percentage. Gated by the
--- existence of the old constraint name so re-running schema.sql is
--- safe and won't touch already-converted rows.
+-- Migrate the prior 0-5 scale to a 0-100 percentage. The old check
+-- constraint blocks fit > 5 so we have to drop it BEFORE multiplying;
+-- gating on the constraint name keeps this re-runnable and prevents
+-- already-converted rows from being multiplied a second time.
 do $$
 begin
   if exists (
     select 1 from pg_constraint where conname = 'board_items_fit_check'
   ) then
-    update board_items set fit = fit * 20 where fit > 0 and fit <= 5;
     alter table board_items drop constraint board_items_fit_check;
+    update board_items set fit = fit * 20 where fit > 0 and fit <= 5;
   end if;
 end $$;
 do $$
