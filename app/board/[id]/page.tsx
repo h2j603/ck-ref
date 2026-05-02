@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { BoardItemsGrid } from "@/components/board/BoardItemsGrid";
 import { BoardOwnerActions } from "@/components/board/BoardOwnerActions";
+import { BoardShareButton } from "@/components/board/BoardShareButton";
 import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { NicknamePill } from "@/components/nickname-pill";
 import { fetchBoard, fetchBoardRefs } from "@/lib/queries";
@@ -49,6 +50,7 @@ export default async function BoardDetailPage({
         ) : null}
         <div className="flex items-center gap-2">
           <NicknamePill nickname={board.created_by} />
+          <BoardShareButton />
           <BoardOwnerActions
             boardId={board.id}
             createdBy={board.created_by}
