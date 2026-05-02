@@ -811,7 +811,7 @@ export async function fetchBoardRefs(boardId: string) {
   const { data, error } = await supabase
     .from("board_items")
     .select(
-      `position, ref:refs(${REF_COLUMNS_FOR_BOARD})`,
+      `position, fit, ref:refs(${REF_COLUMNS_FOR_BOARD})`,
     )
     .eq("board_id", boardId)
     .order("position", { ascending: true });
@@ -825,12 +825,19 @@ export async function fetchBoardRefs(boardId: string) {
     }[];
     ref_images?: { count: number }[];
   };
-  type Row = { position: number; ref: RawRef | RawRef[] | null };
+  type Row = {
+    position: number;
+    fit: number | null;
+    ref: RawRef | RawRef[] | null;
+  };
   const rows = (data ?? []) as unknown as Row[];
   const bare = rows
-    .map((r) => (Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref))
-    .filter((r): r is RawRef => r !== null)
-    .map((ref) => {
+    .map((r) => {
+      const ref = Array.isArray(r.ref) ? r.ref[0] ?? null : r.ref;
+      return ref ? { ref, fit: r.fit ?? 0 } : null;
+    })
+    .filter((x): x is { ref: RawRef; fit: number } => x !== null)
+    .map(({ ref, fit }) => {
       const { ref_designers, ref_images, ...rest } = ref;
       const designers: Pick<Designer, "id" | "slug" | "name">[] = [];
       for (const rd of ref_designers ?? []) {
@@ -840,10 +847,16 @@ export async function fetchBoardRefs(boardId: string) {
         else designers.push(d);
       }
       const extra_image_count = ref_images?.[0]?.count ?? 0;
-      return { ...rest, designers, extra_image_count };
+      return { ...rest, designers, extra_image_count, fit };
     });
-  return attachRatings(bare);
+  const withRatings = await attachRatings(bare);
+  // attachRatings spreads original fields, so fit survives — but the
+  // resulting type widened to RefWithDesigners; expose the fit as part
+  // of the row so consumers can read it without re-querying.
+  return withRatings.map((row, i) => ({ ...row, fit: bare[i]?.fit ?? 0 }));
 }
+
+export type BoardRef = Awaited<ReturnType<typeof fetchBoardRefs>>[number];
 
 export async function fetchRefExtraImages(refId: string): Promise<RefImage[]> {
   const supabase = await createClient();

@@ -12,32 +12,61 @@ import { BoardImageUploadButton } from "@/components/board/BoardImageUploadButto
 import { useColumnPref, type ColumnCount } from "@/lib/columnPref";
 import { isVideoPath } from "@/lib/media";
 import { useNickname } from "@/lib/nickname";
+import type { BoardRef } from "@/lib/queries";
 import { publicImageUrl } from "@/lib/storage";
 import { createClient } from "@/lib/supabase/client";
-import type { RefWithDesigners } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function breakpointsFor(cols: ColumnCount) {
   return { default: cols };
 }
+
+// Border tint per fit level. The card always carries border-2 so layout
+// stays consistent; only the colour shifts.
+const FIT_BORDER: Record<number, string> = {
+  0: "border-transparent",
+  1: "border-rose-400/70 dark:border-rose-500/60",
+  2: "border-orange-400/70 dark:border-orange-500/60",
+  3: "border-amber-400/70 dark:border-amber-500/60",
+  4: "border-lime-500/70 dark:border-lime-500/60",
+  5: "border-emerald-500/80 dark:border-emerald-500/70",
+};
+
+const FIT_DOT_FILL: Record<number, string> = {
+  1: "bg-rose-400",
+  2: "bg-orange-400",
+  3: "bg-amber-400",
+  4: "bg-lime-500",
+  5: "bg-emerald-500",
+};
+
+const FIT_LABEL: Record<number, string> = {
+  0: "—",
+  1: "거의 안 맞음",
+  2: "조금 맞음",
+  3: "보통",
+  4: "잘 맞음",
+  5: "딱 맞음",
+};
 
 export function BoardItemsGrid({
   boardId,
   initialRefs,
 }: {
   boardId: string;
-  initialRefs: RefWithDesigners[];
+  initialRefs: BoardRef[];
 }) {
   const supabase = createClient();
   const router = useRouter();
   const { columns } = useColumnPref();
   const { nickname, hydrated } = useNickname();
-  const [refs, setRefs] = useState<RefWithDesigners[]>(initialRefs);
+  const [refs, setRefs] = useState<BoardRef[]>(initialRefs);
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Board-only refs don't have a /ref/<id> view worth navigating to
   // (no metadata, no notes, etc.) — clicking them just opens the
   // image full-size in a lightbox.
-  const [lightbox, setLightbox] = useState<RefWithDesigners | null>(null);
+  const [lightbox, setLightbox] = useState<BoardRef | null>(null);
 
   const closeLightbox = useCallback(() => setLightbox(null), []);
   useEffect(() => {
@@ -77,6 +106,22 @@ export function BoardItemsGrid({
       return;
     }
     setRefs((prev) => prev.filter((r) => r.id !== refId));
+  }
+
+  async function setFit(refId: string, fit: number) {
+    // Optimistic — the moodboard reads as a glance grid, so a half-
+    // second round trip before the border updates would feel laggy.
+    setRefs((prev) => prev.map((r) => (r.id === refId ? { ...r, fit } : r)));
+    const { error } = await supabase
+      .from("board_items")
+      .update({ fit })
+      .eq("board_id", boardId)
+      .eq("ref_id", refId);
+    if (error) {
+      setError(error.message);
+      // Revert by re-fetching from the server.
+      router.refresh();
+    }
   }
 
   return (
@@ -137,7 +182,10 @@ export function BoardItemsGrid({
           return (
             <div
               key={ref.id}
-              className="group relative block overflow-hidden bg-muted"
+              className={cn(
+                "group relative block overflow-hidden rounded-md border-2 bg-muted transition-colors",
+                FIT_BORDER[ref.fit] ?? FIT_BORDER[0],
+              )}
             >
               {ref.board_only ? (
                 <button
@@ -153,6 +201,11 @@ export function BoardItemsGrid({
                   {media}
                 </Link>
               )}
+              <FitDots
+                fit={ref.fit}
+                editable={Boolean(hydrated && nickname)}
+                onSet={(n) => void setFit(ref.id, n)}
+              />
               {hydrated && nickname ? (
                 <button
                   type="button"
@@ -175,6 +228,7 @@ export function BoardItemsGrid({
           aria-modal="true"
           onClick={closeLightbox}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 sm:p-8"
+          // The lightbox sits above everything, including fit dots.
         >
           <button
             type="button"
@@ -208,6 +262,53 @@ export function BoardItemsGrid({
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// 5-dot fit selector pinned to the bottom-left of each card. Tapping
+// dot N sets fit to N (1-5); tapping the currently-selected dot clears
+// to 0. Read-only when the viewer has no nickname.
+function FitDots({
+  fit,
+  editable,
+  onSet,
+}: {
+  fit: number;
+  editable: boolean;
+  onSet: (next: number) => void;
+}) {
+  return (
+    <div
+      className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-full bg-background/90 px-1.5 py-1 shadow-sm"
+      // Stop the click from reaching the underlying Link / lightbox
+      // button — the dots are an in-card control, not a card click.
+      onClick={(e) => e.stopPropagation()}
+    >
+      {[1, 2, 3, 4, 5].map((n) => {
+        const filled = n <= fit;
+        return (
+          <button
+            key={n}
+            type="button"
+            disabled={!editable}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSet(fit === n ? 0 : n);
+            }}
+            aria-label={`fit ${n}/5 — ${FIT_LABEL[n]}`}
+            title={`${n}/5 · ${FIT_LABEL[n]}`}
+            className={cn(
+              "block size-2 rounded-full transition-colors",
+              filled
+                ? FIT_DOT_FILL[n]
+                : "bg-muted-foreground/25 hover:bg-muted-foreground/40",
+              editable ? "cursor-pointer" : "cursor-default",
+            )}
+          />
+        );
+      })}
     </div>
   );
 }
