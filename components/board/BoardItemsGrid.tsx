@@ -44,10 +44,6 @@ export function BoardItemsGrid({
   // reads as a viewing surface; the toggle lives next to the upload /
   // add-ref buttons in the action row.
   const [manageMode, setManageMode] = useState(false);
-  // Which card's fit chip is currently expanded into a slider. The chip
-  // shows a compact "62%" overlay by default and only one card edits at
-  // a time — outside taps and ESC collapse it back.
-  const [editingFit, setEditingFit] = useState<string | null>(null);
   // Board-only refs don't have a /ref/<id> view worth navigating to
   // (no metadata, no notes, etc.) — clicking them just opens the
   // image full-size in a lightbox.
@@ -62,26 +58,6 @@ export function BoardItemsGrid({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, closeLightbox]);
-
-  // Outside-click / ESC dismissal for the fit popover.
-  useEffect(() => {
-    if (!editingFit) return;
-    function onPointerDown(e: PointerEvent) {
-      const target = e.target as HTMLElement | null;
-      if (!target?.closest('[data-fit-popover="true"]')) {
-        setEditingFit(null);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setEditingFit(null);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [editingFit]);
 
   // Sync local state with the server-rendered list. After adding new
   // refs we router.refresh(), which re-runs the RSC and feeds a new
@@ -215,9 +191,7 @@ export function BoardItemsGrid({
               )}
               <FitChip
                 fit={ref.fit}
-                isEditing={editingFit === ref.id}
                 editable={Boolean(hydrated && nickname)}
-                onOpen={() => setEditingFit(ref.id)}
                 onCommit={(n) => void setFit(ref.id, n)}
               />
               {hydrated && nickname && manageMode ? (
@@ -280,80 +254,74 @@ export function BoardItemsGrid({
   );
 }
 
-// Compact fit affordance pinned to the top-left of each card. Reads as
-// a single "62%" pill by default — taking up roughly the same footprint
-// as the X delete button on the opposite corner — and expands inline
-// into a small range slider when the user taps it. Outside taps / ESC
-// collapse it again (handled by the parent so only one card edits at a
-// time). Read-only viewers see the percentage but can't open the slider.
+// 20% step gives 6 stops (0/20/40/60/80/100) — enough resolution for a
+// "fit" judgment without making the curator tap their way around.
+const FIT_STEP = 20;
+
+// Compact fit stepper pinned to the top-left of each card. Tapping the
+// minus / plus buttons clamps and persists in 20% increments; no
+// popover, no slider, no overflow — the chip stays the same width all
+// the time so it never breaks the masonry rhythm. Read-only viewers
+// see just the percentage with no buttons.
 function FitChip({
   fit,
-  isEditing,
   editable,
-  onOpen,
   onCommit,
 }: {
   fit: number;
-  isEditing: boolean;
   editable: boolean;
-  onOpen: () => void;
   onCommit: (next: number) => void;
 }) {
-  const [local, setLocal] = useState(fit);
-  // Re-sync local mirror whenever the server value changes or the
-  // chip toggles (so a re-open starts from the current persisted fit).
-  useEffect(() => setLocal(fit), [fit, isEditing]);
-
-  function commit() {
-    if (local !== fit) onCommit(local);
+  function step(delta: number) {
+    const next = Math.max(0, Math.min(100, fit + delta));
+    if (next !== fit) onCommit(next);
   }
 
-  // Hide entirely for read-only viewers when there's nothing to read.
+  // Hide for read-only viewers when there's nothing to read.
   if (!editable && fit === 0) return null;
+
+  if (!editable) {
+    return (
+      <div className="absolute left-1 top-1 z-20 rounded-full bg-background/90 px-2 py-0.5 font-mono text-[10px] tabular-nums shadow-sm">
+        {fit}%
+      </div>
+    );
+  }
 
   return (
     <div
-      data-fit-popover="true"
-      className="absolute left-1 top-1 z-20"
+      className="absolute left-1 top-1 z-20 flex items-center gap-0.5 rounded-full bg-background/90 px-1 py-0.5 shadow-sm"
       onClick={(e) => e.stopPropagation()}
     >
-      {isEditing ? (
-        <div className="flex items-center gap-2 rounded-full bg-background/95 px-2.5 py-1 shadow-md ring-1 ring-border/40">
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={local}
-            onChange={(e) => setLocal(Number(e.target.value))}
-            onPointerUp={commit}
-            onTouchEnd={commit}
-            onKeyUp={commit}
-            aria-label={`fit ${local}%`}
-            className="h-3 w-32 accent-foreground"
-          />
-          <span className="w-8 text-right font-mono text-[10px] tabular-nums">
-            {local}%
-          </span>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (editable) onOpen();
-          }}
-          disabled={!editable}
-          className={cn(
-            "rounded-full bg-background/90 px-2 py-0.5 font-mono text-[10px] tabular-nums shadow-sm transition-colors",
-            fit > 0 ? "text-foreground" : "text-muted-foreground",
-            editable ? "cursor-pointer hover:bg-background" : "cursor-default",
-          )}
-        >
-          {fit > 0 ? `${fit}%` : "fit?"}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          step(-FIT_STEP);
+        }}
+        disabled={fit <= 0}
+        aria-label="감소"
+        className="grid size-5 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30"
+      >
+        −
+      </button>
+      <span className="w-9 text-center font-mono text-[10px] tabular-nums">
+        {fit > 0 ? `${fit}%` : "fit?"}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          step(FIT_STEP);
+        }}
+        disabled={fit >= 100}
+        aria-label="증가"
+        className="grid size-5 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30"
+      >
+        +
+      </button>
     </div>
   );
 }
