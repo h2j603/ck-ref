@@ -180,7 +180,7 @@ export function BoardItemsGrid({
             type="button"
             onClick={closeLightbox}
             aria-label="close"
-            className="absolute right-3 top-3 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            className="absolute right-3 top-3 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
           >
             <X className="size-4" />
           </button>
@@ -188,7 +188,8 @@ export function BoardItemsGrid({
             // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
               src={publicImageUrl(lightbox.image_path)}
-              className="max-h-full max-w-full object-contain"
+              className="object-contain"
+              style={{ maxHeight: "90vh", maxWidth: "92vw" }}
               controls
               autoPlay
               loop
@@ -200,7 +201,8 @@ export function BoardItemsGrid({
             <img
               src={publicImageUrl(lightbox.image_path)}
               alt={lightbox.title ?? "image"}
-              className="max-h-full max-w-full object-contain"
+              className="object-contain"
+              style={{ maxHeight: "90vh", maxWidth: "92vw" }}
               onClick={(e) => e.stopPropagation()}
             />
           )}

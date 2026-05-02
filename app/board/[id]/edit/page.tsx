@@ -36,8 +36,11 @@ export default async function EditBoardPage({
         initial={{
           title: board.title,
           description: board.description,
-          keywords: board.keywords,
+          positive_keywords: board.positive_keywords,
+          negative_keywords: board.negative_keywords,
           playlist_url: board.playlist_url,
+          pairing_a: board.pairing_a,
+          pairing_b: board.pairing_b,
         }}
       />
     </div>

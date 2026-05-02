@@ -200,20 +200,42 @@ create index if not exists project_update_refs_ref_idx on project_update_refs (r
 -- edit the board metadata or delete the board itself.
 
 create table if not exists boards (
-  id           uuid primary key default gen_random_uuid(),
-  title        text not null,
-  description  text,
-  keywords     text[] not null default '{}',
-  playlist_url text,
-  created_at   timestamptz not null default now(),
-  created_by   text
+  id                 uuid primary key default gen_random_uuid(),
+  title              text not null,
+  description        text,
+  positive_keywords  text[] not null default '{}',
+  negative_keywords  text[] not null default '{}',
+  playlist_url       text,
+  -- Brian Eno's Oblique Strategies card the team drew for this
+  -- board — a non-visual prompt to break creative fixation.
+  oblique_card       text,
+  -- Pairing brief: "A × B" headline (e.g. "Helvetica × bossa nova").
+  pairing_a          text,
+  pairing_b          text,
+  created_at         timestamptz not null default now(),
+  created_by         text
 );
 
 create index if not exists boards_created_at_idx on boards (created_at desc);
 create index if not exists boards_created_by_idx on boards (created_by);
 
-alter table boards add column if not exists keywords text[] not null default '{}';
+-- Old single-bucket keywords column → positive_keywords. Idempotent
+-- so re-running schema.sql after the rename is safe.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'boards' and column_name = 'keywords'
+  ) then
+    alter table boards rename column keywords to positive_keywords;
+  end if;
+end $$;
+alter table boards add column if not exists positive_keywords text[] not null default '{}';
+alter table boards add column if not exists negative_keywords text[] not null default '{}';
 alter table boards add column if not exists playlist_url text;
+alter table boards add column if not exists oblique_card text;
+alter table boards add column if not exists pairing_a text;
+alter table boards add column if not exists pairing_b text;
 
 create table if not exists board_items (
   board_id  uuid not null references boards(id) on delete cascade,

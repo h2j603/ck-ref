@@ -17,19 +17,28 @@ export default function NewBoardForm() {
   const { nickname, hydrated } = useNickname();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [keywords, setKeywords] = useState<string[]>([]);
+  const [positiveKeywords, setPositiveKeywords] = useState<string[]>([]);
+  const [negativeKeywords, setNegativeKeywords] = useState<string[]>([]);
   const [playlistUrl, setPlaylistUrl] = useState("");
+  const [pairingA, setPairingA] = useState("");
+  const [pairingB, setPairingB] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function toggleKeyword(k: string) {
-    const lower = k.toLowerCase();
-    setKeywords((prev) =>
-      prev.some((x) => x.toLowerCase() === lower)
-        ? prev.filter((x) => x.toLowerCase() !== lower)
-        : [...prev, k],
-    );
+  function makeToggle(
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+  ) {
+    return (k: string) => {
+      const lower = k.toLowerCase();
+      setter((prev) =>
+        prev.some((x) => x.toLowerCase() === lower)
+          ? prev.filter((x) => x.toLowerCase() !== lower)
+          : [...prev, k],
+      );
+    };
   }
+  const togglePositive = makeToggle(setPositiveKeywords);
+  const toggleNegative = makeToggle(setNegativeKeywords);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,8 +53,11 @@ export default function NewBoardForm() {
       .insert({
         title: title.trim(),
         description: description.trim() || null,
-        keywords,
+        positive_keywords: positiveKeywords,
+        negative_keywords: negativeKeywords,
         playlist_url: playlistUrl.trim() || null,
+        pairing_a: pairingA.trim() || null,
+        pairing_b: pairingB.trim() || null,
         created_by: nickname || null,
       })
       .select("id")
@@ -76,12 +88,38 @@ export default function NewBoardForm() {
           placeholder="이 보드의 목적을 적어주세요"
         />
       </Field>
-      <Field label="키워드">
+      <Field label="포지티브 키워드">
         <ChipToggleRow
           items={TAG_PRESETS}
-          active={keywords}
-          onToggle={toggleKeyword}
+          active={positiveKeywords}
+          onToggle={togglePositive}
+          tone="positive"
         />
+      </Field>
+      <Field label="네거티브 키워드">
+        <ChipToggleRow
+          items={TAG_PRESETS}
+          active={negativeKeywords}
+          onToggle={toggleNegative}
+          tone="negative"
+        />
+      </Field>
+      <Field label="페어링 (A × B)">
+        <div className="flex items-center gap-2">
+          <Input
+            value={pairingA}
+            onChange={(e) => setPairingA(e.target.value)}
+            placeholder="예: Helvetica"
+          />
+          <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            ×
+          </span>
+          <Input
+            value={pairingB}
+            onChange={(e) => setPairingB(e.target.value)}
+            placeholder="예: 보사노바"
+          />
+        </div>
       </Field>
       <Field label="플레이리스트 (선택)">
         <Input
