@@ -266,9 +266,10 @@ export function BoardItemsGrid({
   );
 }
 
-// 5-dot fit selector pinned to the bottom-left of each card. Tapping
-// dot N sets fit to N (1-5); tapping the currently-selected dot clears
-// to 0. Read-only when the viewer has no nickname.
+// 5-dot fit selector pinned below the card image so it doesn't sit on
+// top of the artwork. Tapping dot N sets fit to N (1-5); tapping the
+// currently-selected dot clears to 0. Read-only when the viewer has no
+// nickname.
 function FitDots({
   fit,
   editable,
@@ -280,9 +281,7 @@ function FitDots({
 }) {
   return (
     <div
-      className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-full bg-background/90 px-1.5 py-1 shadow-sm"
-      // Stop the click from reaching the underlying Link / lightbox
-      // button — the dots are an in-card control, not a card click.
+      className="flex items-center justify-center gap-1 border-t border-border/30 bg-background/40 py-1.5"
       onClick={(e) => e.stopPropagation()}
     >
       {[1, 2, 3, 4, 5].map((n) => {
