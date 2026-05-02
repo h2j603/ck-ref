@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { NicknamePill } from "@/components/nickname-pill";
 import type { BoardSummary } from "@/lib/queries";
+import { isVideoPath } from "@/lib/media";
 import { publicImageUrl } from "@/lib/storage";
 
 export function BoardCard({ board }: { board: BoardSummary }) {
@@ -18,13 +19,25 @@ export function BoardCard({ board }: { board: BoardSummary }) {
         {cells.map((cell, i) => (
           <div key={i} className="relative overflow-hidden bg-muted">
             {cell ? (
-              <Image
-                src={publicImageUrl(cell.image_path)}
-                alt=""
-                fill
-                sizes="(max-width: 640px) 50vw, 200px"
-                className="object-cover"
-              />
+              isVideoPath(cell.image_path) ? (
+                <video
+                  src={publicImageUrl(cell.image_path)}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <Image
+                  src={publicImageUrl(cell.image_path)}
+                  alt=""
+                  fill
+                  sizes="(max-width: 640px) 50vw, 200px"
+                  className="object-cover"
+                />
+              )
             ) : null}
           </div>
         ))}
