@@ -344,7 +344,7 @@ export type Board = {
   positive_keywords: string[];
   negative_keywords: string[];
   playlist_url: string | null;
-  oblique_card: string | null;
+  oblique_cards: string[];
   pairing_a: string | null;
   pairing_b: string | null;
   created_at: string;

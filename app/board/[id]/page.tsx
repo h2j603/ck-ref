@@ -88,7 +88,7 @@ export default async function BoardDetailPage({
       <ObliqueCardBlock
         boardId={board.id}
         createdBy={board.created_by}
-        initial={board.oblique_card}
+        initial={board.oblique_cards}
       />
       <BoardItemsGrid boardId={board.id} initialRefs={refs} />
       {playlist ? (

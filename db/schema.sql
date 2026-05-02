@@ -206,9 +206,10 @@ create table if not exists boards (
   positive_keywords  text[] not null default '{}',
   negative_keywords  text[] not null default '{}',
   playlist_url       text,
-  -- Brian Eno's Oblique Strategies card the team drew for this
-  -- board — a non-visual prompt to break creative fixation.
-  oblique_card       text,
+  -- Brian Eno's Oblique Strategies cards the team has pinned to this
+  -- board. Multiple allowed — non-visual prompts to keep the moodboard
+  -- from collapsing into pure visual fixation.
+  oblique_cards      text[] not null default '{}',
   -- Pairing brief: "A × B" headline (e.g. "Helvetica × bossa nova").
   pairing_a          text,
   pairing_b          text,
@@ -233,9 +234,23 @@ end $$;
 alter table boards add column if not exists positive_keywords text[] not null default '{}';
 alter table boards add column if not exists negative_keywords text[] not null default '{}';
 alter table boards add column if not exists playlist_url text;
-alter table boards add column if not exists oblique_card text;
+alter table boards add column if not exists oblique_cards text[] not null default '{}';
 alter table boards add column if not exists pairing_a text;
 alter table boards add column if not exists pairing_b text;
+-- One-shot migration: previous `oblique_card text` (single) → array.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'boards' and column_name = 'oblique_card'
+  ) then
+    update boards
+       set oblique_cards = array[oblique_card]
+     where oblique_card is not null
+       and (array_length(oblique_cards, 1) is null);
+    alter table boards drop column oblique_card;
+  end if;
+end $$;
 
 create table if not exists board_items (
   board_id  uuid not null references boards(id) on delete cascade,
