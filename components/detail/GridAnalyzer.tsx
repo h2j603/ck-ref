@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import nextDynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -603,6 +603,8 @@ function GridEditor({
         </div>
       ) : null}
 
+      {draft.grid_type !== "custom" ? <NudgePad draft={draft} onChange={onChange} /> : null}
+
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -1112,6 +1114,108 @@ function GridLines({
         />
       ))}
     </>
+  );
+}
+
+// D-pad that translates the whole grid frame without resizing it. The
+// left/right margin sliders set the grid's horizontal size and centre
+// it; this pad lets the curator slide that frame off-centre when the
+// reference image isn't perfectly centred. Each tap moves by 0.5% of
+// the canvas — same step size as the size sliders. A nudge is rejected
+// (no-op) if it would push any margin below zero.
+const NUDGE_STEP = 0.005;
+
+function NudgePad({
+  draft,
+  onChange,
+}: {
+  draft: Draft;
+  onChange: (next: Draft) => void;
+}) {
+  function nudge(dx: number, dy: number) {
+    const newLeft = draft.margin_left + dx;
+    const newRight = draft.margin_right - dx;
+    const newTop = draft.margin_top + dy;
+    const newBottom = draft.margin_bottom - dy;
+    if (
+      newLeft < 0 ||
+      newRight < 0 ||
+      newTop < 0 ||
+      newBottom < 0 ||
+      newLeft >= 1 ||
+      newRight >= 1 ||
+      newTop >= 1 ||
+      newBottom >= 1
+    ) {
+      return;
+    }
+    onChange({
+      ...draft,
+      margin_left: newLeft,
+      margin_right: newRight,
+      margin_top: newTop,
+      margin_bottom: newBottom,
+    });
+  }
+
+  const btn =
+    "grid size-7 place-items-center rounded-md border border-input text-muted-foreground hover:border-foreground hover:text-foreground disabled:opacity-30";
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+        이동
+      </span>
+      <div className="grid grid-cols-3 gap-1">
+        <span />
+        <button
+          type="button"
+          onClick={() => nudge(0, -NUDGE_STEP)}
+          disabled={draft.margin_top <= 0}
+          aria-label="위로"
+          className={btn}
+        >
+          <ArrowUp className="size-3.5" />
+        </button>
+        <span />
+        <button
+          type="button"
+          onClick={() => nudge(-NUDGE_STEP, 0)}
+          disabled={draft.margin_left <= 0}
+          aria-label="왼쪽으로"
+          className={btn}
+        >
+          <ArrowLeft className="size-3.5" />
+        </button>
+        <span />
+        <button
+          type="button"
+          onClick={() => nudge(NUDGE_STEP, 0)}
+          disabled={draft.margin_right <= 0}
+          aria-label="오른쪽으로"
+          className={btn}
+        >
+          <ArrowRight className="size-3.5" />
+        </button>
+        <span />
+        <button
+          type="button"
+          onClick={() => nudge(0, NUDGE_STEP)}
+          disabled={draft.margin_bottom <= 0}
+          aria-label="아래로"
+          className={btn}
+        >
+          <ArrowDown className="size-3.5" />
+        </button>
+        <span />
+      </div>
+      <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        L {Math.round(draft.margin_left * 1000) / 10}% · R{" "}
+        {Math.round(draft.margin_right * 1000) / 10}% · T{" "}
+        {Math.round(draft.margin_top * 1000) / 10}% · B{" "}
+        {Math.round(draft.margin_bottom * 1000) / 10}%
+      </p>
+    </div>
   );
 }
 
