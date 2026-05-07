@@ -41,6 +41,7 @@ export default async function EditBoardPage({
           playlist_url: board.playlist_url,
           pairing_a: board.pairing_a,
           pairing_b: board.pairing_b,
+          is_private: board.is_private,
         }}
       />
     </div>

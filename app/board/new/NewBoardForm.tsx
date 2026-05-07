@@ -22,6 +22,7 @@ export default function NewBoardForm() {
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [pairingA, setPairingA] = useState("");
   const [pairingB, setPairingB] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +59,7 @@ export default function NewBoardForm() {
         playlist_url: playlistUrl.trim() || null,
         pairing_a: pairingA.trim() || null,
         pairing_b: pairingB.trim() || null,
+        is_private: isPrivate,
         created_by: nickname || null,
       })
       .select("id")
@@ -129,6 +131,15 @@ export default function NewBoardForm() {
           inputMode="url"
         />
       </Field>
+      <label className="flex cursor-pointer items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={isPrivate}
+          onChange={(e) => setIsPrivate(e.target.checked)}
+          className="size-3"
+        />
+        비공개 — 만든 사람만 볼 수 있음
+      </label>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="flex items-center justify-between">
         {hydrated && nickname ? (

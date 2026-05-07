@@ -347,6 +347,7 @@ export type Board = {
   oblique_cards: string[];
   pairing_a: string | null;
   pairing_b: string | null;
+  is_private: boolean;
   created_at: string;
   created_by: string | null;
 };
