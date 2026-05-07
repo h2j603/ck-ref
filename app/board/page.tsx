@@ -1,6 +1,8 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { BoardCard } from "@/components/board/BoardCard";
+import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
 import { fetchBoards } from "@/lib/queries";
 
 export const metadata = {
@@ -8,7 +10,13 @@ export const metadata = {
 };
 
 export default async function BoardIndexPage() {
-  const boards = await fetchBoards().catch(() => []);
+  const store = await cookies();
+  const me = store.get(ARCHIVE_AUTH_COOKIE)?.value ?? null;
+  const all = await fetchBoards().catch(() => []);
+  // Private boards belong to a single curator — hide them from anyone
+  // else's listing. created_by stores the same profile key the auth
+  // cookie carries, so a direct equality check is enough.
+  const boards = all.filter((b) => !b.is_private || b.created_by === me);
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">

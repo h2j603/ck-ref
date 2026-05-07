@@ -43,9 +43,16 @@ export function BoardCard({ board }: { board: BoardSummary }) {
         ))}
       </div>
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="truncate text-sm font-medium leading-tight">
-          {board.title}
-        </h3>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h3 className="truncate text-sm font-medium leading-tight">
+            {board.title}
+          </h3>
+          {board.is_private ? (
+            <span className="shrink-0 rounded-full border border-input px-1.5 py-0 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+              비공개
+            </span>
+          ) : null}
+        </div>
         <p className="font-mono text-[10px] tabular-nums uppercase tracking-wider text-muted-foreground">
           {board.item_count}
         </p>

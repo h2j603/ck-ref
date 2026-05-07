@@ -767,7 +767,7 @@ export async function fetchBoards(): Promise<BoardSummary[]> {
     .from("boards")
     .select(
       `id, title, description, positive_keywords, negative_keywords,
-       playlist_url, oblique_cards, pairing_a, pairing_b,
+       playlist_url, oblique_cards, pairing_a, pairing_b, is_private,
        created_at, created_by,
        board_items ( position, ref:refs(id, image_path, image_width, image_height) )`,
     )

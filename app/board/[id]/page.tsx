@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -7,6 +8,7 @@ import { BoardShareButton } from "@/components/board/BoardShareButton";
 import { ObliqueCardBlock } from "@/components/board/ObliqueCardBlock";
 import { ColumnSelector } from "@/components/gallery/ColumnSelector";
 import { NicknamePill } from "@/components/nickname-pill";
+import { ARCHIVE_AUTH_COOKIE } from "@/lib/auth";
 import { fetchBoard, fetchBoardRefs } from "@/lib/queries";
 import { playlistEmbed } from "@/lib/playlist";
 
@@ -19,6 +21,11 @@ export default async function BoardDetailPage({
   const board = await fetchBoard(id).catch(() => null);
   if (!board) notFound();
 
+  // Private boards: 404 for anyone but the curator.
+  const store = await cookies();
+  const me = store.get(ARCHIVE_AUTH_COOKIE)?.value ?? null;
+  if (board.is_private && board.created_by !== me) notFound();
+
   const refs = await fetchBoardRefs(id).catch(() => []);
   const playlist = playlistEmbed(board.playlist_url);
 
@@ -29,7 +36,14 @@ export default async function BoardDetailPage({
           KIWI Juice / board
         </p>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-3xl font-medium tracking-tight">{board.title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-medium tracking-tight">{board.title}</h1>
+            {board.is_private ? (
+              <span className="rounded-full border border-input px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                비공개
+              </span>
+            ) : null}
+          </div>
           <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
             {refs.length} ref{refs.length === 1 ? "" : "s"}
           </p>

@@ -26,6 +26,7 @@ export function EditBoardForm({
     playlist_url: string | null;
     pairing_a: string | null;
     pairing_b: string | null;
+    is_private: boolean;
   };
 }) {
   const supabase = createClient();
@@ -41,6 +42,7 @@ export function EditBoardForm({
   const [playlistUrl, setPlaylistUrl] = useState(initial.playlist_url ?? "");
   const [pairingA, setPairingA] = useState(initial.pairing_a ?? "");
   const [pairingB, setPairingB] = useState(initial.pairing_b ?? "");
+  const [isPrivate, setIsPrivate] = useState(initial.is_private);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +94,7 @@ export function EditBoardForm({
         playlist_url: playlistUrl.trim() || null,
         pairing_a: pairingA.trim() || null,
         pairing_b: pairingB.trim() || null,
+        is_private: isPrivate,
       })
       .eq("id", boardId);
     if (error) {
@@ -155,6 +158,15 @@ export function EditBoardForm({
           inputMode="url"
         />
       </Field>
+      <label className="flex cursor-pointer items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={isPrivate}
+          onChange={(e) => setIsPrivate(e.target.checked)}
+          className="size-3"
+        />
+        비공개 — 만든 사람만 볼 수 있음
+      </label>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="flex justify-end">
         <Button type="submit" disabled={busy}>

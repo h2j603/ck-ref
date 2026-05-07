@@ -213,6 +213,10 @@ create table if not exists boards (
   -- Pairing brief: "A × B" headline (e.g. "Helvetica × bossa nova").
   pairing_a          text,
   pairing_b          text,
+  -- When true, only the creator can see this board. Index and detail
+  -- pages 404 for everyone else; created_by stores the curator's
+  -- display_name and we match it against the auth cookie's profile.
+  is_private         boolean not null default false,
   created_at         timestamptz not null default now(),
   created_by         text
 );
@@ -237,6 +241,7 @@ alter table boards add column if not exists playlist_url text;
 alter table boards add column if not exists oblique_cards text[] not null default '{}';
 alter table boards add column if not exists pairing_a text;
 alter table boards add column if not exists pairing_b text;
+alter table boards add column if not exists is_private boolean not null default false;
 -- One-shot migration: previous `oblique_card text` (single) → array.
 do $$
 begin
