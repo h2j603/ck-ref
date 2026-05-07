@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Masonry from "react-masonry-css";
 
 import { RefCard } from "./RefCard";
@@ -41,6 +41,19 @@ export function MasonryGrid({
     sort !== "shuffle" && pageSize != null && initial.length >= pageSize,
   );
   const [pending, startTransition] = useTransition();
+
+  // Re-sync local state whenever the parent hands us a fresh list. The
+  // index page re-renders the server component when filter / sort / q
+  // change, but useState(initial) only initialises on mount — without
+  // this effect a filter switch would leave the masonry pinned to the
+  // first render's refs and the user would see "no change" even though
+  // the URL was updating.
+  useEffect(() => {
+    setRefs(initial);
+    setHasMore(
+      sort !== "shuffle" && pageSize != null && initial.length >= pageSize,
+    );
+  }, [initial, sort, pageSize]);
 
   function loadMore() {
     if (!filter || !pageSize || pending || refs.length === 0) return;
